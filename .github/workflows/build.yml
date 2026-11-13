@@ -20,7 +20,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Linux is built on an older image, not ubuntu-latest: the archive
+        # is for other people's machines.  What the newest image links is marked as
+        # needing x86-64-v3, and its C library is newer than most systems have.
+        # (Built here it needs glibc 2.39 and any x86-64.)
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
