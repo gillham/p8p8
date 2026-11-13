@@ -37,11 +37,10 @@ compiler with LLVM targets added.
   builtin functions, variables and scopes, floating point, the string and
   conversion modules), with values the compiler cannot know in advance.
   Each prints the same from both compilers in the virtual machine and
-  natively, and on the two emulated machines except for two programs that
-  are left out there: the remainder of signed numbers, which upstream does
-  not have for the 6502, and the square root of a `long`, where upstream's
-  6502 build prints wrong numbers.  The set is not complete: it has what one
-  pass through the language thought of.
+  natively, and on the two emulated machines except for one program that
+  is skipped there: the remainder of signed numbers, which upstream does
+  not have for the 6502.  The set is not complete: it has what one pass
+  through the language thought of.
 
 ## Targets
 

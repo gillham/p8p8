@@ -1,6 +1,4 @@
-; Conformance: the square root of a long.  The emulator suites leave this one out: built for
-; the 6502 by the reference compiler it prints other numbers (768 for the root of
-; 1000000), which the virtual machine and the host do not.
+; Conformance: the square root of a long, which on the 6502 is a subroutine of the library.
 ; Compared with upstream by make vmcmp, make nativecmp and the emulator suites.
 ; (At most 24 lines of 40 characters: the C64 comparison is of one screen.)
 

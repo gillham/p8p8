@@ -288,10 +288,8 @@ gfxcmp:	$(P8P8)
 # (needs 64tass and x16emu; text programs only, each runs for a few seconds)
 # Left out, because they print how long they took: queens, mandelbrot, cube3d-float, cx16/sortingbench;
 # and cx16/interpolation, which moves on to a next screen after a delay
-# and conformance/sqrtlong.p8: the reference compiler's 6502 build gives wrong roots of a long
 EMUTESTS_COMMON=$(wildcard .prog8-reference/compiler/test/arithmetic/*.p8 .prog8-reference/compiler/test/comparisons/*.p8) \
-	$(addprefix .prog8-reference/examples/,fibonacci.p8 primes.p8 maze.p8 screencodes.p8 swirl-float.p8 numbergame.p8) $(PTRTESTS) $(wildcard tests/programs/*.p8) \
-	$(filter-out %/sqrtlong.p8,$(CONFTESTS))
+	$(addprefix .prog8-reference/examples/,fibonacci.p8 primes.p8 maze.p8 screencodes.p8 swirl-float.p8 numbergame.p8) $(PTRTESTS) $(wildcard tests/programs/*.p8) $(CONFTESTS)
 EMUTESTS=$(EMUTESTS_COMMON) .prog8-reference/examples/cx16/floatparse.p8 $(wildcard tests/programs/cx16/*.p8)
 emucmp:	$(P8P8)
 	@tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS)

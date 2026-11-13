@@ -98,6 +98,7 @@ main {
         t(first == &bytes[0])
         t(last != first)
         u((last - first) as uword)
+        u((&bytes[i + 2] - &bytes[i]) as uword)
     }
 
     sub nodes(ubyte base) {
