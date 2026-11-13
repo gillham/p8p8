@@ -7,7 +7,7 @@ they do it, with real output.
 
 Everything quoted here (listings, sizes, times) was produced while writing,
 with the compiler as it was on 2026-11-13 (the commit after `c7f3c76`) and
-the reference compiler `prog8c-llvm` v14.0-BETA3-llvm.1 at commit `8f164edd`, on an Apple M3 Max.
+the reference compiler `prog8c-llvm` v14.0-BETA3-llvm.1 at commit `e25b4c29`, on an Apple M3 Max.
 The source moves on; where this document and the source disagree, the source
 is right.
 
