@@ -237,7 +237,7 @@ run those suites with p8p8's own 6502 code generator.
 | `seed/` | the compiler's own earlier output, which it is built from |
 | `runtime/` | support code that some programs are built with |
 | `tests/` | test programs, scripts and expected output |
-| `docs/` | the differences from `prog8c`, the design, and the description of target files and the library |
+| `docs/` | the differences from `prog8c`, the design, a tour of the internals, and the description of target files and the library |
 | `tools/` | helper scripts for the tests |
 
 ## Licence and credits

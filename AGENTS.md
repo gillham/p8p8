@@ -6,7 +6,9 @@ reference compiler and the language are upstream's
 (<https://github.com/irmen/prog8>).
 
 Read `README.md` for what the compiler does and `docs/DESIGN.md` for how it
-is put together.  `docs/TARGETS.md` describes target files and where the
+is put together (`docs/INTERNALS.md` is the long tour, with listings and
+measurements of the commit it names: when you change what it shows, bring it
+up to date or say that it is behind).  `docs/TARGETS.md` describes target files and where the
 library is found.  If `notes/PLAN.md` exists (it is private and not part of
 the repository), it is the log of the work: every decision, with what was
 tried and dropped.

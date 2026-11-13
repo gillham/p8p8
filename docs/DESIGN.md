@@ -2,7 +2,8 @@
 
 p8p8 is a Prog8 compiler written in Prog8.  This document says how it is
 put together and why.  [TARGETS.md](TARGETS.md) describes target files and
-the library; the README has the command line.
+the library; the README has the command line.  [INTERNALS.md](INTERNALS.md)
+is the long version: how each part works, with real output.
 
 ## Aims
 
