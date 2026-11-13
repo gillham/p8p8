@@ -1,0 +1,7 @@
+tests/warnings.p8:7:5: warning: variable 'never' is never used
+tests/warnings.p8:17:9: warning: variable 'local_unused' is never used
+tests/warnings.p8:30:30: warning: parameter 'ignored' is never used
+tests/warnings.p8:39:5: warning: subroutine 'orphan' is never called
+tests/warnings.p8:27:9: warning: this is never reached
+tests/warnings.p8:59:17: warning: this is never reached
+tests/warnings.p8:62:13: warning: this is never reached

@@ -181,6 +181,9 @@ test:	$(TESTBIN) $(P8P8)
 	    echo "test literals $$t"; \
 	    $(P8P8) -types -ast -nopos -nolib tests/$$t.p8 | diff -u tests/expected/$(TARGET)_literals_$$t.txt - || exit 1; \
 	done
+	@echo "test warnings"
+	@$(P8P8) -lib lib -check -warnall tests/warnings.p8 2>&1 | diff -u tests/expected/$(TARGET)_warnings.txt -
+	@$(P8P8) -lib lib -check tests/warnings.p8 2>&1 | diff -u /dev/null -
 	@echo "test literals encoding_option"
 	@$(P8P8) -target c64 -encoding iso -types -ast -nopos -nolib tests/encoding_option.p8 | diff -u tests/expected/$(TARGET)_literals_encoding_option.txt -
 	@for t in bad_resolve bad_types bad_strings bad_checks; do \

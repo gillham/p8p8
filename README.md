@@ -116,11 +116,25 @@ For a 6502 machine the program is built with p8p8's own code generator and
 A command line written for `prog8c` mostly works as it is: options may be
 written with two dashes, `-emu` is `-run`, and the options of `prog8c` that
 only concern what it prints (`-plaintext`, `-quiet`, `-quietasm`,
-`-nosourcelines`, `-timings`, `-warnshadow`, `-warnimplicitcasts`,
-`-ircomments`) are accepted and ignored.  `-o file` names the program as it
+`-nosourcelines`, `-timings`, `-warnimplicitcasts`, `-ircomments`) are
+accepted and ignored.  `-o file` names the program as it
 does there: its directory is where the output goes, and its name is that of
 every output file.  An option that would change the program and that p8p8
 does not have is an error, not ignored.
+
+Warnings about things that are not wrong but may not be meant are asked
+for, each kind by its own option:
+
+| Option | Warns about |
+|---|---|
+| `-warnunused` | a variable, parameter or subroutine that nothing uses |
+| `-warnunreachable` | statements after a `return`, `goto`, `break` or `continue` |
+| `-warnshadow` | (as `prog8c` has it) the assembler's warnings about symbols that hide others |
+| `-warnall` | all of these |
+
+They look at the program's own modules only, and say nothing in a block or
+module with `%option ignore_unused`, about a `@shared` variable, or about
+the variables of a subroutine or block that has assembly in it.
 
 p8p8 prints errors and warnings and nothing else.  `-verbose` also prints
 the commands it runs and lets the assembler print its summary of the

@@ -61,6 +61,7 @@ symtab {
         uword type              ; type id (types.p8) of a variable, constant, parameter or field; a subroutine's first return type
         ubyte kind
         ubyte flags             ; ast.F_PRIVATE / ast.F_PUBLIC from the declaration
+        ubyte marks             ; notes of later stages (1: the resolver saw the name used)
     }
 
     ^^Scope global = 0

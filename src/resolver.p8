@@ -146,6 +146,8 @@ resolver {
         ^^symtab.Sym s = lookup_name(node.name, node)
         if s == 0
             error(node, "undefined symbol: ", node.name)
+        else
+            s.marks |= 1
         node.extra = s
         return s
     }
@@ -161,6 +163,7 @@ resolver {
         ; qualified: an alias or a struct pointer variable in scope?
         ^^symtab.Sym local = lookup_unqualified(parts[0])
         if local != 0 {
+            local.marks |= 1            ; (the variable in "variable.field" is used)
             if local.kind == symtab.K_ALIAS
                 return alias_target(local, node, 1)
             ^^symtab.Scope fields = pointee_struct(local)
@@ -181,6 +184,8 @@ resolver {
             ^^symtab.Sym inner = 0
             if s2.inner != 0
                 inner = symtab.find_in(s2.inner, parts[i])
+            if inner != 0
+                inner.marks |= 1        ; (every name on the way is used: "main.sub.variable.field")
             if inner == 0 {
                 ^^symtab.Scope fields2 = pointee_struct(s2)
                 if fields2 != 0 {

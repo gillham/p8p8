@@ -28,6 +28,7 @@
 %import ast
 %import diag
 %import version
+%import warn
 %zeropage basicsafe
 
 main {
@@ -138,7 +139,7 @@ main {
             }
             else if strings.compare(arg, "-plaintext") == 0 or strings.compare(arg, "-quiet") == 0
                     or strings.compare(arg, "-quietasm") == 0 or strings.compare(arg, "-nosourcelines") == 0
-                    or strings.compare(arg, "-timings") == 0 or strings.compare(arg, "-warnshadow") == 0
+                    or strings.compare(arg, "-timings") == 0
                     or strings.compare(arg, "-warnimplicitcasts") == 0 or strings.compare(arg, "-ircomments") == 0 {
                 ; options of upstream that only concern what it prints or notes in its
                 ; output, and that have nothing to switch here: taken and ignored, so that
@@ -182,6 +183,17 @@ main {
             }
             else if strings.compare(arg, "-verbose") == 0
                 opt_verbose = true
+            else if strings.compare(arg, "-warnunused") == 0
+                warn.unused = true
+            else if strings.compare(arg, "-warnunreachable") == 0
+                warn.unreachable = true
+            else if strings.compare(arg, "-warnshadow") == 0
+                opt_warnshadow = true
+            else if strings.compare(arg, "-warnall") == 0 {
+                warn.unused = true
+                warn.unreachable = true
+                opt_warnshadow = true
+            }
             else if strings.compare(arg, "-print") == 0
                 opt_print = true
             else if strings.compare(arg, "-parse") == 0
@@ -445,9 +457,15 @@ main {
         out.nl()
         out.puts("  -version       print the version of the compiler and of the library it uses")
         out.nl()
+        out.puts("  -warnunused    warn about variables, parameters and subroutines that nothing uses")
+        out.nl()
+        out.puts("  -warnunreachable  warn about statements after a return, goto, break or continue")
+        out.nl()
+        out.puts("  -warnshadow    let the assembler warn about symbols that hide others;  -warnall: all of these")
+        out.nl()
         out.puts("  (options may be written with two dashes; -emu is -run; -plaintext, -quiet, -quietasm, -nosourcelines,")
         out.nl()
-        out.puts("   -timings, -warnshadow, -warnimplicitcasts and -ircomments of prog8c are accepted and ignored)")
+        out.puts("   -timings, -warnimplicitcasts and -ircomments of prog8c are accepted and ignored)")
         out.nl()
         out.puts("  -srcdirs a:b   directories searched first for imported modules")
         out.nl()
@@ -647,6 +665,8 @@ main {
             encoding.target_default = opt_encoding
         typer.run()
         checker.run()
+        if diag.errors == 0
+            warn.run()
         if (opt_ir or opt_llvm or opt_build) and diag.errors == 0
             generate_ir()
         if opt_ast {
@@ -672,6 +692,7 @@ main {
     ^^ubyte out_name = 0
     ^^ubyte out_ext = 0
     ^^ubyte built_ext = 0           ; the extension build() gave the program
+    bool opt_warnshadow = false     ; -warnshadow: the assembler's warnings about symbols that hide others
     bool opt_verbose = false        ; -verbose: say what is run, and let the assembler print its summary
 
     sub output_file(^^ubyte path) {
@@ -833,7 +854,9 @@ main {
             }
             else
                 buf.add_str(cmd, " --cbm-prg --ascii")
-            buf.add_str(cmd, " --case-sensitive --long-branch -Wall -Wno-implied-reg --no-monitor -Wno-shadow")
+            buf.add_str(cmd, " --case-sensitive --long-branch -Wall -Wno-implied-reg --no-monitor")
+            if not opt_warnshadow
+                buf.add_str(cmd, " -Wno-shadow")
             if not opt_verbose
                 buf.add_str(cmd, " --quiet")
             buf.add_str(cmd, " --vice-labels --labels=")
