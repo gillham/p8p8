@@ -105,7 +105,8 @@ p8c -target llvm64 -out build -run program.p8
 `-lib` names the library directory.  Without it `p8c` uses `P8P8_LIB` from
 the environment, or the library installed with it (`../lib/p8p8` from the
 directory `p8c` is in; `lib/` of the repository for one in `build/`);
-`p8c -libpath` prints which.  Run `p8c` without arguments
+`p8c -libpath` prints which, and `p8c -version` the version of the compiler
+and of that library.  Run `p8c` without arguments
 for the list of options.
 
 For a 6502 machine the program is built with p8p8's own code generator and

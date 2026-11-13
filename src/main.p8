@@ -27,6 +27,7 @@
 %import types
 %import ast
 %import diag
+%import version
 %zeropage basicsafe
 
 main {
@@ -90,6 +91,8 @@ main {
             }
             else if strings.compare(arg, "-libpath") == 0
                 opt_libpath = true
+            else if strings.compare(arg, "-version") == 0
+                opt_version = true
             else if strings.compare(arg, "-target") == 0 and value != 0 {
                 opt_target = value
                 i++
@@ -176,6 +179,10 @@ main {
             }
             i++
         }
+        if opt_version {
+            print_version()
+            out.exit(0)
+        }
         if opt_libpath {
             prepare_library()
             out.puts(lib_root)
@@ -219,6 +226,48 @@ main {
     ^^ubyte lib_root = 0            ; the directory that was chosen
     bool layered = false            ; it is a library in parts: prog8lib/, common/, targets/
     bool opt_libpath = false        ; -libpath: print the library directory and stop
+    bool opt_version = false        ; -version: print the compiler's version and the library's, and stop
+
+    ; The compiler's version, and which library it would use with what that says of
+    ; itself (its VERSION file): the two things a report of a problem needs.
+    sub print_version() {
+        out.puts("p8p8 ")
+        out.puts(version.number)
+        out.puts(", a Prog8 compiler written in Prog8")
+        out.nl()
+        out.puts("This software is licensed under the GNU GPL 3.0, see https://www.gnu.org/licenses/gpl.html")
+        out.nl()
+        prepare_library()
+        out.puts("library: ")
+        out.puts(lib_root)
+        out.nl()
+        ^^buf.Buf vb = buf.new(256)
+        buf.add_str(vb, lib_root)
+        buf.add_str(vb, "/VERSION")
+        buf.add_byte(vb, 0)
+        long size = io_platform.file_size(vb.data)
+        if size <= 0 {
+            out.puts("  (it has no VERSION file)")
+            out.nl()
+            return
+        }
+        ^^ubyte text = mem.alloc(size + 2)
+        long got = io_platform.read_file(vb.data, text, size)
+        long i = 0
+        while i < got {
+            ; each line of it, indented
+            long start = i
+            while i < got and text[i] != '\n' and text[i] != '\r'
+                i++
+            if i > start {
+                out.puts("  ")
+                out.put_bytes(text + start, i - start)
+                out.nl()
+            }
+            while i < got and (text[i] == '\n' or text[i] == '\r')
+                i++
+        }
+    }
     ^^ubyte program_found = 0
 
     sub prepare_library() {
@@ -373,6 +422,8 @@ main {
 
     sub usage() {
         out.puts("usage: p8c [options] file.p8 ...")
+        out.nl()
+        out.puts("  -version       print the version of the compiler and of the library it uses")
         out.nl()
         out.puts("  -srcdirs a:b   directories searched first for imported modules")
         out.nl()
