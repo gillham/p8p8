@@ -82,7 +82,19 @@ arguments of `asmsub`s, split word arrays, the symbol prefixes (`p8b_`,
 - **Host specifics** are in `src/<target>/*_platform.p8`: files, the
   environment, running a command.
 
-## The LLVM back end
+## Reports of problems
+
+`-report dir` is for the user who has a problem and no small program that
+shows it.  The compiler starts itself a second time with the same command
+line, the output and the written files redirected into the directory, and
+adds the versions, the command, the list of loaded files and copies of the
+program's own sources.  It is a second process so that a run that crashes
+is reported like any other.
+
+The compiler keeps a note of what it is doing (`crumb.p8`: the stage, and
+the file or subroutine where a stage records one).  A handler for the
+signals of a crash prints that note and exits with status 70.
+
 
 `llvmgen.p8` writes LLVM IR text from the IR: a function for each
 subroutine, a basic block for each chunk of the IR, and every virtual

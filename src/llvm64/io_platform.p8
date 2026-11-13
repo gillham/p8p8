@@ -14,6 +14,25 @@ io_platform {
     extsub realpath(str path, pointer resolved) -> pointer
     extsub rename(str oldname, str newname) -> long
     extsub remove(str path) -> long
+    extsub signal(long number, pointer handler) -> pointer
+
+    sub is_windows() -> bool {
+        ^^ubyte os = getenv("OS")
+        return os != 0 and os[0] == 'W' and os[1] == 'i' and os[2] == 'n'
+    }
+
+    ; The handler is called when the program itself goes wrong: a bad address, an
+    ; illegal instruction, an arithmetic fault.  (Windows knows fewer signals, and
+    ; ends the program when it is asked for one it does not know.)
+    sub catch_crashes(pointer handler) {
+        void signal(11, handler)
+        void signal(4, handler)
+        void signal(8, handler)
+        if not is_windows() {
+            void signal(10, handler)
+            void signal(7, handler)
+        }
+    }
 
     ; Gives a file another name, in place of a file of that name if there is one.
     sub move_file(str oldname, str newname) -> bool {
@@ -75,6 +94,12 @@ io_platform {
     ; or 255 when it could not be run or was stopped by a signal.
     sub run_command(str command) -> ubyte {
         long status = system(command)
+        if is_windows() {
+            ; (there it is the exit status itself)
+            if status < 0 or status > 255
+                return 255
+            return status as ubyte
+        }
         if status < 0 or (status & 127) != 0
             return 255
         return ((status >> 8) & 255) as ubyte

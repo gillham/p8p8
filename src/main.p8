@@ -28,6 +28,7 @@
 %import ast
 %import diag
 %import version
+%import crumb
 %import warn
 %zeropage basicsafe
 
@@ -66,11 +67,39 @@ main {
             or strings.compare(arg, "-triple") == 0 or strings.compare(arg, "-encoding") == 0
             or strings.compare(arg, "-varshigh") == 0 or strings.compare(arg, "-varsaddress") == 0
             or strings.compare(arg, "-out") == 0 or strings.compare(arg, "-o") == 0
-            or strings.compare(arg, "-output") == 0
+            or strings.compare(arg, "-output") == 0 or strings.compare(arg, "-report") == 0
     }
+
+    ; The compiler itself went wrong (a signal): say where, and how to report it.
+    sub crashed() {
+        out.err()
+        out.puts("p8c: internal error: the compiler crashed")
+        if crumb.stage != 0 {
+            out.puts(" while ")
+            out.puts(crumb.stage)
+            if crumb.name != 0 {
+                out.puts(" (")
+                out.puts(crumb.name)
+                out.puts(")")
+            }
+        }
+        out.nl()
+        out.puts("This is a bug in p8c.  To report it, run the same command with  -report <directory>")
+        out.nl()
+        out.puts("added (a directory that does not exist yet) and attach what it writes there.")
+        out.nl()
+        out.exit(70)
+    }
+
+    ^^ubyte opt_report = 0          ; -report: the directory a report of this run is written to
+    bool opt_report_nosource = false
+    bool opt_selfcrash = false
+    ^^ubyte opt_modules_file = 0    ; (what -report asks of the compiler it starts: the list of loaded files)
 
     sub start() {
         out.init()
+        io_platform.catch_crashes(&crashed)
+        crumb.at("reading the command line")
         uword argc = sys.argc()
         uword files_done = 0
         uword i = 1
@@ -112,6 +141,20 @@ main {
             }
             else if strings.compare(arg, "-libpath") == 0
                 opt_libpath = true
+            else if strings.compare(arg, "-report") == 0 and value != 0 {
+                opt_report = value
+                i++
+            }
+            else if strings.compare(arg, "-reportnosource") == 0
+                opt_report_nosource = true
+            else if strings.compare(arg, "-reportmodules") == 0 and value != 0 {
+                opt_modules_file = value
+                i++
+            }
+            else if strings.compare(arg, "-selfcrash") == 0 {
+                ; (for the test of the message below: the compiler goes wrong on purpose)
+                opt_selfcrash = true
+            }
             else if strings.compare(arg, "-version") == 0
                 opt_version = true
             else if strings.compare(arg, "-target") == 0 and value != 0 {
@@ -240,6 +283,14 @@ main {
                 file_count++
             }
             i++
+        }
+        if opt_report != 0
+            make_report()
+        if opt_selfcrash {
+            crumb.at("testing the crash message")
+            crumb.name = "on purpose"
+            ^^ubyte nowhere = 8 as ^^ubyte
+            nowhere[argc] = 1
         }
         if opt_version {
             print_version()
@@ -493,6 +544,10 @@ main {
         out.nl()
         out.puts("  -version       print the version of the compiler and of the library it uses")
         out.nl()
+        out.puts("  -report dir    run as without it, and write a report of the run into the new directory dir: versions,")
+        out.nl()
+        out.puts("                 the command, the output, the files written and the program's sources (-reportnosource: not those)")
+        out.nl()
         out.puts("  -warnunused    warn about variables, parameters and subroutines that nothing uses")
         out.nl()
         out.puts("  -warnunreachable  warn about statements after a return, goto, break or continue")
@@ -682,18 +737,23 @@ main {
             if importer.triple == 0
                 importer.triple = "arm64-apple-macosx"
         }
+        crumb.at("reading the program")
         ^^importer.Module mainmod = importer.load_program(path)
+        if opt_modules_file != 0
+            write_module_list()
         if mainmod == 0
             out.exit(1)
         if opt_modules
             importer.list_modules()
         if diag.errors > 0
             out.exit(1)
+        crumb.at("building the symbol table")
         symtab.build()
         if opt_symbols
             symtab.dump()
         if diag.errors > 0
             out.exit(1)
+        crumb.at("resolving names")
         resolver.resolve_program()
         if diag.errors > 0
             out.exit(1)
@@ -701,7 +761,9 @@ main {
         encoding.set_target(importer.target)
         if opt_encoding != encoding.E_INVALID
             encoding.target_default = opt_encoding
+        crumb.at("typing the program")
         typer.run()
+        crumb.at("checking the program")
         checker.run()
         if diag.errors == 0
             warn.run()
@@ -759,6 +821,7 @@ main {
 
     sub generate_ir() {
         ^^importer.Module mainmod = importer.modules
+        crumb.at("generating the IR")
         ^^ir.Program p = irgen.generate(mainmod.name)
         ^^ubyte oname = mainmod.name
         if out_name != 0
@@ -767,6 +830,7 @@ main {
             return
         bool is_llvm = buf.bytes_equal(importer.target, "llvm", 4)
         irprune.asmsubs_kept = not opt_own or is_llvm
+        crumb.at("removing unused code")
         if not opt_keepunused
             irprune.run(p)
         ^^buf.Buf b = buf.new(65536)
@@ -783,6 +847,7 @@ main {
         }
         if opt_llvm {
             buf.clear(b)
+            crumb.at("generating LLVM IR")
             llvmgen.generate(p, b)
             if llvmgen.errors > 0
                 out.exit(1)
@@ -791,12 +856,14 @@ main {
         if opt_own and not is_llvm {
             ; p8p8's own 6502 code generator: assembly for 64tass
             buf.clear(b)
+            crumb.at("generating 6502 code")
             gen6502.generate(p, b)
             if gen6502.errors > 0
                 out.exit(1)
             write_output(oname, ".asm", b)
         }
         if opt_build {
+            crumb.at("building the program")
             build(oname, is_llvm)
             if out_ext != 0 and built_ext != 0 and strings.compare(out_ext, built_ext) != 0 {
                 ; the program under the name that was asked for
@@ -823,6 +890,264 @@ main {
                 }
             }
         }
+    }
+
+    ; ---- -report: everything about one run of the compiler, in a directory ----
+    ;
+    ; The compiler starts itself with the same command line, has that run write its
+    ; output and its files into the directory, and adds what a report of a problem
+    ; needs: versions, the command, which files were loaded, and the program's own
+    ; source files.  A second process, so that a run that crashes is reported too.
+
+    ^^buf.Buf rep = 0               ; report.txt
+    ^^buf.Buf rpath = 0
+
+    sub report_path(str name) -> ^^ubyte {
+        buf.clear(rpath)
+        buf.add_str(rpath, opt_report)
+        buf.add_byte(rpath, '/')
+        buf.add_str(rpath, name)
+        buf.add_byte(rpath, 0)
+        return rpath.data
+    }
+
+    sub quoted(^^buf.Buf b, ^^ubyte text) {
+        buf.add_byte(b, '"')
+        buf.add_str(b, text)
+        buf.add_byte(b, '"')
+    }
+
+    ; the whole file in memory, zero terminated; 0 when it can't be read
+    sub file_bytes(^^ubyte path) -> ^^ubyte, long {
+        long size = io_platform.file_size(path)
+        if size < 0
+            return 0, 0
+        ^^ubyte data = mem.alloc(size + 1)
+        long got = io_platform.read_file(path, data, size)
+        if got != size
+            return 0, 0
+        data[size] = 0
+        return data, size
+    }
+
+    ; the name of a file without its directories
+    sub base_name(^^ubyte path) -> ^^ubyte {
+        ^^ubyte base = path
+        long k = 0
+        while path[k] != 0 {
+            if path[k] == '/' or path[k] == '\\'
+                base = path + k + 1
+            k++
+        }
+        return base
+    }
+
+    uword sources_copied = 0
+
+    sub copy_source(^^ubyte path) {
+        buf.add_str(rep, "  ")
+        buf.add_str(rep, path)
+        if opt_report_nosource {
+            buf.add_byte(rep, '\n')
+            return
+        }
+        ^^ubyte data
+        long size
+        data, size = file_bytes(path)
+        buf.clear(rpath)
+        buf.add_str(rpath, opt_report)
+        buf.add_str(rpath, "/src/")
+        buf.add_str(rpath, base_name(path))
+        buf.add_byte(rpath, 0)
+        if data != 0 and io_platform.write_file(rpath.data, data, size) {
+            buf.add_str(rep, "  (copied to src/")
+            buf.add_str(rep, base_name(path))
+            buf.add_str(rep, ")\n")
+            sources_copied++
+        }
+        else
+            buf.add_str(rep, "  (could not be copied)\n")
+    }
+
+    ; (in the compiler that -report starts) the files that were loaded, one on a line,
+    ; with L before those of the library and U before the program's own
+    sub write_module_list() {
+        ^^buf.Buf lb = buf.new(4096)
+        ^^importer.Module m = importer.modules
+        while m != 0 {
+            if m.is_library
+                buf.add_byte(lb, 'L')
+            else
+                buf.add_byte(lb, 'U')
+            buf.add_byte(lb, ' ')
+            buf.add_str(lb, m.file.name)
+            buf.add_byte(lb, '\n')
+            m = m.next
+        }
+        void io_platform.write_file(opt_modules_file, lb.data, lb.len)
+    }
+
+    sub make_report() {
+        rep = buf.new(8192)
+        rpath = buf.new(1024)
+        ^^buf.Buf cb = buf.new(2048)
+        bool windows = io_platform.is_windows()
+        uword argc = sys.argc()
+        uword i
+
+        ; the directory, with out/ for what the run writes and src/ for the sources
+        buf.add_str(cb, "mkdir ")
+        quoted(cb, opt_report)
+        buf.add_byte(cb, 0)
+        if io_platform.run_command(cb.data) != 0 {
+            out.err()
+            out.puts("-report: can't make the directory (it must not exist yet): ")
+            out.puts(opt_report)
+            out.nl()
+            out.exit(1)
+        }
+        buf.clear(cb)
+        buf.add_str(cb, "mkdir ")
+        quoted(cb, report_path("out"))
+        buf.add_byte(cb, 0)
+        void io_platform.run_command(cb.data)
+        if not opt_report_nosource {
+            buf.clear(cb)
+            buf.add_str(cb, "mkdir ")
+            quoted(cb, report_path("src"))
+            buf.add_byte(cb, 0)
+            void io_platform.run_command(cb.data)
+        }
+
+        ; versions
+        ^^buf.Buf saved = out.current
+        out.flush()
+        out.current = rep
+        print_version()
+        out.current = saved
+        buf.add_str(rep, "host: ")
+        ^^ubyte host = io_platform.host_triple()
+        if host == 0
+            host = "unknown"
+        buf.add_str(rep, host)
+        buf.add_str(rep, "\ncommand: p8c")
+        for i in 1 to argc - 1 {
+            if i < argc {
+                buf.add_byte(rep, ' ')
+                buf.add_str(rep, sys.argv(i))
+            }
+        }
+        buf.add_byte(rep, '\n')
+
+        ; the same command again, without -report, its files and its output in the directory
+        buf.clear(cb)
+        if windows
+            buf.add_byte(cb, '"')       ; (cmd takes the outermost quotes away)
+        quoted(cb, program_path())
+        i = 1
+        while i < argc {
+            ^^ubyte arg = sys.argv(i)
+            ^^ubyte plain_arg = arg
+            if arg[0] == '-' and arg[1] == '-' and arg[2] != 0
+                plain_arg = arg + 1
+            if strings.compare(plain_arg, "-report") == 0
+                i++
+            else if strings.compare(plain_arg, "-reportnosource") != 0 {
+                buf.add_byte(cb, ' ')
+                quoted(cb, arg)
+            }
+            i++
+        }
+        buf.add_str(cb, " -verbose -traceimports -out ")
+        quoted(cb, report_path("out"))
+        buf.add_str(cb, " -reportmodules ")
+        quoted(cb, report_path("modules.txt"))
+        buf.add_str(cb, " > ")
+        quoted(cb, report_path("output.txt"))
+        buf.add_str(cb, " 2>&1")
+        if windows
+            buf.add_byte(cb, '"')
+        buf.add_byte(cb, 0)
+        ubyte status = io_platform.run_command(cb.data)
+        buf.add_str(rep, "exit status: ")
+        buf.add_long(rep, status)
+        if status == 70
+            buf.add_str(rep, " (the compiler crashed: see output.txt)")
+        else if status == 255
+            buf.add_str(rep, " (the compiler could not be started, or was stopped)")
+        buf.add_str(rep, "\nwhat it printed is in output.txt, the files it wrote are in out/\n")
+
+        ; the files of the program
+        buf.add_str(rep, "\nsource files of the program:\n")
+        ^^ubyte list
+        long list_size
+        list, list_size = file_bytes(report_path("modules.txt"))
+        ^^buf.Buf libs = buf.new(4096)
+        if list != 0 and list_size > 0 {
+            long at = 0
+            while at < list_size {
+                long eol = at
+                while list[eol] != 0 and list[eol] != '\n'
+                    eol++
+                list[eol] = 0
+                if list[at] == 'U'
+                    copy_source(list + at + 2)
+                else if list[at] == 'L' {
+                    buf.add_str(libs, "  ")
+                    buf.add_str(libs, list + at + 2)
+                    buf.add_byte(libs, '\n')
+                }
+                at = eol + 1
+            }
+        }
+        else {
+            ; the run did not get as far as loading the program: what the command names
+            for i in 0 to file_count - 1 {
+                if i < file_count
+                    copy_source(files[i])
+            }
+        }
+        if opt_report_nosource
+            buf.add_str(rep, "(not copied: -reportnosource)\n")
+        if libs.len > 0 {
+            buf.add_str(rep, "\nlibrary modules that were loaded:\n")
+            buf.add_bytes(rep, libs.data, libs.len)
+        }
+        buf.add_str(rep, "\nthe tools (what they say of themselves is in tools.txt)\n")
+        if not io_platform.write_file(report_path("report.txt"), rep.data, rep.len) {
+            out.err()
+            out.puts("-report: can't write into ")
+            out.puts(opt_report)
+            out.nl()
+            out.exit(1)
+        }
+        void io_platform.remove(report_path("modules.txt"))
+        buf.clear(cb)
+        buf.add_str(cb, "64tass --version > ")
+        quoted(cb, report_path("tools.txt"))
+        buf.add_str(cb, " 2>&1")
+        buf.add_byte(cb, 0)
+        void io_platform.run_command(cb.data)
+        buf.clear(cb)
+        buf.add_str(cb, "clang --version >> ")
+        quoted(cb, report_path("tools.txt"))
+        buf.add_str(cb, " 2>&1")
+        buf.add_byte(cb, 0)
+        void io_platform.run_command(cb.data)
+
+        out.puts("report written to ")
+        out.puts(opt_report)
+        out.puts(": the run ended with status ")
+        out.putl(status)
+        out.puts(", what it printed is in output.txt")
+        out.nl()
+        if sources_copied > 0 {
+            out.puts("it contains the program's source files (")
+            out.putl(sources_copied)
+            out.puts(", in src/); -reportnosource leaves them out")
+            out.nl()
+        }
+        out.exit(status)
     }
 
     ; ---- building and running ----

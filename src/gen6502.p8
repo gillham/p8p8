@@ -15,6 +15,7 @@
 ; All instructions go through ins() and the few routines after it that know
 ; the CPU: the 65C02 has stz, bra and friends, the 6502 gets longer forms.
 
+%import crumb
 %import ir
 %import strtab
 %import mem
@@ -1493,6 +1494,7 @@ gen6502 {
     }
 
     sub subroutine(^^ir.Block bl, ^^ir.Sub s, bool nested) {
+        crumb.name = s.name
         if s.is_asm {
             ; an asmsub: its assembly, unless it is inlined at every call
             if s.is_inline or s.asmtext == 0 or s.asm_is_ir

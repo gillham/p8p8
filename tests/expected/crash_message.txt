@@ -1,0 +1,3 @@
+p8c: internal error: the compiler crashed while testing the crash message (on purpose)
+This is a bug in p8c.  To report it, run the same command with  -report <directory>
+added (a directory that does not exist yet) and attach what it writes there.

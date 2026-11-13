@@ -5,6 +5,7 @@
 ; (its target subdirectory first, then its shared files).  syslib,
 ; prog8_math and prog8_lib are imported implicitly, as upstream does.
 
+%import crumb
 %import ast
 %import parser
 %import lexer
@@ -113,6 +114,7 @@ importer {
 
     ; Parses the file as a module and adds it to the list; 0 when it can't be read.
     sub load_module(^^ubyte filepath, ^^ubyte name, bool is_library) -> ^^Module {
+        crumb.name = filepath
         ^^source.File f = source.load(filepath)
         if f == 0
             return 0

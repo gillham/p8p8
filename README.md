@@ -165,7 +165,39 @@ Options p8p8 has that the reference compiler does not:
 | `-noopt` | the own code generator without its optimizations |
 | `-verbose` | print the commands that are run and the assembler's summary |
 | `-libpath` | print the library directory that is used |
+| `-report <dir>` | write a report of this run into the new directory `<dir>` (see below); `-reportnosource` leaves the program's sources out of it |
 
+
+## When something goes wrong
+
+If p8c rejects a program it should accept, builds one that misbehaves, or
+stops with "internal error", please report it:
+<https://github.com/gillham/p8p8/issues>.  The smallest program that shows
+the problem is the best report.  When that is hard to make, run the same
+command once more with `-report` and a directory that does not exist yet:
+
+```
+p8c -target cx16 game.p8 -report problem
+```
+
+The compiler runs as it would without the option, and writes into
+`problem/` everything needed to repeat the run somewhere else:
+
+| File | What |
+|---|---|
+| `report.txt` | the versions of p8c and of the library, the kind of machine, the command, how the run ended, and every file that was loaded |
+| `output.txt` | what the run printed, with the commands it ran and where each module came from |
+| `out/` | the files the run wrote: assembly, IR, the program |
+| `src/` | the program's own source files |
+| `tools.txt` | the versions of 64tass and clang |
+
+**The directory contains your source code.**  Look through it before you
+attach it; `-reportnosource` writes the same report without `src/` (the
+assembly in `out/` is still made from your program).  Files a program pulls
+in with `%asminclude` or `%asmbinary` are not copied.
+
+When the compiler itself crashes, it says in which stage and at which file or
+subroutine, and exits with status 70.
 
 ## Working on the compiler
 

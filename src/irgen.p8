@@ -6,6 +6,7 @@
 ; included, as in the upstream IR (the backends decide what goes on a
 ; stack).
 
+%import crumb
 %import ast
 %import token
 %import types
@@ -1792,6 +1793,7 @@ irgen {
         scope = ss.inner
         loop_depth = 0
         cursub = ir.add_sub(block, sym_name(ss), pos_text(n))
+        crumb.name = cursub.name
         ; parameters
         ^^ast.Node p = n.a
         while p != 0 {

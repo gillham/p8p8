@@ -14,6 +14,7 @@
 ; - %ir blocks of the libraries are parsed (irparse.p8) and lowered too.
 ; mem2reg and the optimizer turn the slots back into registers.
 
+%import crumb
 %import ir
 %import irparse
 %import strtab
@@ -1291,6 +1292,7 @@ llvmgen {
 
     sub function(^^ir.Sub s) {
         cursub = s
+        crumb.name = s.name
         if not irparse.expand(s) {
             errors++
             return

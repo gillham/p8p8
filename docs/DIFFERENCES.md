@@ -130,8 +130,10 @@ Options are upstream's where both have them, with one dash or two.
   `-printast1`, `-printast2`, `-float2bytes`, `-bytes2float`, `-vm`,
   `-vmtrace`, `-compareir`.
 - **p8p8's own:** `-codegen own|upstream`, `-encoding`, `-lib`, `-libpath`,
-  `-verbose`, `-ir`, `-llvm`, `-build`, `-run`, and options that print the
-  compiler's internal tables.
+  `-verbose`, `-ir`, `-llvm`, `-build`, `-run`, `-report` and
+  `-reportnosource` (everything about one run in a directory, to attach to
+  a report of a problem), and options that print the compiler's internal
+  tables.
 - A 6502 machine is built by default; for an llvm target p8p8 only checks
   the program unless `-build`, `-run` or `-emu` is given.
 - The output directory of `-out` or `-o` has to exist.

@@ -1,0 +1,2 @@
+report written to build/llvm64/report: the run ended with status 0, what it printed is in output.txt
+it contains the program's source files (1, in src/); -reportnosource leaves them out

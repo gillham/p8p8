@@ -211,6 +211,16 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -ir -out $(OUT) -target c64 tests/hello.p8 && mv $(OUT)/hello.p8ir $(OUT)/hello_before.p8ir
 	@$(P8P8) tests/hello.p8 -target c64 -out $(OUT) -ir -lib lib && cmp $(OUT)/hello_before.p8ir $(OUT)/hello.p8ir
 	@$(P8P8) tests/hello.p8 -target 2>&1 | diff -u tests/expected/option_value.txt -
+	@echo "test report"
+	@$(P8P8) -selfcrash tests/hello.p8 2>&1 | diff -u tests/expected/crash_message.txt -
+	@rm -rf $(OUT)/report $(OUT)/report2
+	@$(P8P8) -lib lib -target c64 -ir tests/hello.p8 -report $(OUT)/report | diff -u tests/expected/report_done.txt -
+	@cmp tests/hello.p8 $(OUT)/report/src/hello.p8
+	@test -s $(OUT)/report/out/hello.p8ir && test -s $(OUT)/report/output.txt
+	@grep -c '^command: \|^exit status: 0\|^host: \|^p8p8 \|copied to src/hello.p8' $(OUT)/report/report.txt | diff -u tests/expected/report_lines.txt -
+	@$(P8P8) -lib lib -target c64 -ir -selfcrash tests/hello.p8 -reportnosource -report $(OUT)/report2 | diff -u tests/expected/report_crash.txt -
+	@grep -c 'internal error: the compiler crashed' $(OUT)/report2/output.txt | diff -u tests/expected/report_one.txt -
+	@test ! -e $(OUT)/report2/src
 	@for t in bad_resolve bad_types bad_strings bad_checks; do \
 	    echo "test $$t (must be rejected)"; \
 	    $(P8P8) tests/$$t.p8 > $(OUT)/$$t.out 2>&1; \
