@@ -1810,6 +1810,7 @@ irgen {
             if defer_count != 0
                 defer_entry(n, ss)
         }
+        zero_locals(n.c, n.c)
         statements(n.c)
         if not ends_with_return(chunk) {
             defer_exit()
@@ -2161,32 +2162,72 @@ irgen {
         return false
     }
 
-    sub vardecl(^^ast.Node n) {
-        if n.b == 0 {
-            ; no initializer: a subroutine's scalars start at zero on every call, unless @dirty
-            if scope.kind != symtab.S_SUB
-                return
-            ^^ast.Node tag = n.d
-            while tag != 0 {
-                if tag.kind == ast.N_TAG and strings.compare(tag.name, "dirty") == 0
-                    return
-                tag = tag.next
-            }
-            ^^ast.Node zid = n.c
-            while zid != 0 {
-                ^^symtab.Sym zs = zid.extra
-                if zs != 0 and zs.type != 0 and zs.kind == symtab.K_VAR {
-                    ^^types.Type zt = types.get(zs.type)
-                    if zt.base != types.T_ARRAY and zt.base != types.T_STR and zt.base != types.T_STRUCT {
-                        ; (not when the first thing that happens to it is an assignment)
-                        if not assigned_first(n, zs)
-                            void ir.emit_m(chunk, ir.OP_STOREZM, irt(zs.type), sym_name(zs), 0)
-                    }
+    ; A subroutine's scalars without an initial value are zero when the subroutine is
+    ; entered, unless @dirty: on every call, and only then.  (Not where they are
+    ; declared: one declared in a loop keeps its value from round to round, and one
+    ; whose declaration is passed by is zero all the same.  It is what upstream does.)
+    sub zero_locals(^^ast.Node list, ^^ast.Node body) {
+        while list != 0 {
+            if list.kind != ast.N_SUB and list.kind != ast.N_ASMSUB and list.kind != ast.N_EXTSUB {
+                if list.kind == ast.N_VARDECL and list.b == 0
+                    zero_declared(list, body)
+                else {
+                    zero_locals(list.a, body)
+                    zero_locals(list.b, body)
+                    zero_locals(list.c, body)
+                    zero_locals(list.d, body)
                 }
-                zid = zid.next
             }
-            return
+            list = list.next
         }
+    }
+
+    sub zero_declared(^^ast.Node n, ^^ast.Node body) {
+        ^^ast.Node tag = n.d
+        while tag != 0 {
+            if tag.kind == ast.N_TAG and strings.compare(tag.name, "dirty") == 0
+                return
+            tag = tag.next
+        }
+        ^^ast.Node zid = n.c
+        while zid != 0 {
+            ^^symtab.Sym zs = zid.extra
+            if zs != 0 and zs.type != 0 and zs.kind == symtab.K_VAR {
+                ^^types.Type zt = types.get(zs.type)
+                if zt.base != types.T_ARRAY and zt.base != types.T_STR and zt.base != types.T_STRUCT {
+                    ; Not when nothing can see the zero: every mention of the variable comes
+                    ; after its declaration, in the same list of statements, and the first
+                    ; of them assigns it.
+                    bool unseen = assigned_first(n, zs) and count_list(body, zs) == count_list(n.next, zs) + 1
+                    if not unseen
+                        void ir.emit_m(chunk, ir.OP_STOREZM, irt(zs.type), sym_name(zs), 0)
+                }
+            }
+            zid = zid.next
+        }
+    }
+
+    ; how often a list of nodes, and everything below them, names the variable
+    ; (assembly counts as once: it may)
+    sub count_list(^^ast.Node n, ^^symtab.Sym s) -> long {
+        long total = 0
+        while n != 0 {
+            if n.kind == ast.N_IDENT and n.extra == s
+                total++
+            else if n.kind == ast.N_ASM
+                total++
+            total += count_list(n.a, s)
+            total += count_list(n.b, s)
+            total += count_list(n.c, s)
+            total += count_list(n.d, s)
+            n = n.next
+        }
+        return total
+    }
+
+    sub vardecl(^^ast.Node n) {
+        if n.b == 0
+            return          ; no initializer: its zero was stored when the subroutine was entered (zero_locals)
         ^^symtab.Sym s = n.c.extra
         if s == 0 or s.type == 0
             return
@@ -4426,6 +4467,36 @@ irgen {
                     return r, ir.T_POINTER
                 }
             }
+            if e.b != 0 and (types.is_pointer(s.type) or (s.kind == symtab.K_PARAM and s.type == types.T_STR)
+                    or (not types.is_array(s.type) and s.type != types.T_STR)) {
+                ; &pointer[i]: where the pointer points, plus the scaled index (not the
+                ; address of the pointer variable itself, which is what an array's name is)
+                uword pvr
+                ubyte pvt
+                pvr, pvt = identifier(target)
+                pvr = convert(pvr, pvt, ir.T_POINTER, false)
+                void ir.emit_rr(chunk, ir.OP_LOADR, ir.T_POINTER, r, pvr)
+                long psize = types.size_of(types.index_elem(s.type))
+                if psize == 0
+                    psize = 1
+                bool pok
+                quad pci
+                pok, pci = typer.const_eval(e.b)
+                if pok {
+                    if pci != 0
+                        void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, r, pci * psize)
+                }
+                else {
+                    uword pxr
+                    ubyte pxt
+                    pxr, pxt = expression(e.b)
+                    pxr = convert(pxr, pxt, ir.T_POINTER, types.is_signed(e.b.type))
+                    if psize > 1
+                        void ir.emit_ri(chunk, scale_op(), address_irt, pxr, psize)
+                    void ir.emit_rr(chunk, ir.OP_ADDR, ir.T_POINTER, r, pxr)
+                }
+                return r, ir.T_POINTER
+            }
             long off = 0
             if e.b != 0 {
                 bool ok2
@@ -4464,6 +4535,38 @@ irgen {
             uword pr
             long foff
             pr, foff = field_address(target)
+            if e.b != 0 {
+                ; &p.field[i]: an element of the field.  A field that is a pointer is
+                ; followed first; one that is an array is where the elements are.
+                uword er = ir.new_reg(ir.T_POINTER)
+                if types.is_pointer(target.type) or (not types.is_array(target.type) and target.type != types.T_STR)
+                    void ir.emit_rp(chunk, ir.OP_LOADI, ir.T_POINTER, er, pr, foff)
+                else {
+                    void ir.emit_rr(chunk, ir.OP_LOADR, ir.T_POINTER, er, pr)
+                    if foff != 0
+                        void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, er, foff)
+                }
+                long fsize = types.size_of(types.index_elem(target.type))
+                if fsize == 0
+                    fsize = 1
+                bool fok
+                quad fci
+                fok, fci = typer.const_eval(e.b)
+                if fok {
+                    if fci != 0
+                        void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, er, fci * fsize)
+                }
+                else {
+                    uword fxr
+                    ubyte fxt
+                    fxr, fxt = expression(e.b)
+                    fxr = convert(fxr, fxt, ir.T_POINTER, types.is_signed(e.b.type))
+                    if fsize > 1
+                        void ir.emit_ri(chunk, scale_op(), address_irt, fxr, fsize)
+                    void ir.emit_rr(chunk, ir.OP_ADDR, ir.T_POINTER, er, fxr)
+                }
+                return er, ir.T_POINTER
+            }
             if foff != 0
                 void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, pr, foff)
             return pr, ir.T_POINTER

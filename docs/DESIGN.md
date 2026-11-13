@@ -200,10 +200,34 @@ comparison:
 Size and speed are measured on whole programs against the reference
 compiler's output, not on fragments.
 
+## Building itself
+
+p8p8 is built from a **seed**: its own output for its own sources, as LLVM
+IR (`seed/p8c.ll.gz`).  clang makes a first compiler of the seed, that one
+compiles the sources, and clang makes `p8c` of the result.  No other Prog8
+compiler is needed.  The IR for macOS and Linux differs only in two target
+lines, which the seed leaves out, so it is one file for both.
+
+Two things keep this honest:
+
+- `make bootstrap`: `p8c` compiles itself again, and the result must be
+  identical.
+- `make seedcheck`: the reference compiler's LLVM branch builds p8p8 from
+  the same sources, and that compiler and the one from the seed must write
+  identical output, for the compiler's own sources and for the test programs
+  through the 6502 code generator.  A compiler that only ever builds itself
+  could carry a mistake along from seed to seed; the first compiler p8p8
+  built of itself did have mistakes that this comparison found.
+
+The seed is refreshed (`make seed`) when the compiler's sources start to
+use something that the compiler in the old seed does not compile, and for
+releases.  Because the sources must always be compilable by the seed, a new
+language feature is first implemented, then the seed refreshed, and only
+then used in the compiler's own sources.
+
 ## Not done yet
 
-- A build that needs no other Prog8 compiler: p8p8 from a seed of its own
-  earlier output.  Today it is built with the LLVM branch of Prog8.
+- A seed for Windows (four C library names differ there).
 - The 65816 and the 45GS02; a Z80 or 68000 code generator.
 - The reference compiler's optimizer has no counterpart in p8p8's front
   end; the 6502 passes and LLVM do that work on their side.

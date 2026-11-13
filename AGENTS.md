@@ -13,8 +13,10 @@ tried and dropped.
 
 ## Setup check
 
-The compiler is built with `prog8c-llvm` (the LLVM branch of Prog8).  Do not
-use plain `prog8c`: it has no llvm targets.
+`make` builds the compiler from `seed/p8c.ll.gz`, its own earlier output,
+with clang alone.  The comparison tests and `make BOOT=prog8c` use
+`prog8c-llvm` (the LLVM branch of Prog8).  Do not use plain `prog8c`: it has
+no llvm targets.
 
 The library that programs are built with is the submodule at `lib/`
 (`prog8lib/` is upstream's library and is never edited; additions and
@@ -74,7 +76,7 @@ Which suite after which change (see the Makefile for all of them):
 
 | Change | Run |
 |---|---|
-| anything | `make test`, `make bootstrap` (p8c compiled by itself must reproduce itself) |
+| anything | `make test`, `make bootstrap` (p8c compiled by itself must reproduce itself), `make seedcheck` (built from the seed and built by prog8c-llvm it must be the same compiler) |
 | front end | `make programs`, `make roundtrip` |
 | IR generation | `make vmcmp`, `make nativecmp` |
 | 6502 code generator or peephole | `BUILDALL_CODEGEN=own make buildall`, `EMUCMP_CODEGEN=own make emucmp`, `EMUCMP_CODEGEN=own make emucmp64` |
@@ -110,6 +112,12 @@ suites pick it up) and, where it is a dump or an error, an expected file in
   measured in the message when the change is about size or speed.
 - **Report measurements as they are.**  Size and cycle numbers come from a
   build that was just made, with the comparison stated.
+- **The sources must compile with the seed.**  Do not use a language feature
+  in the compiler's own sources that the compiler in `seed/` does not
+  compile yet: implement it, run the tests, refresh the seed (`make seed`,
+  with a compiler that passed `make seedcheck`), commit, and only then use
+  it.  Do not refresh the seed for any other reason without the user's
+  agreement: each refresh adds 2 MB to the history.
 - **Keep the documents true.**  A change to how the compiler is put
   together goes into `docs/DESIGN.md`; a new option into the README.  When
   `notes/PLAN.md` exists, add a dated section there for a piece of work.

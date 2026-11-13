@@ -8,7 +8,13 @@
 #
 # Make targets:
 # all:
-#     builds the compiler, the executable p8c, for the llvm64 target (the default)
+#     builds the compiler, the executable p8c, for the llvm64 target (the default):
+#     from the seed in seed/ when there is one (BOOT=seed), else with prog8c-llvm
+#     (BOOT=prog8c)
+# seed:
+#     writes the seed of the compiler that was just built
+# seedcheck:
+#     the compiler from the seed and the one from prog8c-llvm must be the same
 # check:
 #     runs a compiler syntax check of all programs without building them
 # install:
@@ -64,12 +70,46 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	all check install test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	all check seed seedcheck install test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
 $(OUT):
 	$(MD) $(OUT)
+
+# How the compiler is built: from the seed (BOOT=seed), which is p8c's own earlier
+# output as LLVM IR, or by prog8c-llvm (BOOT=prog8c).  The seed is used when it is there.
+#
+# From the seed: clang makes stage 0 of it, stage 0 compiles the sources, and clang
+# makes p8c of that.  (make bootstrap then checks that p8c reproduces itself.)
+# The seed has no target lines, so it is the same file for macOS and Linux.
+SEED	= seed/p8c.ll.gz
+BOOT	?= $(if $(wildcard $(SEED)),seed,prog8c)
+STAGE0	= build/stage0/p8c$(EXE)
+P8CARGS	= -target $(TARGET) -lib lib -srcdirs src:src/$(TARGET)
+CLANG	?= clang
+CFLAGS	?= -O2
+
+ifeq ($(BOOT),seed)
+
+$(STAGE0): $(SEED)
+	$(MD) build/stage0
+	gzip -dc $(SEED) > build/stage0/p8c.ll
+	$(CLANG) $(CFLAGS) -Wno-override-module build/stage0/p8c.ll -o $@
+
+$(P8P8): $(SRCS) $(STAGE0) | $(OUT)
+	$(STAGE0) $(P8CARGS) -llvm -out $(OUT) $(MAIN)
+	mv $(OUT)/main.ll $(OUT)/p8c.ll
+	$(CLANG) $(CFLAGS) -Wno-override-module $(OUT)/p8c.ll -o $@
+
+$(OUT)/test_%$(EXE): src/test_%.p8 $(SRCS) $(P8P8) | $(OUT)
+	$(P8P8) $(P8CARGS) -out $(OUT) -build $<
+
+check:	$(P8P8)
+	$(P8P8) $(P8CARGS) -check $(MAIN)
+	@for t in $(TESTS); do $(P8P8) $(P8CARGS) -check src/$$t.p8 || exit 1; done
+
+else
 
 # -o names the executable; clang builds it from the .ll written next to it
 $(P8P8): $(SRCS) | $(OUT)
@@ -80,6 +120,22 @@ $(OUT)/test_%$(EXE): src/test_%.p8 $(SRCS) | $(OUT)
 
 check:
 	$(PCC) -check -quiet $(PCCARGS) $(MAIN) $(addprefix src/,$(addsuffix .p8,$(TESTS)))
+
+endif
+
+# make seed: the seed of this compiler, for the next one to be built from.
+# (Without the two target lines, which are all that differs between macOS and Linux;
+# gzip -n leaves out the time, so the same compiler gives the same file.)
+seed:	$(P8P8)
+	$(MD) seed build/seed
+	$(P8P8) $(P8CARGS) -llvm -out build/seed $(MAIN)
+	grep -v '^target ' build/seed/main.ll | gzip -9 -n > $(SEED)
+	@ls -l $(SEED) | awk '{print "wrote", $$9 ":", $$5, "bytes"}'
+
+# make seedcheck: the compiler built from the seed and the one built by prog8c-llvm must
+# be the same compiler: each compiles the sources, and the two results must be identical.
+seedcheck:
+	@tests/seedcheck.sh $(SEED) "$(PCC) $(PCCARGS)" "$(P8CARGS)" $(MAIN)
 
 # make install [PREFIX=dir] [LIB=dir]: the compiler in PREFIX/bin and the library it builds
 # programs with in PREFIX/lib/p8p8, where p8c finds it by itself.  LIB is the library

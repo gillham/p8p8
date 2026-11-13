@@ -39,32 +39,40 @@ compiler, so expect to find bugs.
 
 ## Building
 
-p8p8 is built with the LLVM branch of the Prog8 compiler, run as
-`prog8c-llvm` (<https://github.com/gillham/prog8>, branch `llvm`).  You need:
+p8p8 builds itself.  You need:
 
-- Java 17 or newer and `prog8c-llvm` in your `PATH`
 - clang 15 or newer
-- make and Python 3
+- make
 - [64tass](https://sourceforge.net/projects/tass64/) to build 6502 programs
-- optional, for the test suites that run programs:
-  [x16emu](https://github.com/X16Community/x16-emulator) and
-  [VICE](https://vice-emu.sourceforge.io/)
 
 ```
 git clone --recurse-submodules <this repository>
 make                 # builds build/llvm64/p8c
-python3 setup.py     # for the tests: Prog8's examples, compiler tests and docs, into .prog8-reference
-make test
 ```
+
+`seed/p8c.ll.gz` is the compiler's own earlier output, as LLVM IR.  clang
+makes a first compiler of it, that one compiles the sources, and clang makes
+`p8c` of the result.  `make bootstrap` checks that `p8c` then reproduces
+itself.  The seed is the same file for macOS and Linux; it is not for
+Windows yet.
 
 The library that programs are built with is a repository of its own, the
 submodule at `lib/`: Prog8's standard library unchanged, with the machines
 and modules that are added beside it (see its README).  A `p8c` in
 `build/` finds it there.
 
-`setup.py` fetches Prog8's examples, compiler tests and documentation,
-which the test suites use.  They are not part of this repository and are
-never committed.
+For the tests, and as a second way to build the compiler
+(`make BOOT=prog8c`), you also need:
+
+- Python 3, and `python3 setup.py` once: it fetches Prog8's examples,
+  compiler tests and documentation into `.prog8-reference`, which the test
+  suites use.  They are not part of this repository and are never committed.
+- Java 17 or newer and `prog8c-llvm`, the LLVM branch of the Prog8 compiler
+  (<https://github.com/gillham/prog8>, branch `llvm`), in your `PATH`: the
+  comparison suites build every test program with it too.
+- optional, for the suites that run programs:
+  [x16emu](https://github.com/X16Community/x16-emulator) and
+  [VICE](https://vice-emu.sourceforge.io/)
 
 To install the compiler with the library it builds programs with:
 
@@ -110,6 +118,7 @@ Options p8p8 has that the reference compiler does not:
 |---|---|
 | `make test` | unit tests and the dumps of the sample files in `tests/` |
 | `make bootstrap` | p8p8 compiled by itself compiles itself to identical output |
+| `make seedcheck` | the compiler built from the seed and the one built by `prog8c-llvm` write identical output |
 | `make vmcmp` | test programs run in the reference compiler's VM from p8p8's IR and from the reference compiler's: same output |
 | `make nativecmp` | the same for native executables |
 | `make buildall` | every C64 and X16 example builds |
@@ -126,6 +135,7 @@ run those suites with p8p8's own 6502 code generator.
 |---|---|
 | `src/` | the compiler |
 | `lib/` | the library programs are built with (a submodule) |
+| `seed/` | the compiler's own earlier output, which it is built from |
 | `runtime/` | support code that some programs are built with |
 | `tests/` | test programs, scripts and expected output |
 | `docs/` | the design, and the description of target files and the library |
