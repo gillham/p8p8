@@ -167,7 +167,18 @@ Options p8p8 has that the reference compiler does not:
 | `-libpath` | print the library directory that is used |
 
 
-## Tests
+## Working on the compiler
+
+Nothing in this section is needed to compile programs with p8c, and none of it
+is in a release archive.
+
+### Tests
+
+`make test` and `make bootstrap` need only this repository and its library,
+and are what CI runs.  The suites that compare with the reference compiler
+need `prog8c-llvm` (from its commit 486bd411 on: two programs of
+`tests/conformance` fail on the 6502 with an older one), and the emulator
+suites need 64tass, x16emu and VICE as well.
 
 | Target | What it checks |
 |---|---|
@@ -185,7 +196,7 @@ Options p8p8 has that the reference compiler does not:
 Set `EMUCMP_CODEGEN=own`, `GFXCMP_CODEGEN=own` or `BUILDALL_CODEGEN=own` to
 run those suites with p8p8's own 6502 code generator.
 
-## Layout
+### Layout
 
 | Path | What is there |
 |---|---|
