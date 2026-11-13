@@ -119,7 +119,9 @@ suites pick it up) and, where it is a dump or an error, an expected file in
   it.  Do not refresh the seed for any other reason without the user's
   agreement: each refresh adds 2 MB to the history.
 - **Keep the documents true.**  A change to how the compiler is put
-  together goes into `docs/DESIGN.md`; a new option into the README.  When
+  together goes into `docs/DESIGN.md`; a new option into the README; anything
+  that makes p8p8 behave more or less like `prog8c` into
+  `docs/DIFFERENCES.md`.  When
   `notes/PLAN.md` exists, add a dated section there for a piece of work.
 
 ## Upstream's sources

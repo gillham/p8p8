@@ -35,7 +35,9 @@ programs have been built with it for the C64, C128, X16, PET, VIC-20, Plus/4,
 MEGA65, Foenix F256 and GameTank.  It has had far less use than the reference
 compiler, so expect to find bugs.
 
-[docs/DESIGN.md](docs/DESIGN.md) says how the compiler is put together.
+[docs/DIFFERENCES.md](docs/DIFFERENCES.md) lists where p8p8 differs from
+`prog8c`.  [docs/DESIGN.md](docs/DESIGN.md) says how the compiler is put
+together.
 
 ## Building
 
@@ -185,7 +187,7 @@ run those suites with p8p8's own 6502 code generator.
 | `seed/` | the compiler's own earlier output, which it is built from |
 | `runtime/` | support code that some programs are built with |
 | `tests/` | test programs, scripts and expected output |
-| `docs/` | the design, and the description of target files and the library |
+| `docs/` | the differences from `prog8c`, the design, and the description of target files and the library |
 | `tools/` | helper scripts for the tests |
 
 ## Licence and credits

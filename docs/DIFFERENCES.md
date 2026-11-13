@@ -1,0 +1,146 @@
+# Differences from prog8c
+
+p8p8 compiles the Prog8 language as the reference compiler, `prog8c`, defines
+it, and tries to behave the same.  This is the list of where it does not, or
+not yet.  It is meant to be complete about the kinds of difference and honest
+about how much has been checked; where a statement rests on a test, the test
+is named.
+
+"Upstream" below is `prog8c` and its standard library, by Irmen de Jong
+(<https://github.com/irmen/prog8>).  p8p8 is compared against its LLVM
+branch (<https://github.com/gillham/prog8>), which is upstream's compiler
+with LLVM targets added.
+
+## What is the same
+
+- **The language.**  The parser takes upstream's whole grammar.  Every file
+  of upstream's standard library, examples and the two directories of
+  compiler test programs loads and checks (`make programs`, `make corpus`).
+- **The standard library.**  p8p8 has no library of its own: programs are
+  built with upstream's, unchanged.
+- **The intermediate representation.**  p8p8 writes upstream's `.p8ir`
+  format.  Its IR runs in upstream's virtual machine and builds with
+  upstream's IR back ends.
+- **The conventions of 6502 programs:** symbol prefixes, how arguments reach
+  `asmsub`s, split word arrays, the layout that library assembly expects,
+  64tass as the assembler.
+- **What programs do.**  Test programs built by both compilers print the same
+  in the virtual machine, as native executables, and in emulators of the
+  Commander X16 and Commodore 64, and programs that draw end on the same
+  picture (`make vmcmp`, `nativecmp`, `emucmp`, `emucmp64`, `gfxcmp`).  All
+  of upstream's C64 and X16 examples build (`make buildall`).
+
+## Targets
+
+| | upstream | p8p8 |
+|---|---|---|
+| 6502 and 65C02 machines | built in: c64, c128, cx16, pet32; others as custom targets | every machine is a target file, the four built-in ones included; a code generator of p8p8's own |
+| 65816, 45GS02 | no | no (planned) |
+| 68000 (Amiga and others) | yes | no code generator; such programs can be checked, not built |
+| the virtual machine | yes, with the machine itself | p8p8 writes the IR for it and has no virtual machine: upstream's runs it |
+| the host, through LLVM | in the LLVM branch | yes; it is how p8p8 compiles itself |
+
+p8p8 uses only what the 65816 has too on a 65C02 (no `bbr`, `bbs`, `rmb`,
+`smb`), as upstream does.
+
+## The code that is generated
+
+- **A different code generator.**  For the 6502, p8p8 does not use upstream's
+  code generator or its output.  It translates the IR one instruction at a
+  time and improves the result with its own passes ([DESIGN.md](DESIGN.md)).
+  The assembly looks different, has no source lines as comments, and
+  variables and temporaries are at other addresses, also in the zero page.
+- **No optimizer in the front end.**  Upstream optimizes the program before
+  generating code: constant propagation, inlining of small subroutines,
+  removal of dead stores and of unreachable code, and more.  p8p8 folds
+  constants, removes subroutines and variables that nothing refers to, and
+  leaves the rest to its 6502 passes and to LLVM.  Two visible consequences:
+  - `inline` on a subroutine is not acted on, except for an `asmsub` whose
+    body is put in place of the call as upstream does;
+  - upstream sometimes accepts a program because its optimizer changed it
+    first (a variable that is never written becomes a constant and may then
+    stand where a constant is required).  p8p8 does this for the places
+    where it matters, an array initializer and a `when` choice
+    (`tests/programs/neverwritten.p8`), not everywhere.
+- **Size and speed** are measured on whole programs and are close to
+  upstream's default code generator, a little smaller on some programs and a
+  little larger on others.  They are not the same and are not meant to be.
+- **Floating point on the 6502** goes through the ROM routines, as upstream's
+  does.  Some forms of float arithmetic are not implemented in p8p8's
+  generator and are reported as an error when a program uses them.
+
+## Checking and messages
+
+- **Errors.**  p8p8 reports the errors of upstream's that have been ported,
+  with upstream's wording.  `tools/checkprobe.py` compares the two compilers
+  on 195 small invalid programs: they agree on 182.  In 11 of the others
+  p8p8 rejects a program that upstream's `-check` lets through (upstream
+  rejects most of them too once the values are used).  Known programs that
+  upstream rejects and p8p8 accepts:
+  - an `if` expression whose two values have types that cannot be assigned;
+  - `unroll` with a count that is not constant;
+  - `p^^ = array[i]` where upstream asks for `&`.
+
+  There will be others: the 195 cases were written here, they are not
+  upstream's own test suite.
+- **Warnings and notes.**  Upstream prints warnings and information lines
+  (a variable made constant, recursion, and so on).  p8p8 prints errors and
+  two warnings, and has others on request (`-warnunused`,
+  `-warnunreachable`, `-warnshadow`, `-warnall`).
+- **Format.**  p8p8's messages are `file:line:column: error: text`, without
+  colors.  Parse errors are worded differently (the parser is written by
+  hand, not generated from the grammar).
+
+## The command line
+
+Options are upstream's where both have them, with one dash or two.
+
+- **Accepted and ignored**, because they only concern what upstream prints:
+  `-plaintext`, `-quiet`, `-quietasm`, `-nosourcelines`, `-timings`,
+  `-warnimplicitcasts`, `-ircomments`.
+- **Not there** (an error, not ignored): `-D`, `-address`, `-breakinstr`,
+  `-profiling`, `-noasm`, `-ignorefootguns`, `-newcodegen`, `-watch`,
+  `-daemon`, `-emu2`, and the tools that upstream has built in:
+  `-libsearch`, `-libdump`, `-dumpsymbols`, `-dumpvars`, `-gendoc`,
+  `-printast1`, `-printast2`, `-float2bytes`, `-bytes2float`, `-vm`,
+  `-vmtrace`, `-compareir`.
+- **p8p8's own:** `-codegen own|upstream`, `-encoding`, `-lib`, `-libpath`,
+  `-verbose`, `-ir`, `-llvm`, `-build`, `-run`, and options that print the
+  compiler's internal tables.
+- A 6502 machine is built by default; for an llvm target p8p8 only checks
+  the program unless `-build`, `-run` or `-emu` is given.
+- The output directory of `-out` or `-o` has to exist.
+- One program for each run of the compiler: several source files on one
+  command line are not reliable.
+
+## The library
+
+- Upstream carries its library inside the compiler.  p8p8 reads it from a
+  directory, which is a repository of its own: upstream's library unchanged,
+  with machines and modules that are added beside it
+  ([TARGETS.md](TARGETS.md)).
+- A machine's description is a properties file in the format of upstream's
+  custom targets, with a few keys of p8p8's own (the startup code among
+  them, which upstream has in its Kotlin sources for its built-in machines).
+- `%import` looks in the same places in the same order; the library has more
+  layers.  `-traceimports` shows which file a module came from.
+
+## Things upstream has that p8p8 does not
+
+- the virtual machine, and running a program in it;
+- a language server and editor support;
+- the syntax files, documentation and examples: those are upstream's and
+  apply to p8p8 as they are;
+- years of use.  p8p8 is new and has been run on few programs.  Mistakes in
+  basic behaviour have been found as late as its first week (where an
+  uninitialized local is set to zero, the address of an element behind a
+  pointer, the value of a call through a pointer); each now has a test, and
+  there will be more of the kind.
+
+## Things p8p8 has that upstream does not
+
+- It is written in Prog8 and compiles itself; it is built from its own
+  earlier output with clang alone, on macOS, Linux and Windows.
+- It starts at once: there is no Java virtual machine to start.
+- Every 6502 machine, the built-in ones too, is a text file that can be
+  changed without building the compiler.

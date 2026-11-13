@@ -26,7 +26,7 @@ for name,target,body in cases:
         u=subprocess.run(['prog8c-llvm','-target',target,'-quiet','-out',S,f],capture_output=True,text=True)
         u=strip(u.stdout+u.stderr)
     um=[re.sub(r'.*\.p8:(\d+):\d+: ','\\1: ',l) for l in u.split('\n') if 'ERROR' in l]
-    p=subprocess.run(['build/llvm64/p8p8','-target',target,'-lib',L,'-ir','-out',S,f],capture_output=True,text=True)
+    p=subprocess.run(['build/llvm64/p8c','-target',target,'-lib',L,'-ir','-out',S,f],capture_output=True,text=True)
     pm=[re.sub(r'.*\.p8:(\d+):\d+: error: ','\\1: ',l) for l in (p.stdout+p.stderr).split('\n') if 'error' in l]
     same = bool(um)==bool(pm)
     print(('ok   ' if same else 'GAP  ')+name+' ['+target+']')
