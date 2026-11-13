@@ -4,9 +4,9 @@ A [Prog8](https://prog8.readthedocs.io/) compiler written in Prog8.
 
 p8p8 is an independent project.  It is not the reference compiler: the Prog8
 language, its compiler `prog8c` and its standard library are by Irmen de Jong,
-at <https://github.com/irmen/prog8>.  p8p8 compiles the same language, uses
-that standard library unchanged, and follows `prog8c` in its command line
-where it can.
+at <https://github.com/irmen/prog8>.  p8p8 compiles the same language, builds
+programs with that standard library, and follows `prog8c` in its command
+line where it can.
 
 The command is `p8c`.
 
@@ -68,8 +68,9 @@ It builds `build\llvm64\p8c.exe` from the same seed and checks that it
 reproduces itself.
 
 The library that programs are built with is a repository of its own, the
-submodule at `lib/`: Prog8's standard library unchanged, with the machines
-and modules that are added beside it (see its README).  A `p8c` in
+submodule at `lib/`: Prog8's standard library as it comes, and beside it the
+machines and modules that are added and a few modules with bug fixes that
+take the place of upstream's (see its README).  A `p8c` in
 `build/` finds it there.
 
 For the tests, and as a second way to build the compiler

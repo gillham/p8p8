@@ -176,8 +176,9 @@ memory map, zero page, startup code.  The machines the reference compiler
 has built in are such files too.
 
 The library that programs are built with is a separate repository: the
-reference compiler's standard library unchanged, and beside it the machines
-and modules that are added.  See [TARGETS.md](TARGETS.md).
+reference compiler's standard library as it comes, and beside it the
+machines and modules that are added and a few modules with bug fixes that
+take the place of upstream's.  See [TARGETS.md](TARGETS.md).
 
 ## How it is tested
 

@@ -8,8 +8,8 @@ is named.
 
 "Upstream" below is `prog8c` and its standard library, by Irmen de Jong
 (<https://github.com/irmen/prog8>).  p8p8 is compared against its LLVM
-branch (<https://github.com/gillham/prog8>), which is upstream's compiler
-with LLVM targets added.
+branch (<https://github.com/gillham/prog8>), which is a fork of upstream's
+compiler with LLVM targets added.
 
 ## What is the same
 
@@ -17,7 +17,9 @@ with LLVM targets added.
   of upstream's standard library, examples and the two directories of
   compiler test programs loads and checks (`make programs`, `make corpus`).
 - **The standard library.**  p8p8 has no library of its own: programs are
-  built with upstream's, unchanged.
+  built with upstream's.  Its files are not edited; a few modules are
+  replaced by copies with bug fixes or changes for the added targets, which
+  the library repository lists.
 - **The intermediate representation.**  p8p8 writes upstream's `.p8ir`
   format.  Its IR runs in upstream's virtual machine and builds with
   upstream's IR back ends.
@@ -38,10 +40,10 @@ with LLVM targets added.
 | 65816, 45GS02 | no | no (planned) |
 | 68000 (Amiga and others) | yes | no code generator; such programs can be checked, not built |
 | the virtual machine | yes, with the machine itself | p8p8 writes the IR for it and has no virtual machine: upstream's runs it |
-| the host, through LLVM | in the LLVM branch | yes; it is how p8p8 compiles itself |
+| the host, through LLVM | in the fork's LLVM branch | yes; it is how p8p8 compiles itself |
 
-p8p8 uses only what the 65816 has too on a 65C02 (no `bbr`, `bbs`, `rmb`,
-`smb`), as upstream does.
+On a 65C02 p8p8 uses only instructions that a 65816 in emulation mode has
+as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
 
 ## The code that is generated
 
@@ -117,7 +119,7 @@ Options are upstream's where both have them, with one dash or two.
 
 - Upstream carries its library inside the compiler.  p8p8 reads it from a
   directory, which is a repository of its own: upstream's library unchanged,
-  with machines and modules that are added beside it
+  with machines, modules, and minor bugfixes that are added beside it
   ([TARGETS.md](TARGETS.md)).
 - A machine's description is a properties file in the format of upstream's
   custom targets, with a few keys of p8p8's own (the startup code among
@@ -135,7 +137,7 @@ Options are upstream's where both have them, with one dash or two.
   basic behaviour have been found as late as its first week (where an
   uninitialized local is set to zero, the address of an element behind a
   pointer, the value of a call through a pointer); each now has a test, and
-  there will be more of the kind.
+  there will be more of the same.
 
 ## Things p8p8 has that upstream does not
 
@@ -143,4 +145,4 @@ Options are upstream's where both have them, with one dash or two.
   earlier output with clang alone, on macOS, Linux and Windows.
 - It starts at once: there is no Java virtual machine to start.
 - Every 6502 machine, the built-in ones too, is a text file that can be
-  changed without building the compiler.
+  changed without rebuilding the compiler.
