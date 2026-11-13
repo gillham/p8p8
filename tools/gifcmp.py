@@ -6,12 +6,16 @@ The two builds run at different speeds, so the recordings are not compared frame
 frame.  Two things can be compared:
 
 - the final picture, when both recordings end on a picture that no longer changes
-  (a program that draws something and stops, or waits for a key);
+  (a program that draws something and stops, or waits for a key); and with it where
+  on the screen each recording ever showed something else than that final picture.
+  Two builds that end on the same picture must have drawn in the same places on the
+  way: one that drew nothing, where the other animated something and cleaned up
+  after itself, is not the same program;
 - the sequence of distinct pictures, when the program shows whole frames one after the
   other (an animation locked to the vertical blank): the sequences are the same, one
   is just further along than the other.
 
-Prints one line: "same picture", "same frames (N)", "different picture", "cannot
+Prints one line: "same picture", "same frames (N)", "different picture...", "cannot
 tell (...)" or "nothing drawn".  Only "different picture" is a finding: two builds of
 different speed show different frames of a program that draws at its own pace, without
 anything being wrong.  The exit status is 0 for the same, 1 for a different picture, 2
@@ -63,6 +67,63 @@ def only_load_line(path_a, count_a, path_b, count_b):
     return bottom - top <= 16 and bottom <= a.size[1] // 2 and right - left <= 80
 
 
+CELL = 8            # the screen in cells of this many pixels
+MOST = 400          # distinct pictures looked at, spread over the recording
+
+
+def touched(path, hashes, other):
+    """The cells of the screen that ever showed something else than the final picture,
+    in the pictures that only this recording has (a picture that both have, such as
+    the screens of the machine starting up, says nothing about a difference)."""
+    final = last_frame(path, len(hashes))
+    small = (max(1, final.size[0] // CELL), max(1, final.size[1] // CELL))
+    mask = Image.new('L', small, 0)
+    # the first frame of each picture that is this recording's own
+    wanted = []
+    seen = set(other)
+    for i, h in enumerate(hashes):
+        if h not in seen:
+            seen.add(h)
+            wanted.append(i)
+    if len(wanted) > MOST:
+        step = len(wanted) / MOST
+        wanted = [wanted[int(k * step)] for k in range(MOST)]
+    with Image.open(path) as im:
+        for i in wanted:
+            try:
+                im.seek(i)
+                frame = im.convert('RGB')
+            except (OSError, EOFError):
+                break
+            if frame.size != final.size:
+                continue
+            diff = ImageChops.difference(frame, final).convert('L')
+            # a cell is touched when any of its pixels differs
+            cells = diff.resize(small, Image.BOX).point(lambda v: 255 if v else 0)
+            mask = ImageChops.lighter(mask, cells)
+    return mask
+
+
+def lit(mask):
+    return mask.size[0] * mask.size[1] - mask.histogram()[0]
+
+
+def drew_alike(path_a, a, path_b, b):
+    """Did the two recordings, which end on the same picture, draw in the same places
+    before that?  (The cells one touched and the other did not, against all touched.)"""
+    ma = touched(path_a, a, set(b))
+    mb = touched(path_b, b, set(a))
+    if ma.size != mb.size:
+        return True, 0, 0
+    union = lit(ImageChops.lighter(ma, mb))
+    apart = lit(ImageChops.difference(ma, mb))
+    # Some cells differ without meaning anything: the cursor, the digits of the load
+    # address, and text that scrolls by, caught at other moments in the two recordings
+    # (a third of the cells in examples/queens.p8).  Half of them or more is one
+    # recording drawing where the other did not.
+    return apart <= max(4, union // 2), apart, union
+
+
 def distinct(seq):
     out = []
     for f in seq:
@@ -84,14 +145,18 @@ def main():
         print('nothing drawn')
         return 2
     if settled(a, need) and settled(b, need):
-        if a[-1] == b[-1]:
-            print('same picture')
-            return 0
-        if only_load_line(sys.argv[1], len(a), sys.argv[2], len(b)):
-            print('same picture (but for the load address)')
-            return 0
-        print('different picture')
-        return 1
+        note = ''
+        if a[-1] != b[-1]:
+            if not only_load_line(sys.argv[1], len(a), sys.argv[2], len(b)):
+                print('different picture')
+                return 1
+            note = ' (but for the load address)'
+        alike, apart, union = drew_alike(sys.argv[1], a, sys.argv[2], b)
+        if not alike:
+            print('different picture (the same at the end, but %d of the %d cells that were drawn in on the way were so in one only)' % (apart, union))
+            return 1
+        print('same picture' + note)
+        return 0
     if settled(a, need) != settled(b, need):
         print('cannot tell (one of the two is still drawing)')
         return 2
