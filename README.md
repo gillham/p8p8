@@ -172,8 +172,8 @@ Options p8p8 has that the reference compiler does not:
 
 If p8c rejects a program it should accept, builds one that misbehaves, or
 stops with "internal error", please report it:
-<https://github.com/gillham/p8p8/issues>.  The smallest program that shows
-the problem is the best report.  When that is hard to make, run the same
+<https://github.com/gillham/p8p8/issues> (the form there asks for what is
+needed).  The smallest program that shows the problem is the best report.  When that is hard to make, run the same
 command once more with `-report` and a directory that does not exist yet:
 
 ```
