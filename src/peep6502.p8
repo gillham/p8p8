@@ -2594,6 +2594,46 @@ peep6502 {
 
     ; loads and transfers into a register that nothing uses before it is loaded again,
     ; and stores to a cell that is written again before anything reads it
+    ; "name,x" or "name+2,y" of a plain variable (an array of the program): reading it
+    ; is reading memory and nothing else
+    sub indexed_plain(^^strtab.Sym s) -> bool {
+        ^^ubyte t = s.text
+        if t[0] == '('
+            return false
+        long n = 0
+        while t[n] != 0 and t[n] != ',' and t[n] != '+'
+            n++
+        long comma = n
+        while t[comma] != 0 and t[comma] != ','
+            comma++
+        if t[comma] == 0 or n == 0
+            return false
+        ^^strtab.Sym base = strtab.intern_sym(t, n as uword)
+        return base.mark & K_PLAIN != 0
+    }
+
+    ; may a "+" be put after this line?  Not when a branch before it goes to a "+"
+    ; further on, which would then stop at the new one.
+    sub no_open_plus(long at_line) -> bool {
+        long j = at_line
+        while j > 0 {
+            j--
+            if lkind[j] == L_RAW
+                return false
+            if lkind[j] == L_LABEL {
+                ^^strtab.Sym ls = lsym[j]
+                if ls.mark & K_ANON != 0 and ls.text[0] == '+'
+                    return true
+            }
+            if lkind[j] == L_INS and lok[j] == O_OTHER and lsym[j] != 0 {
+                ^^strtab.Sym bs = lsym[j]
+                if bs.mark & K_ANON != 0 and bs.text[0] == '+'
+                    return false
+            }
+        }
+        return true
+    }
+
     sub backward() {
         bool la = true
         bool lx = true
@@ -2776,6 +2816,34 @@ peep6502 {
                     continue
                 }
             }
+            if use_previous and m == M_STA and not la and not lc and not lnz and (ok == O_CELL or ok == O_VAR or ok == O_POOL) {
+                ; "lda hi / adc #0 / sta hi", the carry of a byte added to a word, with
+                ; neither A nor the flags wanted after it: "bcc + / inc hi / +"; and
+                ; "bcs + / dec hi / +" for sbc #0.  Only in the last runs: a label makes
+                ; the forward pass forget what it knows.
+                long h1 = previous_live(i)
+                long h2 = previous_live(h1)
+                if h2 < h1 and h1 < i and lkind[h1] == L_INS and (lmn[h1] == M_ADC or lmn[h1] == M_SBC)
+                        and lok[h1] == O_NUM and lval[h1] == 0
+                        and lkind[h2] == L_INS and lmn[h2] == M_LDA and lok[h2] == ok
+                        and lval[h2] == lval[i] and lsym[h2] == lsym[i] and no_open_plus(h2) {
+                    ^^strtab.Sym plus = scanned("+")
+                    plus.mark |= K_ANON
+                    ubyte carry_branch = M_BCC
+                    ubyte carry_step = M_INC
+                    if lmn[h1] == M_SBC {
+                        carry_branch = M_BCS
+                        carry_step = M_DEC
+                    }
+                    set_line(h1, carry_step, ok, lval[i], lsym[i])
+                    set_line(h2, carry_branch, O_OTHER, 0, plus)
+                    lkind[i] = L_LABEL
+                    lsym[i] = plus
+                    changed = true
+                    i++                 ; (once more, as the label it is now)
+                    continue
+                }
+            }
             if m == M_STA and not la and not lc and (ok == O_CELL or ok == O_VAR) {
                 ; "lda x / clc / adc #1 / sta x" (or "inc a" for the two in the middle) with
                 ; neither A nor the carry wanted after it: "inc x".  The same for dec.
@@ -2874,6 +2942,8 @@ peep6502 {
             if not lnz {
                 ; (a load of any other operand may be one that the hardware notices)
                 bool harmless = ok == O_NUM or ok == O_IMMTEXT or ok == O_CELL or ok == O_VAR or ok == O_POOL
+                if ok == O_OTHER and (m == M_LDA or m == M_LDX or m == M_LDY)
+                    harmless = indexed_plain(lsym[i])
                 if (m == M_CMP or m == M_CPX or m == M_CPY) and harmless and not lc {
                     ; a comparison that nothing looks at
                     drop(i)

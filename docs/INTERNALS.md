@@ -6,8 +6,8 @@ is the short version: what the parts are and why.  This document shows how
 they do it, with real output.
 
 Everything quoted here (listings, sizes, times) was produced while writing,
-with the compiler at commit `185727e` and the reference compiler
-`prog8c-llvm` v14.0-BETA3-llvm.1 at commit `486bd411`, on an Apple M3 Max.
+with the compiler as it was on 2026-11-13 (the commit after `c7f3c76`) and
+the reference compiler `prog8c-llvm` v14.0-BETA3-llvm.1 at commit `8f164edd`, on an Apple M3 Max.
 The source moves on; where this document and the source disagree, the source
 is right.
 
@@ -323,14 +323,13 @@ p8_label_gen_4:
     lda  p8b_main.p8v_values,y
     cmp  p8b_main.p8s_total.p8v_limit
     bcs  p8_label_gen_7
-    lda  p8b_main.p8v_values,y
     clc
     lda  p8b_main.p8s_total.p8v_sum
     adc  p8b_main.p8v_values,y
     sta  p8b_main.p8s_total.p8v_sum
-    lda  p8b_main.p8s_total.p8v_sum+1
-    adc  #0
-    sta  p8b_main.p8s_total.p8v_sum+1
+    bcc  +
+    inc  p8b_main.p8s_total.p8v_sum+1
++
 p8_label_gen_7:
     inc  p8b_main.p8s_total.p8v_i
     lda  p8b_main.p8s_total.p8v_i
@@ -352,9 +351,16 @@ Not one cell is left.  What happened:
 - the three zeros at the start are one `lda #0`;
 - the labels nothing jumps to are gone.
 
-And one thing did not happen: the `lda p8b_main.p8v_values,y` before the
-`clc` loads a value that the next `lda` replaces.  The passes do not catch
-that one yet.  The program is 526 bytes.
+- the second read of the element for the comparison's sake went: nothing
+  used it, and reading an array of the program has no other effect;
+- the carry into the high byte of `sum` is a branch and an `inc`, since
+  neither A nor the flags are wanted after it.  That rewrite is made in the
+  very last run, because the label it needs would make the forward pass
+  forget what it knows.
+
+One thing is left: A already holds `values[i]` when the addition starts, so
+`clc / adc sum` would do, as upstream has it below.  The program is 521
+bytes.
 
 ### What upstream writes
 
@@ -377,12 +383,12 @@ p8_label_gen_8_for_loop
 +
 ```
 
-It reloads Y, which p8p8 does not, and it adds a byte to a word with a
-branch and an `inc`, which is shorter than p8p8's second `adc`.  Its program
-is 518 bytes.  The two generators arrive at code of the same kind from
-opposite ends: upstream writes a good sequence for each construct it
-recognizes, p8p8 writes a naive sequence for everything and then removes
-what is not needed.  Neither is uniformly smaller (section 8).
+It reloads Y, which p8p8 does not, and it adds to the value it already has
+in A, which p8p8 does not see.  Its program is 518 bytes.  The two
+generators arrive at code of the same kind from opposite ends: upstream
+writes a good sequence for each construct it recognizes, p8p8 writes a naive
+sequence for everything and then removes what is not needed.  Neither is
+uniformly smaller (section 8).
 
 ## 4. The front end
 
@@ -561,7 +567,7 @@ as naive as the 6502 generator, and here somebody else's passes clean up:
 That is how p8p8 is built.  Three things keep it honest:
 
 - **Bootstrap.**  p8c compiled by itself must compile itself to the
-  identical 14,023,016 bytes of IR (`make bootstrap`).
+  identical 14,092,869 bytes of IR (`make bootstrap`).
 - **The seed.**  The repository carries the compiler's own LLVM IR,
   compressed (`seed/p8c.ll.gz`), so building needs clang and nothing else:
   clang makes a first compiler from the seed, that compiles the source,
@@ -608,14 +614,14 @@ default settings:
 
 | Example | C64 upstream | C64 p8p8 | X16 upstream | X16 p8p8 |
 |---|---|---|---|---|
-| `primes` | 520 | 516 | 565 | 559 |
+| `primes` | 520 | 514 | 565 | 557 |
 | `numbergame` | 1030 | 1035 | 1077 | 1083 |
 | `queens` | 1053 | 1107 | 1103 | 1155 |
 | `mandelbrot` | 1171 | 1804 | 1132 | 1829 |
 | `pointers/sorting` | 1779 | 1995 | 1788 | 1976 |
-| `maze` | 2992 | 3293 | 2791 | 3154 |
+| `maze` | 2992 | 3286 | 2791 | 3149 |
 | `pointers/hashtable` | 3384 | 3251 | 2909 | 2974 |
-| `textelite` | 11217 | 11278 | 10748 | 10812 |
+| `textelite` | 11217 | 11269 | 10748 | 10805 |
 
 p8p8 is within a percent on the larger text programs, smaller on a few, and
 clearly larger where the program is floating point (`mandelbrot`) or tight
