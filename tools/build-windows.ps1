@@ -8,7 +8,10 @@
 # compiler writes for Windows itself.  clang makes a first compiler of that, the first
 # compiles the sources, clang makes build\llvm64\p8c.exe of the result, and p8c.exe
 # compiles the sources once more: that must give the same IR again.
-param([string]$Clang = "clang")
+#
+# With -Dist it also makes dist\p8p8-<version>-windows-x86_64.zip: bin\p8c.exe and
+# lib\p8p8 (the library, which p8c.exe finds there by itself), and the documents.
+param([string]$Clang = "clang", [switch]$Dist)
 
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
@@ -53,3 +56,24 @@ $first = (Get-FileHash "build\llvm64\p8c.ll").Hash
 $second = (Get-FileHash "build\check\main.ll").Hash
 if ($first -ne $second) { throw "p8c.exe does not reproduce itself: build\llvm64\p8c.ll and build\check\main.ll differ" }
 Write-Host "built build\llvm64\p8c.exe; it compiles itself to the same LLVM IR"
+
+if ($Dist) {
+    if (-not (Test-Path "lib\prog8lib\prog8_lib.p8")) { throw "no library in lib\ (git submodule update --init)" }
+    $version = [regex]::Match((Get-Content "src\version.p8" -Raw), 'str number = "([^"]+)"').Groups[1].Value
+    $name = "p8p8-$version-windows-x86_64"
+    $root = "dist\$name"
+    if (Test-Path $root) { Remove-Item -Recurse -Force $root }
+    foreach ($dir in "$root\bin", "$root\lib\p8p8\runtime", "$root\docs") {
+        New-Item -ItemType Directory -Force $dir | Out-Null
+    }
+    Copy-Item "build\llvm64\p8c.exe" "$root\bin\"
+    Copy-Item -Recurse "lib\prog8lib", "lib\common", "lib\targets" "$root\lib\p8p8\"
+    Copy-Item "lib\VERSION", "lib\LICENSE" "$root\lib\p8p8\"
+    Copy-Item "runtime\windows-console.c", "runtime\mos-c64-support.c" "$root\lib\p8p8\runtime\"
+    Copy-Item "README.md", "LICENSE" "$root\"
+    Copy-Item "docs\*.md" "$root\docs\"
+    if (Test-Path "dist\$name.zip") { Remove-Item -Force "dist\$name.zip" }
+    Compress-Archive -Path $root -DestinationPath "dist\$name.zip"
+    Remove-Item -Recurse -Force $root
+    Write-Host "wrote dist\$name.zip"
+}

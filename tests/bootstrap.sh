@@ -15,7 +15,7 @@ name=$(basename "$main" .p8)
 echo "stage 1 compiles $main"
 "$p8p8" -target llvm64 -lib "$lib" -srcdirs "$srcdirs" -ir -llvm -out "$work/stage2" "$main" || exit 1
 echo "clang builds stage 2"
-clang -O2 -Wno-override-module "$work/stage2/$name.ll" -o "$work/stage2/p8c" || exit 1
+clang -O2 -Wno-override-module "$work/stage2/$name.ll" -o "$work/stage2/p8c" -lm || exit 1
 echo "stage 2 compiles $main"
 "$work/stage2/p8c" -target llvm64 -lib "$lib" -srcdirs "$srcdirs" -ir -llvm -out "$work/stage3" "$main" || exit 1
 status=0

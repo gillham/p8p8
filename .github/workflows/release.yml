@@ -1,0 +1,61 @@
+# On a version tag (v0.1.0): builds p8c on each system as build.yml does and attaches
+# the archives to the release of that tag, which it makes if there is none yet.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  # the release itself, as a draft to look at before it is published
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Make the release if there is none
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md" --draft
+
+  unix:
+    needs: release
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.LIB_TOKEN || github.token }}
+      - name: Build, test, archive
+        run: |
+          make
+          make test
+          make bootstrap
+          make dist
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz --clobber
+
+  windows:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.LIB_TOKEN || github.token }}
+      - name: Build, archive
+        shell: pwsh
+        run: ./tools/build-windows.ps1 -Dist
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber

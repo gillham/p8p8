@@ -17,7 +17,6 @@ prog8lib-*/
 .claude
 .context
 .cursor
-.github
 .idea
 build
 reference
@@ -27,3 +26,5 @@ __pycache__/
 bugs/
 # private working notes
 notes/
+# archives made by make dist
+dist/

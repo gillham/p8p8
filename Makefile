@@ -17,6 +17,8 @@
 #     the compiler from the seed and the one from prog8c-llvm must be the same
 # check:
 #     runs a compiler syntax check of all programs without building them
+# dist:
+#     an archive of the compiler and the library for this machine, in dist/
 # install:
 #     copies p8c to PREFIX/bin and the library LIB to PREFIX/lib/p8p8
 #     (PREFIX defaults to ~/.local, LIB to lib)
@@ -70,7 +72,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	all check seed seedcheck install test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -89,18 +91,20 @@ STAGE0	= build/stage0/p8c$(EXE)
 P8CARGS	= -target $(TARGET) -lib lib -srcdirs src:src/$(TARGET)
 CLANG	?= clang
 CFLAGS	?= -O2
+# (the math library is a library of its own on Linux; naming it does no harm elsewhere)
+LDLIBS	?= -lm
 
 ifeq ($(BOOT),seed)
 
 $(STAGE0): $(SEED)
 	$(MD) build/stage0
 	gzip -dc $(SEED) > build/stage0/p8c.ll
-	$(CLANG) $(CFLAGS) -Wno-override-module build/stage0/p8c.ll -o $@
+	$(CLANG) $(CFLAGS) -Wno-override-module build/stage0/p8c.ll -o $@ $(LDLIBS)
 
 $(P8P8): $(SRCS) $(STAGE0) | $(OUT)
 	$(STAGE0) $(P8CARGS) -llvm -out $(OUT) $(MAIN)
 	mv $(OUT)/main.ll $(OUT)/p8c.ll
-	$(CLANG) $(CFLAGS) -Wno-override-module $(OUT)/p8c.ll -o $@
+	$(CLANG) $(CFLAGS) -Wno-override-module $(OUT)/p8c.ll -o $@ $(LDLIBS)
 
 $(OUT)/test_%$(EXE): src/test_%.p8 $(SRCS) $(P8P8) | $(OUT)
 	$(P8P8) $(P8CARGS) -out $(OUT) -build $<
@@ -152,6 +156,22 @@ install: $(P8P8)
 	$(MD) $(PREFIX)/lib/p8p8/runtime
 	cp runtime/windows-console.c runtime/mos-c64-support.c $(PREFIX)/lib/p8p8/runtime/
 	@echo "installed $(PREFIX)/bin/p8c and $(PREFIX)/lib/p8p8"
+
+# make dist: an archive of the compiler for this machine, to unpack anywhere and use:
+# dist/p8p8-<version>-<system>-<cpu>.tar.gz, with bin/p8c and lib/p8p8 in it as make
+# install lays them out, and the documents.  (On Windows: tools\build-windows.ps1 -Dist.)
+VERSION	= $(shell sed -n 's/.*str number = "\(.*\)".*/\1/p' src/version.p8)
+HOSTNAME = $(shell uname -s | tr A-Z a-z)-$(shell uname -m)
+DISTNAME = p8p8-$(VERSION)-$(HOSTNAME)
+dist:	$(P8P8)
+	rm -rf dist/$(DISTNAME)
+	$(MAKE) install PREFIX=dist/$(DISTNAME) LIB=$(LIB)
+	cp README.md LICENSE dist/$(DISTNAME)/
+	$(MD) dist/$(DISTNAME)/docs
+	cp docs/*.md dist/$(DISTNAME)/docs/
+	tar czf dist/$(DISTNAME).tar.gz -C dist $(DISTNAME)
+	rm -rf dist/$(DISTNAME)
+	@ls -l dist/$(DISTNAME).tar.gz | awk '{print "wrote", $$9 ":", $$5, "bytes"}'
 
 clean:
 	$(CLEAN)

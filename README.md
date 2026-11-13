@@ -95,6 +95,10 @@ make install PREFIX=~/.local
 That puts `p8c` in `PREFIX/bin` and the library in `PREFIX/lib/p8p8`, where
 `p8c` finds it by itself.
 
+`make dist` (on Windows `tools\build-windows.ps1 -Dist`) makes an archive
+with the same layout in `dist/`, to unpack anywhere: `bin/p8c` finds the
+library beside it.
+
 ## Using it
 
 ```

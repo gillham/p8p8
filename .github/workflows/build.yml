@@ -1,0 +1,64 @@
+# Builds p8c from the seed on Linux, macOS and Windows, runs the tests that need
+# nothing but this repository and its library, and keeps the archive of each build.
+#
+# The comparison suites (against the reference compiler, in emulators) are not run
+# here: they need prog8c-llvm, 64tass, x16emu and VICE.
+#
+# While the repositories are private, the library submodule needs a token that may
+# read it: a repository secret LIB_TOKEN (a fine-grained personal access token with
+# read access to the contents of p8p8-lib).  A public repository needs none.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.LIB_TOKEN || github.token }}
+      - name: Build from the seed
+        run: |
+          clang --version
+          make
+          build/llvm64/p8c -version
+      - name: Tests
+        run: make test
+      - name: p8c reproduces itself
+        run: make bootstrap
+      - name: Archive
+        run: make dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p8p8-${{ matrix.os }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.LIB_TOKEN || github.token }}
+      - name: Build from the seed, check that p8c reproduces itself, archive
+        shell: pwsh
+        run: |
+          clang --version
+          ./tools/build-windows.ps1 -Dist
+          build/llvm64/p8c.exe -version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p8p8-windows-latest
+          path: dist/*.zip
+          if-no-files-found: error

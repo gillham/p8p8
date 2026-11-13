@@ -14,7 +14,7 @@ mkdir -p "$work/seed" "$work/ref" "$work/a" "$work/b"
 status=1
 echo "clang builds the compiler from the seed"
 gzip -dc "$seed" > "$work/seed/p8c.ll" &&
-${CLANG:-clang} -O2 -Wno-override-module "$work/seed/p8c.ll" -o "$work/seed/p8c" &&
+${CLANG:-clang} -O2 -Wno-override-module "$work/seed/p8c.ll" -o "$work/seed/p8c" -lm &&
 echo "prog8c-llvm builds the compiler from the sources" &&
 $pcc -quiet -o "$work/ref/p8c" "$main" > "$work/ref.log" 2>&1 &&
 echo "both compile $main" &&
