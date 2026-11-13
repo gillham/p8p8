@@ -176,6 +176,12 @@ main {
                 outdir = value
                 i++
             }
+            else if (strings.compare(arg, "-o") == 0 or strings.compare(arg, "-output") == 0) and value != 0 {
+                output_file(value)
+                i++
+            }
+            else if strings.compare(arg, "-verbose") == 0
+                opt_verbose = true
             else if strings.compare(arg, "-print") == 0
                 opt_print = true
             else if strings.compare(arg, "-parse") == 0
@@ -475,6 +481,12 @@ main {
         out.nl()
         out.puts("  -check         only check the program, like prog8c -check (the default for now)")
         out.nl()
+        out.puts("  -out dir       the directory for the output files (default: the current one)")
+        out.nl()
+        out.puts("  -o file        the program file: its directory is where the output goes, its name that of every output file")
+        out.nl()
+        out.puts("  -verbose       print the commands that are run, and let the assembler print its summary of the program")
+        out.nl()
         out.puts("  -ir            generate the IR and write it as <module>.p8ir (-out dir: where, default .)")
         out.nl()
         out.puts("  -llvm          generate the IR and write it as LLVM IR text <module>.ll")
@@ -653,9 +665,45 @@ main {
         }
     }
 
+    ; -o file: the program file, as upstream has it.  Its directory is where all the
+    ; output goes, and its name without the extension is the name of every output file
+    ; in place of the main module's (build/game-c64.prg: also build/game-c64.asm).  An
+    ; extension that is not the one the program gets by itself is given to it afterwards.
+    ^^ubyte out_name = 0
+    ^^ubyte out_ext = 0
+    ^^ubyte built_ext = 0           ; the extension build() gave the program
+    bool opt_verbose = false        ; -verbose: say what is run, and let the assembler print its summary
+
+    sub output_file(^^ubyte path) {
+        long slash = -1
+        long dot = -1
+        long i = 0
+        while path[i] != 0 {
+            if path[i] == '/' or path[i] == '\\' {
+                slash = i
+                dot = -1
+            }
+            else if path[i] == '.'
+                dot = i
+            i++
+        }
+        if slash > 0
+            outdir = strtab.intern(path, slash as uword)
+        long start = slash + 1
+        if dot > start {
+            out_name = strtab.intern(path + start, (dot - start) as uword)
+            out_ext = strtab.intern(path + dot, (i - dot) as uword)
+        }
+        else if i > start
+            out_name = strtab.intern(path + start, (i - start) as uword)
+    }
+
     sub generate_ir() {
         ^^importer.Module mainmod = importer.modules
         ^^ir.Program p = irgen.generate(mainmod.name)
+        ^^ubyte oname = mainmod.name
+        if out_name != 0
+            oname = out_name
         if diag.errors > 0
             return
         bool is_llvm = buf.bytes_equal(importer.target, "llvm", 4)
@@ -672,14 +720,14 @@ main {
         }
         if opt_ir {
             ir.write(p, b)
-            write_output(mainmod.name, ".p8ir", b)
+            write_output(oname, ".p8ir", b)
         }
         if opt_llvm {
             buf.clear(b)
             llvmgen.generate(p, b)
             if llvmgen.errors > 0
                 out.exit(1)
-            write_output(mainmod.name, ".ll", b)
+            write_output(oname, ".ll", b)
         }
         if opt_own and not is_llvm {
             ; p8p8's own 6502 code generator: assembly for 64tass
@@ -687,10 +735,35 @@ main {
             gen6502.generate(p, b)
             if gen6502.errors > 0
                 out.exit(1)
-            write_output(mainmod.name, ".asm", b)
+            write_output(oname, ".asm", b)
         }
-        if opt_build
-            build(mainmod.name, is_llvm)
+        if opt_build {
+            build(oname, is_llvm)
+            if out_ext != 0 and built_ext != 0 and strings.compare(out_ext, built_ext) != 0 {
+                ; the program under the name that was asked for
+                ^^buf.Buf fromb = buf.new(256)
+                ^^buf.Buf tob = buf.new(256)
+                if outdir != 0 {
+                    buf.add_str(fromb, outdir)
+                    buf.add_byte(fromb, '/')
+                    buf.add_str(tob, outdir)
+                    buf.add_byte(tob, '/')
+                }
+                buf.add_str(fromb, oname)
+                buf.add_str(fromb, built_ext)
+                buf.add_byte(fromb, 0)
+                buf.add_str(tob, oname)
+                buf.add_str(tob, out_ext)
+                buf.add_byte(tob, 0)
+                if not io_platform.move_file(fromb.data, tob.data) {
+                    out.err()
+                    out.puts("can't name the program ")
+                    out.puts(tob.data)
+                    out.nl()
+                    out.exit(1)
+                }
+            }
+        }
     }
 
     ; ---- building and running ----
@@ -716,6 +789,10 @@ main {
 
     sub run_cmd(str what) {
         buf.add_byte(cmd, 0)
+        if opt_verbose {
+            out.puts(cmd.data)
+            out.nl()
+        }
         out.flush()
         ubyte status = io_platform.run_command(cmd.data)
         if status != 0 {
@@ -756,7 +833,10 @@ main {
             }
             else
                 buf.add_str(cmd, " --cbm-prg --ascii")
-            buf.add_str(cmd, " --case-sensitive --long-branch -Wall -Wno-implied-reg --no-monitor -Wno-shadow --quiet --vice-labels --labels=")
+            buf.add_str(cmd, " --case-sensitive --long-branch -Wall -Wno-implied-reg --no-monitor -Wno-shadow")
+            if not opt_verbose
+                buf.add_str(cmd, " --quiet")
+            buf.add_str(cmd, " --vice-labels --labels=")
             add_output(name, ".vice-mon-list")
             if opt_asmlist {
                 buf.add_str(cmd, " --list=")
@@ -836,6 +916,7 @@ main {
                 buf.add_str(cmd, " -lm")
         }
         run_cmd("building the program")
+        built_ext = extension
         if not opt_run
             return
         buf.clear(cmd)

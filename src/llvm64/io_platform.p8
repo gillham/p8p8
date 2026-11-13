@@ -12,6 +12,14 @@ io_platform {
     extsub fgets(pointer buffer, long size, pointer stream) -> pointer
     extsub getenv(str name) -> pointer
     extsub realpath(str path, pointer resolved) -> pointer
+    extsub rename(str oldname, str newname) -> long
+    extsub remove(str path) -> long
+
+    ; Gives a file another name, in place of a file of that name if there is one.
+    sub move_file(str oldname, str newname) -> bool {
+        void remove(newname)
+        return rename(oldname, newname) == 0
+    }
 
     ; The value of an environment variable, or 0 when it is not set.
     sub env(str name) -> ^^ubyte {

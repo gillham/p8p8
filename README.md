@@ -117,8 +117,14 @@ A command line written for `prog8c` mostly works as it is: options may be
 written with two dashes, `-emu` is `-run`, and the options of `prog8c` that
 only concern what it prints (`-plaintext`, `-quiet`, `-quietasm`,
 `-nosourcelines`, `-timings`, `-warnshadow`, `-warnimplicitcasts`,
-`-ircomments`) are accepted and ignored.  An option that would change the
-program and that p8p8 does not have is an error, not ignored.
+`-ircomments`) are accepted and ignored.  `-o file` names the program as it
+does there: its directory is where the output goes, and its name is that of
+every output file.  An option that would change the program and that p8p8
+does not have is an error, not ignored.
+
+p8p8 prints errors and warnings and nothing else.  `-verbose` also prints
+the commands it runs and lets the assembler print its summary of the
+program's sections and sizes.
 
 Options p8p8 has that the reference compiler does not:
 
@@ -127,6 +133,8 @@ Options p8p8 has that the reference compiler does not:
 | `-encoding <name>` | the encoding of string and character literals without a prefix, in place of the target's (`%encoding` in a module and a prefix still override it) |
 | `-codegen own\|upstream` | which back end builds a 6502 program |
 | `-noopt` | the own code generator without its optimizations |
+| `-verbose` | print the commands that are run and the assembler's summary |
+| `-libpath` | print the library directory that is used |
 
 
 ## Tests
