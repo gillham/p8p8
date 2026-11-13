@@ -36,8 +36,11 @@ Compiled by itself for the host it is a 680 KB executable.  It compiles its
 own source to 14 MB of LLVM IR in 0.22 seconds (clang then needs 4.4 seconds
 to optimize that), and builds upstream's `textelite.p8` (1029 lines plus the
 library) for the C64, assembler included, in 0.02 seconds.  The reference
-compiler needs 1.6 seconds for the same program, which includes starting
-the Java virtual machine.
+compiler needs 1.6 seconds for the same program when it is started for the
+one run, which includes starting the Java virtual machine, and 0.62 seconds
+through its `-daemon` mode once that is warm (the first run through the
+daemon took 2.1 seconds and the times settled after about ten runs; 32 runs
+were measured).
 
 For its own source the compiler makes 222,000 tokens, 122,000 tree nodes and
 153,000 allocations, 25 MB in all.
