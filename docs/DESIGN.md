@@ -206,7 +206,10 @@ p8p8 is built from a **seed**: its own output for its own sources, as LLVM
 IR (`seed/p8c.ll.gz`).  clang makes a first compiler of the seed, that one
 compiles the sources, and clang makes `p8c` of the result.  No other Prog8
 compiler is needed.  The IR for macOS and Linux differs only in two target
-lines, which the seed leaves out, so it is one file for both.
+lines, which the seed leaves out, so it is one file for both.  For Windows
+four functions of the C library have other names; `tools/build-windows.ps1`
+renames them where the seed calls or declares them, which gives exactly the
+IR the compiler writes for Windows, and builds from that.
 
 Two things keep this honest:
 
@@ -227,7 +230,9 @@ then used in the compiler's own sources.
 
 ## Not done yet
 
-- A seed for Windows (four C library names differ there).
+- `make` and the test suites on Windows: there is the build script, and the
+  compiler built on Windows is checked from another host (`make
+  hostbootstrap`).
 - The 65816 and the 45GS02; a Z80 or 68000 code generator.
 - The reference compiler's optimizer has no counterpart in p8p8's front
   end; the 6502 passes and LLVM do that work on their side.

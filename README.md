@@ -53,8 +53,17 @@ make                 # builds build/llvm64/p8c
 `seed/p8c.ll.gz` is the compiler's own earlier output, as LLVM IR.  clang
 makes a first compiler of it, that one compiles the sources, and clang makes
 `p8c` of the result.  `make bootstrap` checks that `p8c` then reproduces
-itself.  The seed is the same file for macOS and Linux; it is not for
-Windows yet.
+itself.  The seed is the same file for macOS, Linux and Windows.
+
+On Windows there is a script in place of `make`, which needs clang and
+nothing else:
+
+```
+powershell -ExecutionPolicy Bypass -File tools\build-windows.ps1
+```
+
+It builds `build\llvm64\p8c.exe` from the same seed and checks that it
+reproduces itself.
 
 The library that programs are built with is a repository of its own, the
 submodule at `lib/`: Prog8's standard library unchanged, with the machines
