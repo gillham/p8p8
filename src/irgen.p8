@@ -1774,10 +1774,10 @@ irgen {
         made.file = at.file
         made.a = callee
         made.b = args
-        uword unused_r
-        ubyte unused_t
-        unused_r, unused_t = call_expr(made)
+        library_result, library_type = call_expr(made)
     }
+    uword library_result
+    ubyte library_type
 
     sub gen_sub(^^ast.Node n) {
         ^^symtab.Sym ss = n.extra
@@ -3723,10 +3723,14 @@ irgen {
                 c.extra = cl
                 ^^ast.Node value = c.a
                 while value != 0 {
-                    ok, cv = typer.constlike_eval(value)
-                    if ok {
-                        void ir.emit_ri(chunk, ir.OP_CMPI, vt, vr, truncate(cv, vt))
-                        void ir.emit_t(chunk, ir.OP_BSTEQ, cl)
+                    if value.kind == ast.N_RANGE
+                        when_range(value, vr, vt, types.is_signed(n.a.type), cl)
+                    else {
+                        ok, cv = typer.constlike_eval(value)
+                        if ok {
+                            void ir.emit_ri(chunk, ir.OP_CMPI, vt, vr, truncate(cv, vt))
+                            void ir.emit_t(chunk, ir.OP_BSTEQ, cl)
+                        }
                     }
                     value = value.next
                 }
@@ -3748,6 +3752,57 @@ irgen {
             c = c.next
         }
         label(done)
+    }
+
+    ; A choice of a when that is a range ("10 to 20", "9 downto 1 step -2"): with a step
+    ; of one, two comparisons with its ends; else each of its values.
+    sub when_range(^^ast.Node range, uword vr, ubyte vt, bool signed, ^^ubyte target) {
+        bool ok
+        quad first
+        quad last
+        quad step = 1
+        ok, first = typer.constlike_eval(range.a)
+        if not ok
+            return
+        ok, last = typer.constlike_eval(range.b)
+        if not ok
+            return
+        if range.op == token.T_KW_DOWNTO
+            step = -1
+        if range.c != 0 {
+            ok, step = typer.constlike_eval(range.c)
+            if not ok or step == 0
+                return
+        }
+        if step == 1 or step == -1 {
+            quad low = first
+            quad high = last
+            if step < 0 {
+                low = last
+                high = first
+            }
+            if low > high
+                return              ; (an empty range: no value)
+            ^^ubyte below = new_label()
+            if signed {
+                void ir.emit_rit(chunk, ir.OP_BLTS, vt, vr, truncate(low, vt), below)
+                void ir.emit_rit(chunk, ir.OP_BLES, vt, vr, truncate(high, vt), target)
+            }
+            else {
+                void ir.emit_rit(chunk, ir.OP_BLT, vt, vr, truncate(low, vt), below)
+                void ir.emit_rit(chunk, ir.OP_BLE, vt, vr, truncate(high, vt), target)
+            }
+            label(below)
+            return
+        }
+        uword most = 0
+        quad v = first
+        while most < 1024 and ((step > 0 and v <= last) or (step < 0 and v >= last)) {
+            void ir.emit_ri(chunk, ir.OP_CMPI, vt, vr, truncate(v, vt))
+            void ir.emit_t(chunk, ir.OP_BSTEQ, target)
+            v += step
+            most++
+        }
     }
 
     ; on index goto (a, b, c) / on index call (a, b, c) [else ...]: a chain of
@@ -4323,7 +4378,11 @@ irgen {
                 uword cr
                 ubyte ct
                 cr, ct = expression(e.a)
-                return convert(cr, ct, t, types.is_signed(e.a.type)), t
+                ; from a float, it is the type asked for that says signed or not
+                bool cast_signed = types.is_signed(e.a.type)
+                if plain(ct) == ir.T_FLOAT
+                    cast_signed = types.is_signed(e.type)
+                return convert(cr, ct, t, cast_signed), t
             }
             ast.N_INDEX -> {
                 rr, rt = indexed(e)
@@ -5793,6 +5852,11 @@ irgen {
             return sr, ir.T_BYTE
         }
         if strings.compare(name, "sqrt") == 0 {
+            if split_words and a.type == types.T_LONG {
+                ; on the 6502 the root of a long is a subroutine of the library
+                library_call("prog8_lib", "sqrt_long", "prog8_lib.sqrt_long", a, e)
+                return convert(library_result, ir.T_WORD, t, false), t
+            }
             r, at = expression(a)
             uword qr = ir.new_reg(t)
             ^^ir.Instr qi = ir.emit_rr(chunk, ir.OP_SQRT, at, qr, r)

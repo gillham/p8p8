@@ -605,6 +605,8 @@ typer {
                     length = ast.list_length(n.b.a)
                 else if n.b.kind == ast.N_STR
                     length = (buf.cstr_len(n.b.name) + 1) as long
+                else if n.b.kind == ast.N_RANGE
+                    length = range_length(n.b)
                 else if vt != 0 and types.is_array(vt) {
                     ^^types.Type vtt = types.get(vt)
                     length = vtt.length
@@ -1277,6 +1279,35 @@ typer {
     }
 
     ; The element count of an array or string expression, or 0 when not known.
+    ; how many values a constant range has; 0 when it is not constant
+    sub range_length(^^ast.Node r) -> long {
+        bool ok
+        quad from
+        quad to_value
+        quad stride = 1
+        ok, from = const_eval(r.a)
+        if not ok
+            return 0
+        ok, to_value = const_eval(r.b)
+        if not ok
+            return 0
+        if r.c != 0 {
+            ok, stride = const_eval(r.c)
+            if not ok or stride == 0
+                return 0
+        }
+        else if r.op == token.T_KW_DOWNTO
+            stride = -1
+        if stride > 0 {
+            if to_value < from
+                return 0
+            return ((to_value - from) / stride + 1) as long
+        }
+        if from < to_value
+            return 0
+        return ((from - to_value) / -stride + 1) as long
+    }
+
     sub known_length(^^ast.Node e) -> long {
         if e.kind == ast.N_STR {
             decode_literal(e)
@@ -1310,6 +1341,8 @@ typer {
                         return known_length(s.decl.b)
                     if s.decl.b.kind == ast.N_ARRAYLIT
                         return ast.list_length(s.decl.b.a)
+                    if s.decl.b.kind == ast.N_RANGE
+                        return range_length(s.decl.b)
                 }
             }
         }

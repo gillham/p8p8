@@ -194,6 +194,9 @@ comparison:
   same, in the reference virtual machine, as native executables, and in
   emulators of the Commander X16 and the Commodore 64; programs that draw
   must draw the same.
+- **The language, area by area:** `tests/conformance` has a program for
+  each area of the language, with values neither compiler can know in
+  advance, compared in all of those places.
 - **Everything builds:** each example for the X16 and the C64.
 - **Other hosts:** the compiler built on Linux and Windows must reproduce
   itself there.

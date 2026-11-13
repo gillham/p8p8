@@ -713,6 +713,20 @@ checker {
                         ; the arithmetic ones
                         if at == types.T_STR or types.is_array(at) or at == types.T_BOOL
                             error(e, "expected numeric argument")
+                        else if i >= 10 {
+                            ; min, max and clamp have no float form: the library has
+                            ^^ast.Node arg = e.b
+                            while arg != 0 {
+                                if arg.type == types.T_FLOAT {
+                                    if i == 12
+                                        error(e, "clamp builtin not supported for floats, use floats.clamp")
+                                    else
+                                        error(e, "min/max not supported for floats, use floats.minf/maxf instead")
+                                    break
+                                }
+                                arg = arg.next
+                            }
+                        }
                     }
                     else if i >= 13 and i <= 22 {
                         if at == types.T_FLOAT or at == types.T_BOOL
@@ -751,7 +765,7 @@ checker {
         long literal_length = -1
         if init != 0 {
             if init.kind == ast.N_RANGE {
-                long rl = range_length(init)
+                long rl = typer.range_length(init)
                 if rl > 0 and length == 0
                     length = rl
             }
@@ -853,34 +867,6 @@ checker {
     }
 
     ; The number of values of a range with constant bounds, or 0.
-    sub range_length(^^ast.Node r) -> long {
-        bool ok
-        quad from
-        quad to_value
-        quad stride = 1
-        ok, from = typer.const_eval(r.a)
-        if not ok
-            return 0
-        ok, to_value = typer.const_eval(r.b)
-        if not ok
-            return 0
-        if r.c != 0 {
-            ok, stride = typer.const_eval(r.c)
-            if not ok or stride == 0
-                return 0
-        }
-        else if r.op == token.T_KW_DOWNTO
-            stride = -1
-        if stride > 0 {
-            if to_value < from
-                return 0
-            return ((to_value - from) / stride + 1) as long
-        }
-        if from < to_value
-            return 0
-        return ((from - to_value) / -stride + 1) as long
-    }
-
     ; Does the expression refer to the symbol?
     sub references(^^ast.Node e, ^^symtab.Sym s) -> bool {
         if e == 0
@@ -1384,6 +1370,25 @@ checker {
             else {
                 ^^ast.Node value = c.a
                 while value != 0 {
+                    if value.kind == ast.N_RANGE {
+                        ; "10 to 20": every value from the one to the other
+                        quad last
+                        ok, v = typer.constlike_eval(value.a)
+                        if ok
+                            ok, last = typer.constlike_eval(value.b)
+                        if ok and value.c != 0 {
+                            quad step
+                            ok, step = typer.constlike_eval(value.c)
+                            if ok and step == 0
+                                ok = false
+                        }
+                        if not ok
+                            error(value, "choice values must be constant numbers")
+                        else if ct != 0 and (not typer.literal_fits(v, ct) or not typer.literal_fits(last, ct))
+                            error(value, "choice value datatype differs from condition value")
+                        value = value.next
+                        continue
+                    }
                     ok, v = typer.constlike_eval(value)
                     if not ok
                         error(value, "choice values must be constant numbers")
@@ -1625,6 +1630,9 @@ checker {
                 expressions(e.b)
                 signed_index(e)
                 index_bounds(e)
+                ; (an element of a two-dimensional array is one index by now)
+                if e.a.kind == ast.N_INDEX
+                    error(e, "chained indexing requires the variable to be declared as a 2D array")
                 uword bt = e.a.type
                 if bt == types.T_BOOL or bt == types.T_UBYTE or bt == types.T_BYTE or bt == types.T_WORD or bt == types.T_FLOAT
                     error(e, "indexing requires an iterable, address uword, or pointer variable")

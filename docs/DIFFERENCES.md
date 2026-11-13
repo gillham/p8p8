@@ -31,6 +31,17 @@ compiler with LLVM targets added.
   Commander X16 and Commodore 64, and programs that draw end on the same
   picture (`make vmcmp`, `nativecmp`, `emucmp`, `emucmp64`, `gfxcmp`).  All
   of upstream's C64 and X16 examples build (`make buildall`).
+- **The language, feature by feature.**  `tests/conformance/` goes through
+  the language one area in each program (arithmetic, comparisons, control
+  flow, assignments, subroutines, arrays and strings, pointers and structs,
+  builtin functions, variables and scopes, floating point, the string and
+  conversion modules), with values the compiler cannot know in advance.
+  Each prints the same from both compilers in the virtual machine and
+  natively, and on the two emulated machines except for two programs that
+  are left out there: the remainder of signed numbers, which upstream does
+  not have for the 6502, and the square root of a `long`, where upstream's
+  6502 build prints wrong numbers.  The set is not complete: it has what one
+  pass through the language thought of.
 
 ## Targets
 
@@ -70,6 +81,9 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
 - **Floating point on the 6502** goes through the ROM routines, as upstream's
   does.  Some forms of float arithmetic are not implemented in p8p8's
   generator and are reported as an error when a program uses them.
+- **The remainder of signed numbers** is not there for the 6502 in either
+  compiler.  Upstream says so when it checks the program; p8p8's message
+  comes from its code generator and names the instruction.
 
 ## Checking and messages
 
@@ -81,7 +95,17 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
   upstream rejects and p8p8 accepts:
   - an `if` expression whose two values have types that cannot be assigned;
   - `unroll` with a count that is not constant;
-  - `p^^ = array[i]` where upstream asks for `&`.
+  - `p^^ = array[i]` where upstream asks for `&`;
+  - `w * w` of a signed `word` passed where a `word` is wanted: upstream
+    makes it a square, whose type is `uword`, and then reports a type
+    mismatch.
+
+  And the other way round, programs that upstream accepts and p8p8 does not:
+  - an `if` expression whose first value begins with a sign and has no
+    `then`: `if v < 0 -v else v`.  p8p8 reads `0 - v`; write `then`, or
+    parentheses;
+  - on a target with addresses wider than a word, an array of `uword`
+    initialized with addresses of subroutines.
 
   There will be others: the 195 cases were written here, they are not
   upstream's own test suite.

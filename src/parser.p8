@@ -1153,6 +1153,20 @@ parser {
             k = kind_at(1)
             if k == token.T_AMP
                 return 0
+            if k == token.T_MINUS or k == token.T_PLUS {
+                ; An operator may stand at the start of the next line, but so may the
+                ; sign of a value there: a choice of a when ("-1 -> ...").  The line is
+                ; one of those when it has the arrow in it.
+                uword ahead = 2
+                repeat {
+                    ubyte ak = kind_at(ahead)
+                    if ak == token.T_ARROW
+                        return 0
+                    if ak == token.T_EOL or ak == token.T_EOF or ak == token.T_LBRACE or ak == token.T_RBRACE
+                        break
+                    ahead++
+                }
+            }
         }
         if k == token.T_KW_NOT {
             if kind() == token.T_EOL {

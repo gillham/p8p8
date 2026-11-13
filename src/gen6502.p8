@@ -2811,8 +2811,8 @@ gen6502 {
                 }
             }
             ir.OP_MSIGB -> {
-                ; the high byte of a word (of a long: bits 8 to 15, as msb() gives)
-                lda_reg(i.r2, 1)
+                ; the highest byte: of a long, bits 24 to 31
+                lda_reg(i.r2, size - 1)
                 sta_reg(i.r1, 0)
             }
             ir.OP_MSIGW -> {

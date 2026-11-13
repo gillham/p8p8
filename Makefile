@@ -72,7 +72,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -228,9 +228,16 @@ programs:	$(P8P8)
 # (the pointer examples for the cx16 and the graphical fountain are left out too)
 PTRTESTS=$(addprefix .prog8-reference/examples/pointers/,animalgame.p8 binarytree.p8 hashtable.p8 sortedlist.p8 sorting.p8)
 # (tests/programs holds p8p8's own programs for features the upstream tests do not reach)
-VMTESTS=$(wildcard .prog8-reference/compiler/test/arithmetic/*.p8 .prog8-reference/compiler/test/comparisons/*.p8) .prog8-reference/examples/virtual/bsieve.p8 .prog8-reference/examples/virtual/sincos.p8 $(PTRTESTS) $(wildcard tests/programs/*.p8)
+# (tests/conformance goes through the language feature by feature; make conformance runs
+#  only those, in the virtual machine and natively)
+CONFTESTS=$(wildcard tests/conformance/*.p8)
+VMTESTS=$(wildcard .prog8-reference/compiler/test/arithmetic/*.p8 .prog8-reference/compiler/test/comparisons/*.p8) .prog8-reference/examples/virtual/bsieve.p8 .prog8-reference/examples/virtual/sincos.p8 $(PTRTESTS) $(wildcard tests/programs/*.p8) $(CONFTESTS)
 vmcmp:	$(P8P8)
 	@tests/vmcmp.sh $(P8P8) .prog8-reference $(VMTESTS)
+
+conformance:	$(P8P8)
+	@tests/vmcmp.sh $(P8P8) .prog8-reference $(CONFTESTS)
+	@tests/nativecmp.sh $(P8P8) .prog8-reference $(CONFTESTS)
 
 # compile the test programs natively with both compilers (p8p8 -llvm plus clang) and compare the output
 NATIVETESTS=$(filter-out %/structmapped.p8,$(VMTESTS)) $(wildcard .prog8-reference/examples/llvm/*.p8)
@@ -276,8 +283,10 @@ gfxcmp:	$(P8P8)
 # (needs 64tass and x16emu; text programs only, each runs for a few seconds)
 # Left out, because they print how long they took: queens, mandelbrot, cube3d-float, cx16/sortingbench;
 # and cx16/interpolation, which moves on to a next screen after a delay
+# and conformance/sqrtlong.p8: the reference compiler's 6502 build gives wrong roots of a long
 EMUTESTS_COMMON=$(wildcard .prog8-reference/compiler/test/arithmetic/*.p8 .prog8-reference/compiler/test/comparisons/*.p8) \
-	$(addprefix .prog8-reference/examples/,fibonacci.p8 primes.p8 maze.p8 screencodes.p8 swirl-float.p8 numbergame.p8) $(PTRTESTS) $(wildcard tests/programs/*.p8)
+	$(addprefix .prog8-reference/examples/,fibonacci.p8 primes.p8 maze.p8 screencodes.p8 swirl-float.p8 numbergame.p8) $(PTRTESTS) $(wildcard tests/programs/*.p8) \
+	$(filter-out %/sqrtlong.p8,$(CONFTESTS))
 EMUTESTS=$(EMUTESTS_COMMON) .prog8-reference/examples/cx16/floatparse.p8 $(wildcard tests/programs/cx16/*.p8)
 emucmp:	$(P8P8)
 	@tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS)

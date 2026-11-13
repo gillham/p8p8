@@ -173,6 +173,7 @@ Options p8p8 has that the reference compiler does not:
 | `make test` | unit tests and the dumps of the sample files in `tests/` |
 | `make bootstrap` | p8p8 compiled by itself compiles itself to identical output |
 | `make seedcheck` | the compiler built from the seed and the one built by `prog8c-llvm` write identical output |
+| `make conformance` | the programs of `tests/conformance`, one for each area of the language, built by both compilers: same output in the VM and natively |
 | `make vmcmp` | test programs run in the reference compiler's VM from p8p8's IR and from the reference compiler's: same output |
 | `make nativecmp` | the same for native executables |
 | `make buildall` | every C64 and X16 example builds |

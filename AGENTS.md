@@ -78,7 +78,7 @@ Which suite after which change (see the Makefile for all of them):
 |---|---|
 | anything | `make test`, `make bootstrap` (p8c compiled by itself must reproduce itself), `make seedcheck` (built from the seed and built by prog8c-llvm it must be the same compiler) |
 | front end | `make programs`, `make roundtrip` |
-| IR generation | `make vmcmp`, `make nativecmp` |
+| IR generation | `make conformance` (quick), `make vmcmp`, `make nativecmp` |
 | 6502 code generator or peephole | `BUILDALL_CODEGEN=own make buildall`, `EMUCMP_CODEGEN=own make emucmp`, `EMUCMP_CODEGEN=own make emucmp64` |
 | what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |
 
@@ -87,6 +87,14 @@ with p8c and compare what they print.  The emulator suites need x16emu and
 VICE, take many minutes, and must not run at the same time as each other or
 as anything else that uses an emulator: run them in the background, one
 after the other.
+
+`tests/conformance/` goes through the language area by area (`make
+conformance` runs only those, in the virtual machine and natively; the
+emulator suites include them).  Basic behaviour of the language that turns
+out to be untested gets a few lines in the program for its area: at most 24
+lines of 40 characters of output each, since the C64 comparison is of one
+screen, and values passed as parameters so that neither compiler can fold
+them.
 
 A new feature gets a test program in `tests/programs/` (the comparison
 suites pick it up) and, where it is a dump or an error, an expected file in
