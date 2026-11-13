@@ -206,6 +206,11 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -check tests/warnings.p8 2>&1 | diff -u /dev/null -
 	@echo "test literals encoding_option"
 	@$(P8P8) -target c64 -encoding iso -types -ast -nopos -nolib tests/encoding_option.p8 | diff -u tests/expected/$(TARGET)_literals_encoding_option.txt -
+	@echo "test option order"
+	@$(P8P8) tests/encoding_option.p8 -nolib -nopos -ast -types -encoding iso -target c64 | diff -u tests/expected/$(TARGET)_literals_encoding_option.txt -
+	@$(P8P8) -lib lib -ir -out $(OUT) -target c64 tests/hello.p8 && mv $(OUT)/hello.p8ir $(OUT)/hello_before.p8ir
+	@$(P8P8) tests/hello.p8 -target c64 -out $(OUT) -ir -lib lib && cmp $(OUT)/hello_before.p8ir $(OUT)/hello.p8ir
+	@$(P8P8) tests/hello.p8 -target 2>&1 | diff -u tests/expected/option_value.txt -
 	@for t in bad_resolve bad_types bad_strings bad_checks; do \
 	    echo "test $$t (must be rejected)"; \
 	    $(P8P8) tests/$$t.p8 > $(OUT)/$$t.out 2>&1; \

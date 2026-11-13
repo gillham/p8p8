@@ -55,6 +55,20 @@ main {
     bool opt_keepunused = false
     ^^ubyte outdir = 0
 
+    const ubyte MAX_FILES = 32
+    ^^ubyte[MAX_FILES] files
+    uword file_count = 0
+
+    ; the options that are followed by a value
+    sub takes_value(^^ubyte arg) -> bool {
+        return strings.compare(arg, "-srcdirs") == 0 or strings.compare(arg, "-lib") == 0
+            or strings.compare(arg, "-target") == 0 or strings.compare(arg, "-codegen") == 0
+            or strings.compare(arg, "-triple") == 0 or strings.compare(arg, "-encoding") == 0
+            or strings.compare(arg, "-varshigh") == 0 or strings.compare(arg, "-varsaddress") == 0
+            or strings.compare(arg, "-out") == 0 or strings.compare(arg, "-o") == 0
+            or strings.compare(arg, "-output") == 0
+    }
+
     sub start() {
         out.init()
         uword argc = sys.argc()
@@ -202,14 +216,28 @@ main {
                 opt_parse = true
             else if arg[0] == '-' {
                 out.err()
-                out.puts("unknown option: ")
-                out.puts(arg)
+                if takes_value(arg) {
+                    out.puts(arg)
+                    out.puts(" needs a value")
+                }
+                else {
+                    out.puts("unknown option: ")
+                    out.puts(arg)
+                }
                 out.nl()
                 out.exit(1)
             }
             else {
-                compile_file(arg)
-                files_done++
+                ; a source file: compiled when the whole command line has been read, so
+                ; that an option counts wherever it stands, before the file or after it
+                if file_count == MAX_FILES {
+                    out.err()
+                    out.puts("too many source files")
+                    out.nl()
+                    out.exit(1)
+                }
+                files[file_count] = arg
+                file_count++
             }
             i++
         }
@@ -222,6 +250,12 @@ main {
             out.puts(lib_root)
             out.nl()
             out.exit(0)
+        }
+        for i in 0 to file_count - 1 {
+            if i < file_count {
+                compile_file(files[i])
+                files_done++
+            }
         }
         if files_done == 0
             usage()
