@@ -382,6 +382,11 @@ gen6502 {
         if strings.compare(output_type, "PRG") != 0 and strings.compare(output_type, "RAW") != 0
                 and strings.compare(output_type, "XEX") != 0 and strings.compare(output_type, "LIBRARY") != 0
             error("output type not supported", v)
+        ; (upstream's rule: the BASIC launcher is a line of a .prg; a target with its own
+        ; launcher code has that in its place)
+        if launcher_basic and strings.compare(output_type, "PRG") != 0 and strings.compare(output_type, "LIBRARY") != 0
+                and target.text("custom_launcher_code") == 0
+            error("BASIC launcher requires output type PRG (the program needs %launcher none)", 0)
     }
 
     ; ---- the zero page ----

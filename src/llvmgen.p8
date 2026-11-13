@@ -993,7 +993,52 @@ llvmgen {
     ; ---- memory ----
 
     ; the address of a symbol with an offset, as a ptr value
+    ; What the address of a subroutine that returns a value is where a call through a
+    ; pointer must have the type "void ()" (WebAssembly): a small function that calls
+    ; the subroutine and leaves the value in slot 10, as OP_CALLI expects.
+    sub indirect_entry(^^ir.Sub s, ubyte rt) -> ^^ubyte {
+        ^^ubyte slot = hardware_slot(10, rt == L_DOUBLE)
+        ^^ubyte gname = ident(s.name)
+        buf.clear(nb)
+        buf.add_str(nb, gname)
+        buf.add_str(nb, ".indirect")
+        ^^ubyte tname = keep_nb()
+        buf.clear(nb)
+        buf.add_str(nb, "define internal void @")
+        buf.add_str(nb, tname)
+        buf.add_str(nb, "() {\nentry:\n  %result = call ")
+        buf.add_str(nb, ltname(rt))
+        buf.add_str(nb, " @")
+        buf.add_str(nb, gname)
+        buf.add_str(nb, "()\n")
+        when rt {
+            L_I64 -> buf.add_str(nb, "  store i64 %result, ptr ")
+            L_DOUBLE -> buf.add_str(nb, "  store double %result, ptr ")
+            L_PTR -> buf.add_str(nb, "  %wide = ptrtoint ptr %result to i64\n  store i64 %wide, ptr ")
+            else -> {
+                buf.add_str(nb, "  %wide = zext ")
+                buf.add_str(nb, ltname(rt))
+                buf.add_str(nb, " %result to i64\n  store i64 %wide, ptr ")
+            }
+        }
+        buf.add_str(nb, slot)
+        buf.add_str(nb, "\n  ret void\n}")
+        declare(tname, keep_nb())
+        buf.clear(nb)
+        buf.add_byte(nb, '@')
+        buf.add_str(nb, tname)
+        return keep_nb()
+    }
+
     sub symbol_address(^^ubyte sym, long offset) -> ^^ubyte {
+        if wasm and offset == 0 {
+            ^^ir.Sub called = find_sub(sym)
+            if called != 0 and not called.is_asm and called.params == 0 {
+                ubyte crt = return_ltype(called)
+                if crt != L_VOID
+                    return indirect_entry(called, crt)
+            }
+        }
         ^^ir.Var v = find_var(sym)
         ^^ubyte base
         if v != 0 and v.kind == ir.V_MEMVAR and v.init != 0 {
@@ -1546,10 +1591,27 @@ llvmgen {
             }
             ir.OP_CALL -> lower_call(i)
             ir.OP_CALLI -> {
+                ; A call of the code at an address, without arguments.  The word it may
+                ; return goes to slot 10, where the IR of call() takes it from.  WebAssembly
+                ; wants the exact type of what is called: there it is called as "void ()",
+                ; and a subroutine that returns a value is reached by its indirect entry
+                ; (indirect_entry), which leaves the value in the slot.
                 ^^ubyte cp = pointer_value(i.r1, ir.T_POINTER)
-                line("call void ")
-                addn(cp)
-                add("()\n")
+                ^^ubyte cslot = hardware_slot(10, false)
+                if wasm {
+                    store_to(cslot, int_const(0, L_I64), L_I64)
+                    line("call void ")
+                    addn(cp)
+                    add("()\n")
+                }
+                else {
+                    ^^ubyte cr = result(L_I16)
+                    add("call i16 ")
+                    addn(cp)
+                    add("()")
+                    nl()
+                    store_to(cslot, convert(cr, L_I16, L_I64), L_I64)
+                }
             }
             ir.OP_SYSCALL -> lower_syscall(i)
             ir.OP_INC, ir.OP_INCM, ir.OP_DEC, ir.OP_DECM, ir.OP_NEG, ir.OP_NEGM, ir.OP_INV, ir.OP_INVM,
