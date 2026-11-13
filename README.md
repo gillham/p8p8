@@ -224,6 +224,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make emucmp`, `make emucmp64` | programs built by both compilers print the same in x16emu and in VICE |
 | `make gfxcmp` | programs built by both compilers draw the same in x16emu |
 | `make programs`, `make roundtrip`, `make corpus` | the front end over the whole reference material |
+| `make upstreamcheck` | not a test: what changed in Prog8 since the commit p8p8 follows, sorted by what it means here ([docs/UPSTREAM.md](docs/UPSTREAM.md)) |
 
 Set `EMUCMP_CODEGEN=own`, `GFXCMP_CODEGEN=own` or `BUILDALL_CODEGEN=own` to
 run those suites with p8p8's own 6502 code generator.

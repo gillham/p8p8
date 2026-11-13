@@ -72,7 +72,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -135,6 +135,12 @@ seed:	$(P8P8)
 	$(P8P8) $(P8CARGS) -llvm -out build/seed $(MAIN)
 	grep -v '^target ' build/seed/main.ll | gzip -9 -n > $(SEED)
 	@ls -l $(SEED) | awk '{print "wrote", $$9 ":", $$5, "bytes"}'
+
+# make upstreamcheck PROG8_SRC=<checkout of Prog8> [FROM=commit] [TO=rev]: what changed
+# upstream since the commit the library follows, sorted by what it means for p8p8
+# (docs/UPSTREAM.md)
+upstreamcheck:
+	@python3 tools/upstream_diff.py $(if $(FROM),--from $(FROM)) $(if $(TO),--to $(TO))
 
 # make seedcheck: the compiler built from the seed and the one built by prog8c-llvm must
 # be the same compiler: each compiles the sources, and the two results must be identical.

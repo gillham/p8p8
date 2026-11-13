@@ -136,6 +136,9 @@ suites pick it up) and, where it is a dump or an error, an expected file in
 
 ## Upstream's sources
 
+`docs/UPSTREAM.md` is how a new upstream is taken in: the notes of the merge,
+`make upstreamcheck`, then the suites.
+
 Reading the reference compiler's Kotlin sources helps with questions the
 docs do not answer.  They are not part of this repository.  Where a script
 needs them (`tools/gen_enctables.py`), it takes the directory of a checkout
