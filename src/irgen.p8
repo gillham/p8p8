@@ -4706,6 +4706,17 @@ irgen {
         return bres, bt
     }
 
+    ; The word that a subroutine called through a pointer returned: it is where a
+    ; word result is by the target's convention (A and Y on the 6502: slot 4).
+    sub called_value() -> uword {
+        uword r = ir.new_reg(ir.T_WORD)
+        ubyte slot = 10
+        if split_words
+            slot = 4
+        void ir.emit_rs(chunk, ir.OP_LOADHR, ir.T_WORD, r, slot)
+        return r
+    }
+
     ; p + n and p - n: the offset scaled by the element size
     sub pointer_arith(^^ast.Node e) -> uword {
         ^^ast.Node pe = e.a
@@ -5387,7 +5398,9 @@ irgen {
             pr, pt = identifier(e.a)
             pr = convert(pr, pt, ir.T_POINTER, false)
             void ir.emit_r(chunk, ir.OP_CALLI, ir.T_POINTER, pr)
-            return ir.new_reg(t), t
+            if t == ir.T_NONE
+                return 0, t
+            return convert(called_value(), ir.T_WORD, t, false), t
         }
         unsupported(e, "call target")
         return ir.new_reg(t), t
@@ -5733,7 +5746,7 @@ irgen {
         if strings.compare(name, "call") == 0 {
             r, at = expression(a)
             void ir.emit_r(chunk, ir.OP_CALLI, ir.T_POINTER, convert(r, at, ir.T_POINTER, false))
-            return 0, ir.T_BYTE
+            return called_value(), ir.T_WORD
         }
         if strings.compare(name, "rol") == 0 or strings.compare(name, "ror") == 0 or strings.compare(name, "rol2") == 0 or strings.compare(name, "ror2") == 0 {
             ubyte rop = ir.OP_ROXL
