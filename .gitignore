@@ -1,0 +1,29 @@
+# Agent context
+.prog8-reference/
+# Skill links created by setup.py
+.claude/skills/asm6502-coder
+.claude/skills/m68k-coder
+.claude/skills/prog8-coder
+# build artifacts
+build/
+# Ctags files
+tags
+# libdump output should be ignored anywhere we see it.
+prog8lib-*/
+# agent related
+
+.claude/settings.local.json
+.aiassistant
+.claude
+.context
+.cursor
+.github
+.idea
+build
+reference
+# Python
+__pycache__/
+# reproducers for bugs in other compilers: issue material, not part of the repository
+bugs/
+# private working notes
+notes/

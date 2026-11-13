@@ -1,0 +1,7 @@
+hello: tests/hello.p8
+syslib: lib/targets/llvm64/syslib.p8 (library)
+prog8_math: lib/targets/llvm64/prog8_math.p8 (library)
+prog8_lib: lib/targets/llvm64/prog8_lib.p8 (library)
+textio: lib/targets/llvm64/textio.p8 (library)
+conv: lib/targets/llvm64/conv.p8 (library)
+strings: lib/targets/llvm64/strings.p8 (library)

@@ -1,0 +1,4019 @@
+; The 6502 code generator: writes a p8p8 IR program (ir.p8) as 64tass assembly
+; for the 6502 and 65C02.  See docs/DESIGN.md.
+;
+; The file layout is the one the library's inline assembly expects, which is
+; that of upstream's codeGenNew6502/AsmGen.kt: the header with the zero page
+; scratch cells, the BASIC launcher and startup sequence, the constants and
+; memory-mapped variables, a .proc per block and subroutine, then the data and
+; the BSS sections.
+;
+; Stage A/B of the plan: every virtual register has a memory cell in
+; p8_regfile, and each IR instruction is translated by itself (the reference's
+; behaviour).  The value tracking that makes the code good comes on top of
+; this, through the same emit routines.
+;
+; All instructions go through ins() and the few routines after it that know
+; the CPU: the 65C02 has stz, bra and friends, the 6502 gets longer forms.
+
+%import ir
+%import strtab
+%import mem
+%import buf
+%import out
+%import strings
+%import peep6502
+%import target
+%import io_platform
+%import irparse
+
+gen6502 {
+    %option ignore_unused
+
+    ^^ir.Program prog = 0
+    ^^buf.Buf o = 0                 ; the assembly text
+    ^^buf.Buf nb = 0                ; scratch
+    ^^buf.Buf hb = 0                ; scratch of ins_half and ins_indexed
+    ^^buf.Buf pb = 0                ; scratch for a composed name
+    long errors = 0
+    ; A 65C02: stz, bra, inc a, (zp), tsb.  Only what the 65816 has too (it runs the
+    ; Commander X16 as well): no bbr, bbs, rmb or smb.
+    bool c02 = false
+
+    ; the options of the program (the <OPTIONS> lines of the IR)
+    long load_address = $0801
+    long memtop = 0
+    bool launcher_basic = true
+    bool no_sysinit = false
+    bool vars_golden = false        ; -varsgolden: uninitialized variables in the target's golden ram
+    long vars_high_bank = -1        ; -varshigh N: in its high ram, bank N
+    long vars_address = -1          ; -varsaddress: at this address
+    ^^ubyte output_type = "PRG"     ; PRG, RAW, XEX or LIBRARY: what the assembler is asked to write
+    bool zp_safe = false            ; zeropage basicsafe or dontuse: no reset vector on the stack
+
+    ; the cell of each virtual register: its offset in p8_regfile
+    ^^uword cell_of = 0
+    long cell_cap = 0
+    long regfile_size = 0
+    long float_cells = 0            ; the size of the float cells, which come first
+    long regfile_used = 0           ; what p8_regfile needs in the end
+
+    sub error(str message, ^^ubyte detail) {
+        out.err()
+        out.puts("6502 code generator: ")
+        out.puts(message)
+        if detail != 0 {
+            out.puts(": ")
+            out.puts(detail)
+        }
+        out.nl()
+        errors++
+    }
+
+    ; ---- text output ----
+    ;
+    ; Inside a subroutine the lines go to peep6502, which writes them when the
+    ; subroutine is complete.
+
+    sub w() -> ^^buf.Buf {
+        if peep6502.active
+            return peep6502.text()
+        return o
+    }
+
+    sub raw(str text) {
+        buf.add_str(w(), text)
+        buf.add_byte(w(), '\n')
+    }
+
+    sub put(^^ubyte text) {
+        buf.add_str(w(), text)
+    }
+
+    sub putn(long value) {
+        buf.add_long(w(), value)
+    }
+
+    sub nl() {
+        buf.add_byte(w(), '\n')
+    }
+
+    ; "$1f2e"
+    sub puthex(long value) {
+        buf.add_byte(w(), '$')
+        ubyte shift = 28
+        bool started = false
+        repeat 8 {
+            ubyte digit = ((value >> shift) & 15) as ubyte
+            if digit != 0 or started or shift == 0 {
+                buf.add_byte(w(), buf.hex_digit(digit))
+                started = true
+            }
+            if shift >= 4
+                shift -= 4
+        }
+    }
+
+    ; one instruction: "    lda  operand"
+    sub ins(str mnemonic, ^^ubyte operand) {
+        if peep6502.active {
+            peep6502.ins(mnemonic, operand)
+            return
+        }
+        buf.add_str(w(), "    ")
+        buf.add_str(w(), mnemonic)
+        if operand != 0 and operand[0] != 0 {
+            buf.add_str(w(), "  ")
+            buf.add_str(w(), operand)
+        }
+        buf.add_byte(w(), '\n')
+    }
+
+    ; an instruction whose operand is a symbol plus an offset: "    sta  name+1"
+    sub ins_at(str mnemonic, ^^ubyte symbol, long offset) {
+        if peep6502.active {
+            peep6502.ins_at(mnemonic, symbol, offset)
+            return
+        }
+        buf.add_str(w(), "    ")
+        buf.add_str(w(), mnemonic)
+        buf.add_str(w(), "  ")
+        buf.add_str(w(), symbol)
+        if offset != 0 {
+            buf.add_byte(w(), '+')
+            buf.add_long(w(), offset)
+        }
+        buf.add_byte(w(), '\n')
+    }
+
+    ; an instruction with an immediate number: "    lda  #65"
+    sub ins_imm(str mnemonic, long value) {
+        if peep6502.active {
+            peep6502.ins_imm(mnemonic, value)
+            return
+        }
+        buf.add_str(w(), "    ")
+        buf.add_str(w(), mnemonic)
+        buf.add_str(w(), "  #")
+        buf.add_long(w(), value & 255)
+        buf.add_byte(w(), '\n')
+    }
+
+    ; an instruction with the low or high byte of a symbol's address: "    lda  #<name"
+    sub ins_half(str mnemonic, ubyte which, ^^ubyte symbol, long offset) {
+        if hb == 0
+            hb = buf.new(128)
+        buf.clear(hb)
+        buf.add_byte(hb, '#')
+        buf.add_byte(hb, which)
+        if offset != 0
+            buf.add_byte(hb, '(')
+        buf.add_str(hb, symbol)
+        if offset != 0 {
+            buf.add_byte(hb, '+')
+            buf.add_long(hb, offset)
+            buf.add_byte(hb, ')')
+        }
+        buf.add_byte(hb, 0)
+        ins(mnemonic, hb.data)
+    }
+
+    ; an instruction on symbol+offset indexed by X or Y: "    lda  name+1,y"
+    sub ins_indexed(str mnemonic, ^^ubyte symbol, long offset, ubyte index) {
+        if hb == 0
+            hb = buf.new(128)
+        buf.clear(hb)
+        buf.add_str(hb, symbol)
+        if offset != 0 {
+            buf.add_byte(hb, '+')
+            buf.add_long(hb, offset)
+        }
+        buf.add_byte(hb, ',')
+        buf.add_byte(hb, index)
+        buf.add_byte(hb, 0)
+        ins(mnemonic, hb.data)
+    }
+
+    ; an anonymous label of the assembler: "+" (for branches forward) or "-" (backward)
+    sub anon_label(str which) {
+        if peep6502.active {
+            peep6502.anon_label(which)
+            return
+        }
+        raw(which)
+    }
+
+    sub label(^^ubyte name) {
+        if peep6502.active {
+            peep6502.label(name)
+            return
+        }
+        buf.add_str(w(), name)
+        buf.add_str(w(), ":\n")
+    }
+
+    ; ---- the CPU ----
+
+    ; stores zero at a memory location (A is lost on the 6502)
+    sub store_zero(^^ubyte symbol, long offset) {
+        if c02
+            ins_at("stz", symbol, offset)
+        else {
+            ins("lda", "#0")
+            ins_at("sta", symbol, offset)
+        }
+    }
+
+    sub jump_always(^^ubyte target) {
+        ins("jmp", target)
+    }
+
+    ; ---- registers ----
+
+    ; the size in bytes of an IR type
+    sub type_size(ubyte t) -> ubyte {
+        when t {
+            ir.T_BYTE -> return 1
+            ir.T_WORD, ir.T_POINTER -> return 2
+            ir.T_LONG -> return 4
+            ir.T_FLOAT -> return 5
+        }
+        return 2
+    }
+
+    ; gives every register that the program uses a cell
+    sub assign_cells() {
+        cell_cap = (ir.regcount as long) + 2
+        cell_of = mem.alloc(cell_cap * 2)
+        regfile_size = 0
+        ; the floats first: their cells are used by address and keep their place, the
+        ; others are placed again when it is known which of them the code still names
+        long r = 1
+        while r <= ir.regcount {
+            if ir.regtypes[r] == ir.T_FLOAT {
+                cell_of[r] = regfile_size as uword
+                regfile_size += 5
+            }
+            r++
+        }
+        float_cells = regfile_size
+        r = 1
+        while r <= ir.regcount {
+            if ir.regtypes[r] != ir.T_FLOAT {
+                cell_of[r] = regfile_size as uword
+                regfile_size += type_size(ir.regtypes[r])
+            }
+            r++
+        }
+        regfile_used = regfile_size
+    }
+
+    ; "p8_regfile+N" into nb; gives nb's text (valid until nb is used again)
+    sub cell(uword r, ubyte byteoffset) -> ^^ubyte {
+        buf.clear(nb)
+        buf.add_str(nb, "p8_regfile+")
+        long offset = byteoffset
+        if r < cell_cap
+            offset += cell_of[r]
+        buf.add_long(nb, offset)
+        buf.add_byte(nb, 0)
+        return nb.data
+    }
+
+    sub lda_reg(uword r, ubyte byteoffset) {
+        ins("lda", cell(r, byteoffset))
+    }
+
+    sub sta_reg(uword r, ubyte byteoffset) {
+        ins("sta", cell(r, byteoffset))
+    }
+
+    ; ---- the program options ----
+
+    ; the value of "key=" in the options text, or 0
+    sub option(str key) -> ^^ubyte {
+        ^^ubyte t = prog.options
+        if t == 0
+            return 0
+        long keylen = buf.cstr_len(key)
+        long i = 0
+        while t[i] != 0 {
+            if buf.bytes_equal(t + i, key, keylen) and t[i + keylen] == '=' {
+                long start = i + keylen + 1
+                long stop = start
+                while t[stop] != 0 and t[stop] != '\n'
+                    stop++
+                return strtab.intern(t + start, (stop - start) as uword)
+            }
+            while t[i] != 0 and t[i] != '\n'
+                i++
+            if t[i] == '\n'
+                i++
+        }
+        return 0
+    }
+
+    ; a number as the IR writes it: decimal, $hex or %binary
+    sub number(^^ubyte s) -> long {
+        long v = 0
+        long i = 0
+        bool negative = false
+        if s[0] == '-' {
+            negative = true
+            i = 1
+        }
+        if s[i] == '$' {
+            i++
+            while s[i] != 0 {
+                ubyte c = s[i]
+                if c >= '0' and c <= '9'
+                    v = v * 16 + (c - '0')
+                else if (c | 32) >= 'a' and (c | 32) <= 'f'
+                    v = v * 16 + ((c | 32) - 'a' + 10)
+                else
+                    break
+                i++
+            }
+        }
+        else if s[i] == '%' {
+            i++
+            while s[i] == '0' or s[i] == '1' {
+                v = v * 2 + (s[i] - '0')
+                i++
+            }
+        }
+        else {
+            while s[i] >= '0' and s[i] <= '9' {
+                v = v * 10 + (s[i] - '0')
+                i++
+            }
+        }
+        if negative
+            return -v
+        return v
+    }
+
+    sub read_options() {
+        load_address = $0801
+        memtop = 0
+        launcher_basic = true
+        no_sysinit = false
+        zp_safe = false
+        ^^ubyte v = option("loadAddress")
+        if v != 0
+            load_address = number(v)
+        v = option("memtop")
+        if v != 0
+            memtop = number(v)
+        v = option("launcher")
+        if v != 0 and strings.compare(v, "BASIC") != 0
+            launcher_basic = false
+        v = option("noSysInit")
+        if v != 0 and strings.compare(v, "true") == 0
+            no_sysinit = true
+        v = option("zeropage")
+        if v != 0 and (strings.compare(v, "BASICSAFE") == 0 or strings.compare(v, "DONTUSE") == 0)
+            zp_safe = true
+        v = option("romable")
+        romable = v != 0 and strings.compare(v, "true") == 0
+        output_type = "PRG"
+        v = option("output")
+        if v != 0
+            output_type = v
+        if strings.compare(output_type, "PRG") != 0 and strings.compare(output_type, "RAW") != 0
+                and strings.compare(output_type, "XEX") != 0 and strings.compare(output_type, "LIBRARY") != 0
+            error("output type not supported", v)
+    }
+
+    ; ---- the zero page ----
+    ;
+    ; Scalar variables go to the free part of the zero page: first the ones that ask
+    ; for it (@zp, @requirezp), then the others, the most used first.  What is free
+    ; depends on the machine and on %zeropage: the zp_... lists of the target's
+    ; configuration (target.p8).  A variable with an initial value that lands there
+    ; gets it from code in run_global_inits.
+
+    ^^bool zp_free = 0              ; 256 of them
+    long zp_count = 0               ; variables placed
+
+    ; the free locations of this machine for this %zeropage
+    sub zp_free_map() {
+        uword k
+        if zp_free == 0
+            zp_free = mem.alloc(256)
+        for k in 0 to 255
+            zp_free[k] = false
+        if not target.loaded
+            return              ; a machine nobody described: the zero page is left alone
+        ^^ubyte mode = option("zeropage")
+        if mode == 0
+            mode = "KERNALSAFE"
+        if strings.compare(mode, "DONTUSE") == 0
+            return
+        if strings.compare(mode, "FULL") == 0
+            void target.mark_ranges("zp_fullsafe", zp_free, true)
+        else if strings.compare(mode, "KERNALSAFE") == 0
+            void target.mark_ranges("zp_kernalsafe", zp_free, true)
+        else if strings.compare(mode, "FLOATSAFE") == 0 {
+            if not target.mark_ranges("zp_floatsafe", zp_free, true)
+                void target.mark_ranges("zp_basicsafe", zp_free, true)
+        }
+        else
+            void target.mark_ranges("zp_basicsafe", zp_free, true)
+        ; the virtual registers, when the machine has them in the zero page
+        long vregs = target.number("virtual_registers", -1)
+        if vregs >= 0 and vregs < 256 {
+            for k in 0 to 31 {
+                if vregs + k < 256
+                    zp_free[vregs + k] = false
+            }
+        }
+        ; the scratch cells are the library's
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_MEMVAR and v.init != 0 and starts_with(v.name, "P8ZP_SCRATCH") {
+                long at = number(v.init)
+                if at >= 0 and at < 255 {
+                    zp_free[at] = false
+                    ; (the byte cells are one byte, the others a pair)
+                    if not starts_with(v.name, "P8ZP_SCRATCH_B1") and not starts_with(v.name, "P8ZP_SCRATCH_REG")
+                        zp_free[at + 1] = false
+                }
+            }
+            v = v.next
+        }
+        ; %zpreserved and %zpallowed
+        zp_option_ranges("zpReserved", false)
+        ^^ubyte allowed = option("zpAllowed")
+        if allowed != 0 {
+            long first
+            long last
+            first, last = two_numbers(allowed)
+            for k in 0 to 255 {
+                if k < first or k > last
+                    zp_free[k] = false
+            }
+        }
+    }
+
+    ; "first,last"
+    sub two_numbers(^^ubyte t) -> long, long {
+        long comma = 0
+        while t[comma] != 0 and t[comma] != ','
+            comma++
+        if t[comma] == 0
+            return 0, 255
+        buf.clear(nb)
+        buf.add_bytes(nb, t, comma)
+        buf.add_byte(nb, 0)
+        long first = number(nb.data)
+        return first, number(t + comma + 1)
+    }
+
+    ; every "key=first,last" line of the options
+    sub zp_option_ranges(str key, bool free) {
+        ^^ubyte t = prog.options
+        if t == 0
+            return
+        long keylen = buf.cstr_len(key)
+        long i = 0
+        while t[i] != 0 {
+            if buf.bytes_equal(t + i, key, keylen) and t[i + keylen] == '=' {
+                long start = i + keylen + 1
+                long stop = start
+                while t[stop] != 0 and t[stop] != '\n'
+                    stop++
+                long first
+                long last
+                first, last = two_numbers(strtab.intern(t + start, (stop - start) as uword))
+                long k
+                for k in first to last {
+                    if k >= 0 and k <= 255
+                        zp_free[k] = free
+                }
+            }
+            while t[i] != 0 and t[i] != '\n'
+                i++
+            if t[i] == '\n'
+                i++
+        }
+    }
+
+    sub zp_left() -> long {
+        long n = 0
+        uword k
+        for k in 2 to 255 {
+            if zp_free[k]
+                n++
+        }
+        return n
+    }
+
+    ; a place for size bytes, or 0
+    sub zp_take(long size) -> long {
+        long at = 2
+        while at + size <= 256 {
+            bool fits = true
+            long k
+            for k in 0 to size - 1 {
+                if not zp_free[at + k] {
+                    fits = false
+                    break
+                }
+            }
+            if fits {
+                for k in 0 to size - 1
+                    zp_free[at + k] = false
+                return at
+            }
+            at++
+        }
+        return 0
+    }
+
+    ; can this variable live in the zero page, and how large is it?  (0: no)
+    sub zp_candidate(^^ir.Var v, bool asked) -> long {
+        if v.kind != ir.V_VAR or v.split or v.zpaddr != 0 or v.align > 1
+            return 0
+        if v.zp != 0 and strings.compare(v.zp, "NOT_IN_ZEROPAGE") == 0
+            return 0
+        if array_length(v.typestr) != 0
+            return 0
+        if v.init != 0 and (v.init[0] == '@' or starts_with(v.typestr, "float"))
+            return 0            ; (an address or a float as the initial value: not from code yet)
+        long size = element_size(v.typestr)
+        if size > 2 and not asked
+            return 0
+        if size < 1 or size > 5
+            return 0
+        return size
+    }
+
+    sub zp_wanted(^^ir.Var v) -> bool {
+        return v.zp != 0 and (strings.compare(v.zp, "REQUIRE_ZEROPAGE") == 0 or strings.compare(v.zp, "PREFER_ZEROPAGE") == 0)
+    }
+
+    ; How much each variable would gain from the zero page: a byte for every time it is
+    ; named, and for a pointer the copy to the scratch pointer that it saves when it is
+    ; loaded to be followed (in the zero page it is followed where it is).
+    ^^pointer zp_reg_sym = 0        ; per register: the variable it was loaded from, until it is followed
+    ^^long zp_reg_seq = 0           ; and in which chunk
+    long zp_chunk_seq = 0
+    long zp_follow_gain = 3
+
+    sub zp_count_chunk(^^ir.Chunk c) {
+        if zp_reg_sym == 0 {
+            zp_reg_sym = mem.alloc((ir.regcount + 2) * sizeof(pointer))
+            zp_reg_seq = mem.alloc((ir.regcount + 2) * 4)
+            long z = 0
+            while z < ir.regcount + 2 {
+                zp_reg_seq[z] = 0
+                z++
+            }
+        }
+        while c != 0 {
+            if c.kind != ir.C_ASM {
+                zp_chunk_seq++
+                ^^ir.Instr i = c.first
+                while i != 0 {
+                    if i.sym != 0 {
+                        ^^strtab.Sym s = strtab.intern_sym(i.sym, buf.cstr_len(i.sym) as uword)
+                        s.extra++
+                        if i.op == ir.OP_LOADM and i.r1 <= ir.regcount and type_size(i.type) == 2 {
+                            zp_reg_sym[i.r1] = s
+                            zp_reg_seq[i.r1] = zp_chunk_seq
+                        }
+                    }
+                    else if i.op == ir.OP_LOADR and i.r1 <= ir.regcount and i.r2 <= ir.regcount and zp_reg_seq[i.r2] == zp_chunk_seq {
+                        ; (a copy that an index is added to)
+                        zp_reg_sym[i.r1] = zp_reg_sym[i.r2]
+                        zp_reg_seq[i.r1] = zp_chunk_seq
+                    }
+                    else if (i.mode == ir.M_RP or i.mode == ir.M_P) and i.r2 <= ir.regcount and zp_reg_seq[i.r2] == zp_chunk_seq {
+                        ^^strtab.Sym ps = zp_reg_sym[i.r2]
+                        ps.extra += zp_follow_gain
+                        zp_reg_seq[i.r2] = 0        ; (one copy serves the next times)
+                    }
+                    i = i.next
+                }
+            }
+            c = c.next
+        }
+    }
+
+    ubyte[32] pool_at               ; the zero page bytes of the shared temporaries
+    ubyte pool_count = 0
+
+    ; Which subroutines may run while another is in the middle of something: those
+    ; whose address is taken (an interrupt handler is set that way) or that assembly
+    ; names, and all they call.  They keep off the shared temporaries.
+    sub interrupt_subroutines() {
+        ^^ir.Block bl = prog.blocks
+        ^^ir.Sub sb
+        ^^strtab.Sym s
+        ; the names in assembly: every identifier, and its part after the last dot
+        while bl != 0 {
+            ^^ir.Chunk bc = bl.chunks
+            while bc != 0 {
+                if bc.kind == ir.C_ASM
+                    names_in_assembly(bc.text, bc.textlen)
+                bc = bc.next
+            }
+            sb = bl.subs
+            while sb != 0 {
+                sb.no_pool = false
+                if sb.asmtext != 0
+                    names_in_assembly(sb.asmtext, sb.asmlen)
+                ^^ir.Chunk sc = sb.chunks
+                while sc != 0 {
+                    if sc.kind == ir.C_ASM
+                        names_in_assembly(sc.text, sc.textlen)
+                    else {
+                        ; an address taken: the name as the operand of something that is not a call or jump
+                        ^^ir.Instr i = sc.first
+                        while i != 0 {
+                            if i.sym != 0 and i.op != ir.OP_CALL and i.op != ir.OP_CALLFAR and i.op != ir.OP_CALLFARVB and i.op != ir.OP_JUMP
+                                    and i.mode != ir.M_M and i.mode != ir.M_RM and i.mode != ir.M_IM {
+                                s = strtab.intern_sym(i.sym, buf.cstr_len(i.sym) as uword)
+                                s.mark |= peep6502.K_TAKEN
+                            }
+                            i = i.next
+                        }
+                    }
+                    sc = sc.next
+                }
+                sb = sb.next
+            }
+            bl = bl.next
+        }
+        ; an address in the initial value of a variable ("@name") is taken as well
+        ^^ir.Var iv = prog.vars
+        while iv != 0 {
+            if iv.init != 0 {
+                long il = buf.cstr_len(iv.init)
+                long ik = 0
+                while ik < il {
+                    if iv.init[ik] == '@' {
+                        names_in_assembly(iv.init, il)
+                        break
+                    }
+                    ik++
+                }
+            }
+            iv = iv.next
+        }
+        ; the subroutines that are named that way
+        bl = prog.blocks
+        while bl != 0 {
+            sb = bl.subs
+            while sb != 0 {
+                if not sb.is_asm {
+                    s = strtab.intern_sym(sb.name, buf.cstr_len(sb.name) as uword)
+                    ^^ubyte tail = unscoped(sb.name)
+                    ^^strtab.Sym ts = strtab.intern_sym(tail, buf.cstr_len(tail) as uword)
+                    if s.mark & peep6502.K_TAKEN != 0 or ts.mark & peep6502.K_TAKEN != 0
+                        sb.no_pool = true
+                }
+                sb = sb.next
+            }
+            bl = bl.next
+        }
+        ; and what they call, and what that calls
+        bool more = true
+        while more {
+            more = false
+            bl = prog.blocks
+            while bl != 0 {
+                sb = bl.subs
+                while sb != 0 {
+                    if sb.no_pool and not sb.is_asm {
+                        ^^ir.Chunk cc = sb.chunks
+                        while cc != 0 {
+                            if cc.kind != ir.C_ASM {
+                                ^^ir.Instr ci = cc.first
+                                while ci != 0 {
+                                    if ci.sym != 0 and (ci.op == ir.OP_CALL or ci.op == ir.OP_JUMP) {
+                                        ^^ir.Sub callee = find_sub(ci.sym)
+                                        if callee != 0 and not callee.no_pool {
+                                            callee.no_pool = true
+                                            more = true
+                                        }
+                                    }
+                                    ci = ci.next
+                                }
+                            }
+                            cc = cc.next
+                        }
+                    }
+                    sb = sb.next
+                }
+                bl = bl.next
+            }
+        }
+    }
+
+    ; Which variables does only their own subroutine name, and which subroutines can be
+    ; called again while they run?  (For peep6502: what a call leaves as it was.)
+    ; A subroutine with assembly in it, one that calls through a pointer or calls
+    ; something that is not the program's, may call any subroutine that assembly names.
+    sub own_variables() {
+        ^^ir.Block bl = prog.blocks
+        ^^ir.Sub sb
+        ^^ir.Chunk c
+        ^^ir.Instr i
+        ^^strtab.Sym s
+        long n = 0
+        long edges = 0
+        while bl != 0 {
+            c = bl.chunks
+            while c != 0 {
+                if c.kind != ir.C_ASM {
+                    i = c.first
+                    while i != 0 {
+                        if i.sym != 0 {
+                            s = strtab.intern_sym(i.sym, buf.cstr_len(i.sym) as uword)
+                            s.mark |= peep6502.K_FOREIGN
+                        }
+                        i = i.next
+                    }
+                }
+                c = c.next
+            }
+            sb = bl.subs
+            while sb != 0 {
+                n++
+                c = sb.chunks
+                while c != 0 {
+                    if c.kind != ir.C_ASM {
+                        i = c.first
+                        while i != 0 {
+                            edges++
+                            i = i.next
+                        }
+                    }
+                    c = c.next
+                }
+                sb = sb.next
+            }
+            bl = bl.next
+        }
+        if n == 0
+            return
+        ^^pointer subv = mem.alloc(n * sizeof(pointer))
+        ^^ubyte wild = mem.alloc(n)
+        ^^ubyte named = mem.alloc(n)
+        ^^long seen = mem.alloc(n * 4)
+        ^^long estart = mem.alloc((n + 1) * 4)
+        ^^long eto = mem.alloc((edges + 1) * 4)
+        ^^long todo = mem.alloc((n + 1) * 4)
+        long k = 0
+        bl = prog.blocks
+        while bl != 0 {
+            sb = bl.subs
+            while sb != 0 {
+                subv[k] = sb
+                k++
+                sb = sb.next
+            }
+            bl = bl.next
+        }
+        long ecount = 0
+        long j
+        for k in 0 to n - 1 {
+            sb = subv[k]
+            estart[k] = ecount
+            seen[k] = -1
+            wild[k] = 0
+            named[k] = 0
+            s = strtab.intern_sym(sb.name, buf.cstr_len(sb.name) as uword)
+            ^^ubyte tail = unscoped(sb.name)
+            ^^strtab.Sym ts = strtab.intern_sym(tail, buf.cstr_len(tail) as uword)
+            if s.mark & peep6502.K_TAKEN != 0 or ts.mark & peep6502.K_TAKEN != 0
+                named[k] = 1
+            if sb.is_asm or sb.asmtext != 0
+                wild[k] = 1
+            long namelen = buf.cstr_len(sb.name)
+            c = sb.chunks
+            while c != 0 {
+                if c.kind == ir.C_ASM
+                    wild[k] = 1
+                else {
+                    i = c.first
+                    while i != 0 {
+                        when i.op {
+                            ir.OP_CALL, ir.OP_CALLFAR, ir.OP_CALLFARVB, ir.OP_JUMP -> {
+                                ^^ir.Sub callee = 0
+                                if i.sym != 0
+                                    callee = find_sub(i.sym)
+                                if callee != 0 {
+                                    for j in 0 to n - 1 {
+                                        if subv[j] == callee {
+                                            eto[ecount] = j
+                                            ecount++
+                                            break
+                                        }
+                                    }
+                                }
+                                else if i.op != ir.OP_JUMP or i.sym == 0
+                                    wild[k] = 1         ; not a subroutine of the program, or not a name
+                            }
+                            ir.OP_CALLI, ir.OP_SYSCALL -> wild[k] = 1
+                            else -> {
+                                if i.sym != 0 {
+                                    ; a variable: this subroutine's own?
+                                    ^^ubyte t = i.sym
+                                    bool mine = true
+                                    j = 0
+                                    while j < namelen {
+                                        if t[j] != sb.name[j] {
+                                            mine = false
+                                            break
+                                        }
+                                        j++
+                                    }
+                                    if mine and t[namelen] != '.'
+                                        mine = false
+                                    if not mine {
+                                        s = strtab.intern_sym(t, buf.cstr_len(t) as uword)
+                                        s.mark |= peep6502.K_FOREIGN
+                                    }
+                                }
+                            }
+                        }
+                        i = i.next
+                    }
+                }
+                c = c.next
+            }
+        }
+        estart[n] = ecount
+        ; can it be reached from itself?
+        for k in 0 to n - 1 {
+            sb = subv[k]
+            sb.reenter = false
+            long top = 0
+            bool named_done = false
+            todo[0] = k
+            top = 1
+            while top > 0 and not sb.reenter {
+                top--
+                long u = todo[top]
+                if wild[u] != 0 and not named_done {
+                    named_done = true
+                    for j in 0 to n - 1 {
+                        if named[j] != 0 {
+                            if j == k
+                                sb.reenter = true
+                            else if seen[j] != k {
+                                seen[j] = k
+                                todo[top] = j
+                                top++
+                            }
+                        }
+                    }
+                }
+                j = estart[u]
+                while j < estart[u + 1] {
+                    long dst = eto[j]
+                    if dst == k
+                        sb.reenter = true
+                    else if seen[dst] != k {
+                        seen[dst] = k
+                        todo[top] = dst
+                        top++
+                    }
+                    j++
+                }
+            }
+        }
+    }
+
+    sub name_char(ubyte c) -> bool {
+        return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_' or c == '.'
+    }
+
+    sub names_in_assembly(^^ubyte text, long length) {
+        if text == 0
+            return
+        long i = 0
+        while i < length {
+            if not name_char(text[i]) or (text[i] >= '0' and text[i] <= '9') or text[i] == '.' {
+                i++
+                ; (a number is skipped whole)
+                while i < length and text[i - 1] >= '0' and text[i - 1] <= '9' and name_char(text[i])
+                    i++
+                continue
+            }
+            long start = i
+            long lastdot = -1
+            while i < length and name_char(text[i]) {
+                if text[i] == '.'
+                    lastdot = i
+                i++
+            }
+            ^^strtab.Sym s = strtab.intern_sym(text + start, (i - start) as uword)
+            s.mark |= peep6502.K_TAKEN
+            if lastdot >= 0 and lastdot + 1 < i {
+                s = strtab.intern_sym(text + lastdot + 1, (i - lastdot - 1) as uword)
+                s.mark |= peep6502.K_TAKEN
+            }
+        }
+    }
+
+    sub zp_assign() {
+        zp_count = 0
+        zp_free_map()
+        ^^ir.Var v = prog.vars
+        ^^strtab.Sym s
+        long size
+        ; a few bytes for the temporaries that share them (peep6502.share_cells): each
+        ; serves every subroutine, which is more than any variable does
+        pool_count = 0
+        long want = 4               ; (measured on p8vi: four do nearly all of it, more take bytes from the variables)
+        ^^ubyte pv = io_platform.env("P8P8_ZP_POOL")
+        if pv != 0 and pv[0] != 0
+            want = number(pv)
+        else if zp_left() < 32
+            want = 2                ; (little zero page: two, the rest is worth more to the variables)
+        if want > 32
+            want = 32
+        if not peep6502.enabled
+            want = 0
+        while pool_count < want and zp_left() > 6 {
+            long pa = zp_take(1)
+            if pa == 0
+                break
+            pool_at[pool_count] = pa as ubyte
+            pool_count++
+        }
+        peep6502.pool_size = pool_count
+        interrupt_subroutines()
+        own_variables()
+        ; those that ask
+        while v != 0 {
+            if zp_wanted(v) {
+                size = zp_candidate(v, true)
+                if size != 0 {
+                    v.zpaddr = zp_take(size)
+                    if v.zpaddr != 0
+                        zp_count++
+                }
+            }
+            v = v.next
+        }
+        ; how often each of the others is named
+        v = prog.vars
+        while v != 0 {
+            s = strtab.intern_sym(v.name, buf.cstr_len(v.name) as uword)
+            s.extra = 0
+            v = v.next
+        }
+        ^^ubyte fg = io_platform.env("P8P8_ZP_FOLLOW")
+        if fg != 0 and fg[0] != 0
+            zp_follow_gain = number(fg)
+        zp_count_chunk(prog.initglobals)
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            zp_count_chunk(bl.chunks)
+            ^^ir.Sub sb = bl.subs
+            while sb != 0 {
+                zp_count_chunk(sb.chunks)
+                sb = sb.next
+            }
+            bl = bl.next
+        }
+        ; the most used first, as long as there is room; some of it is left for the
+        ; register cells that survive (cell_equates), which are used more than most
+        long reserve = 0            ; (measured: p8vi is smallest with none; P8P8_ZP_CELLS to try others)
+        ^^ubyte rv = io_platform.env("P8P8_ZP_CELLS")
+        if rv != 0 and rv[0] != 0
+            reserve = number(rv)
+        repeat {
+            if zp_left() <= reserve
+                break
+            ^^ir.Var best = 0
+            long most = 0
+            v = prog.vars
+            while v != 0 {
+                if zp_candidate(v, false) != 0 {
+                    s = strtab.intern_sym(v.name, buf.cstr_len(v.name) as uword)
+                    if s.extra > most {
+                        most = s.extra
+                        best = v
+                    }
+                }
+                v = v.next
+            }
+            if best == 0
+                break
+            s = strtab.intern_sym(best.name, buf.cstr_len(best.name) as uword)
+            s.extra = 0             ; (not looked at again, placed or not)
+            best.zpaddr = zp_take(zp_candidate(best, false))
+            if best.zpaddr != 0
+                zp_count++
+        }
+        v = prog.vars
+        while v != 0 {
+            s = strtab.intern_sym(v.name, buf.cstr_len(v.name) as uword)
+            s.extra = 0
+            v = v.next
+        }
+    }
+
+    ; The cells that the written code still names (p8r_N, a byte each): the most used
+    ; go to what is left of the zero page, the others stay in p8_regfile.
+    sub cell_equates() {
+        if not peep6502.enabled
+            return
+        raw("; register cells")
+        long n
+        ubyte pk = 0
+        while pk < pool_count {
+            put("p8z_")
+            putn(pk)
+            put(" = ")
+            putn(pool_at[pk])
+            nl()
+            pk++
+        }
+        repeat {
+            long best = -1
+            long most = 0
+            for n in 0 to regfile_size - 1 {
+                if peep6502.celluse[n] > most {
+                    most = peep6502.celluse[n]
+                    best = n
+                }
+            }
+            if best < 0
+                break
+            long at = zp_take(1)
+            if at == 0
+                break
+            put("p8r_")
+            putn(best)
+            put(" = ")
+            putn(at)
+            nl()
+            peep6502.celluse[best] = 0
+        }
+        ; the others one after the other behind the float cells
+        regfile_used = float_cells
+        for n in 0 to regfile_size - 1 {
+            if peep6502.celluse[n] > 0 {
+                put("p8r_")
+                putn(n)
+                put(" = p8_regfile+")
+                putn(regfile_used)
+                nl()
+                regfile_used++
+            }
+        }
+        raw("")
+    }
+
+    ; the names of the variables in the zero page
+    sub zp_equates() {
+        raw("; zero page variables")
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.zpaddr != 0 {
+                put(v.name)
+                put(" = ")
+                putn(v.zpaddr)
+                nl()
+            }
+            v = v.next
+        }
+        raw("")
+    }
+
+    ; the initial values of the variables in the zero page that have one
+    ; In a program for ROM (%option romable) nothing that is written can be in the
+    ; program itself: a scalar variable with an initial value lives with the
+    ; uninitialized ones in RAM and gets its value from code, like one in the zero
+    ; page.  (Arrays and strings with initial values stay in the ROM, read only.)
+    bool romable = false
+
+    sub ram_initialized(^^ir.Var v) -> bool {
+        return romable and v.kind == ir.V_VAR and v.init != 0 and v.zpaddr == 0 and not v.split
+            and array_length(v.typestr) == 0
+    }
+
+    sub zp_initial_values() {
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.init != 0 and (v.zpaddr != 0 or ram_initialized(v)) {
+                long size = element_size(v.typestr)
+                long k
+                if v.init[0] == '@' {
+                    ; an address
+                    ins_half("lda", '<', v.init + 1, 0)
+                    ins_at("sta", v.name, 0)
+                    ins_half("lda", '>', v.init + 1, 0)
+                    ins_at("sta", v.name, 1)
+                }
+                else if starts_with(v.typestr, "float") {
+                    float_bytes(irparse.parse_float(v.init))
+                    ubyte fbk
+                    for fbk in 0 to 4 {
+                        ins_imm("lda", fbytes[fbk])
+                        ins_at("sta", v.name, fbk)
+                    }
+                }
+                else {
+                    long value = number(v.init)
+                    for k in 0 to size - 1 {
+                        ubyte part = ((value >> ((k as ubyte) * 8)) & 255) as ubyte
+                        if part == 0 {
+                            ; (outside the zero page it is with the variables that are cleared at the start)
+                            if v.zpaddr != 0
+                                store_zero(v.name, k)
+                        }
+                        else {
+                            ins_imm("lda", part)
+                            ins_at("sta", v.name, k)
+                        }
+                    }
+                }
+            }
+            v = v.next
+        }
+    }
+
+    ; ---- the file ----
+
+    ; Writes the program as assembly into the buffer.
+    sub generate(^^ir.Program p, ^^buf.Buf output) {
+        prog = p
+        o = output
+        errors = 0
+        float_errors = 0
+        if nb == 0
+            nb = buf.new(256)
+        ; the CPU: a 65C02 has more instructions (the default without a configuration: a 6502)
+        c02 = target.is("cpu", "65c02") or target.is("cpu", "cpu65c02")
+        if target.loaded and not c02 and not target.is("cpu", "6502") and not target.is("cpu", "cpu6502")
+            error("this code generator has no instructions for the target's cpu", target.text("cpu"))
+        read_options()
+        assign_cells()
+        count_registers()
+        zp_assign()
+        peep6502.init(regfile_size)
+        peep6502.c02 = c02
+        peep6502.arms_enabled = io_platform.env("P8P8_NOARMS") == 0
+        long fr = 1
+        while fr <= ir.regcount {
+            ; (the address of a float's cell goes to the float routines)
+            if ir.regtypes[fr] == ir.T_FLOAT
+                peep6502.opaque_cells(cell_of[fr], 5)
+            fr++
+        }
+        ^^ir.Var v = p.vars
+        while v != 0 {
+            if v.kind == ir.V_MEMVAR and v.init != 0 and strings.compare(v.name, "cx16.r0") == 0 {
+                bool vok
+                long vaddr
+                vok, vaddr = peep6502.parse_number(v.init)
+                if vok
+                    peep6502.virtual_registers(vaddr)
+            }
+            if v.kind == ir.V_VAR and not v.split {
+                peep6502.plain_variable(v.name)
+                ; a scalar whose address nothing takes cannot be changed through a pointer
+                if array_length(v.typestr) == 0 and not v.shared {
+                    ^^strtab.Sym vs = strtab.intern_sym(v.name, buf.cstr_len(v.name) as uword)
+                    ^^ubyte vtail = unscoped(v.name)
+                    ^^strtab.Sym vt = strtab.intern_sym(vtail, buf.cstr_len(vtail) as uword)
+                    if vs.mark & peep6502.K_TAKEN == 0 and vt.mark & peep6502.K_TAKEN == 0
+                        peep6502.safe_variable(v.name)
+                }
+            }
+            if v.zpaddr != 0
+                peep6502.zp_variable(v.name)
+            v = v.next
+        }
+        ; The code is written first, aside: only then is it known which register cells
+        ; are left, and their places (like those of the variables in the zero page) are
+        ; defined before the code in the file, so that the assembler knows the size of
+        ; every instruction when it comes to it.
+        if codebuf == 0
+            codebuf = buf.new(262144)
+        buf.clear(codebuf)
+        o = codebuf
+        code()
+        o = output
+        header()
+        constants()
+        zp_equates()
+        cell_equates()
+        buf.add_bytes(o, codebuf.data, codebuf.len)
+        data()
+        bss()
+    }
+
+    ^^buf.Buf codebuf = 0
+
+    sub starts_with(^^ubyte s, str prefix) -> bool {
+        return buf.bytes_equal(s, prefix, buf.cstr_len(prefix))
+    }
+
+    sub header() {
+        put("; Program: ")
+        put(prog.name)
+        nl()
+        raw("; Generated by p8p8's 6502 code generator")
+        if c02 {
+            raw("; Target CPU: 65C02")
+            raw("")
+            raw(".cpu  'w65c02'")
+        }
+        else {
+            raw("; Target CPU: 6502")
+            raw("")
+            raw(".cpu  '6502'")
+        }
+        raw(".enc 'none'")
+        raw("")
+        raw("; zero page scratch cells")
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_MEMVAR and v.init != 0 and starts_with(v.name, "P8ZP_SCRATCH") {
+                put(v.name)
+                put(" = ")
+                put(v.init)
+                nl()
+            }
+            v = v.next
+        }
+        ; the machine's own symbols
+        ^^ubyte symbols = target.text("asm_symbols")
+        if prog.floats and target.text("asm_symbols_floats") != 0
+            symbols = target.text("asm_symbols_floats")
+        if symbols != 0
+            raw(symbols)
+        ^^ubyte custom = target.text("custom_launcher_code")
+        if custom != 0 {
+            ; the machine brings its whole launcher and startup code
+            raw("")
+            raw("; ---- custom launcher assembler program ----")
+            put("* = ")
+            puthex(load_address)
+            nl()
+            raw("prog8_program_start:")
+            raw(custom)
+            raw("")
+            return
+        }
+        raw("")
+        if launcher_basic {
+            raw("; ---- basic program with sys call ----")
+            put("* = ")
+            puthex(load_address)
+            nl()
+            raw("prog8_program_start:")
+            raw("    .word  (+), 2026")
+            raw("    .null  $9e, format(' %d ', prog8_entrypoint), $3a, $8f, ' prog8'")
+            anon_label("+")
+            raw("    .word  0")
+            raw("prog8_entrypoint:")
+        }
+        else {
+            raw("; ---- program without basic sys call ----")
+            put("* = ")
+            puthex(load_address)
+            nl()
+            raw("prog8_program_start:")
+        }
+        ; the startup sequence
+        if target.text("startup_code") != 0
+            raw(target.text("startup_code"))
+        ins("cld", 0)
+        ins("tsx", 0)
+        ins("stx", "prog8_lib.orig_stackpointer")
+        if not no_sysinit
+            ins("jsr", "p8_sys_startup.init_system")
+        ins("jsr", "p8_sys_startup.init_system_phase2")
+        if not zp_safe {
+            ; the zero page is used: the machine is reset when the program ends
+            ^^ubyte reset = target.text("reset_address")
+            if reset == 0
+                reset = "sys.reset_system"
+            put("    lda  #>")
+            raw(reset)
+            ins("pha", 0)
+            put("    lda  #<")
+            raw(reset)
+            ins("pha", 0)
+        }
+        if prog.floats and target.text("startup_code_floats") != 0
+            raw(target.text("startup_code_floats"))
+        ins("jsr", "p8b_main.p8s_start")
+        ins("jmp", "p8_sys_startup.cleanup_at_exit")
+        if target.text("exit_code") != 0
+            raw(target.text("exit_code"))
+        raw("")
+    }
+
+    ; "p8c_" plus the name with its dots as underscores
+    sub put_const_label(^^ubyte name) {
+        put("p8c_")
+        long i = 0
+        while name[i] != 0 {
+            if name[i] == '.'
+                buf.add_byte(w(), '_')
+            else
+                buf.add_byte(w(), name[i])
+            i++
+        }
+    }
+
+    ; is this the name of something directly in a block ("block.name")?
+    sub block_level(^^ubyte name) -> bool {
+        ubyte dots = 0
+        long i = 0
+        while name[i] != 0 {
+            if name[i] == '.'
+                dots++
+            i++
+        }
+        return dots <= 1
+    }
+
+    ; the name without its last part
+    sub owner_name(^^ubyte name) -> ^^ubyte {
+        long cut = 0
+        long i = 0
+        while name[i] != 0 {
+            if name[i] == '.'
+                cut = i
+            i++
+        }
+        return strtab.intern(name, cut as uword)
+    }
+
+    sub constants() {
+        raw("; constants")
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_CONST and v.init != 0 {
+                if not v.noprefix {
+                    put_const_label(v.name)
+                    put(" = ")
+                    put(v.init)
+                    nl()
+                }
+                ; under its own name too, for assembly code: a block's constant always, a
+                ; subroutine's when the subroutine is in the program (else there is no such scope)
+                if block_level(v.name) or find_sub(owner_name(v.name)) != 0 {
+                    put(v.name)
+                    put(" = ")
+                    put(v.init)
+                    nl()
+                }
+            }
+            v = v.next
+        }
+        raw("")
+        raw("; memory-mapped variables")
+        v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_MEMVAR and v.init != 0 and not starts_with(v.name, "P8ZP_SCRATCH") {
+                put(v.name)
+                put(" = ")
+                put(v.init)
+                nl()
+            }
+            v = v.next
+        }
+        raw("")
+    }
+
+    ; ---- code ----
+
+    ; is name "parent.something"
+    sub nested_in(^^ubyte name, ^^ubyte parent) -> bool {
+        long n = buf.cstr_len(parent)
+        return buf.bytes_equal(name, parent, n) and name[n] == '.'
+    }
+
+    ; the subroutine that this one is nested in, or 0
+    sub parent_of(^^ir.Block bl, ^^ir.Sub s) -> ^^ir.Sub {
+        ^^ir.Sub other = bl.subs
+        while other != 0 {
+            if other != s and not other.is_asm and nested_in(s.name, other.name)
+                return other
+            other = other.next
+        }
+        return 0
+    }
+
+    ; the last part of a scoped name
+    sub unscoped(^^ubyte name) -> ^^ubyte {
+        long i = buf.cstr_len(name)
+        while i > 0 and name[i - 1] != '.'
+            i--
+        return name + i
+    }
+
+    sub code() {
+        raw("run_global_inits:")
+        peep6502.begin(o)
+        zp_initial_values()
+        chunk_code(prog.initglobals, 0)
+        ins("rts", 0)
+        peep6502.flush()
+        raw("")
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if bl.address != 0 {
+                put("* = ")
+                put(bl.address)
+                nl()
+            }
+            put(bl.name)
+            if bl.force_output
+                raw("  .block")
+            else
+                raw("  .proc")
+            ^^ir.Chunk c = bl.chunks
+            peep6502.begin(o)
+            while c != 0 {
+                if c.label != 0
+                    label(c.label)
+                if c.kind == ir.C_ASM
+                    asm_text(c.text, c.textlen)
+                else
+                    chunk_code(c, 0)
+                c = c.next
+            }
+            peep6502.flush()
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                if parent_of(bl, s) == 0
+                    subroutine(bl, s, false)
+                s = s.next
+            }
+            if bl.force_output
+                raw("  .bend")
+            else
+                raw("  .pend")
+            raw("")
+            bl = bl.next
+        }
+    }
+
+    sub asm_text(^^ubyte text, long length) {
+        if text == 0
+            return
+        buf.add_bytes(w(), text, length)
+        if length == 0 or text[length - 1] != '\n'
+            nl()
+    }
+
+    ; A subroutine is a .proc, which the assembler leaves out when nothing refers to it;
+    ; in a block with %option force_output it is a .block, which is always there (and so
+    ; are the names declared in it).
+    sub scope_start(^^ir.Block bl) {
+        if bl.force_output
+            raw("  .block")
+        else
+            raw("  .proc")
+    }
+
+    sub scope_end(^^ir.Block bl) {
+        if bl.force_output
+            raw("    .bend")
+        else
+            raw("    .pend")
+    }
+
+    sub subroutine(^^ir.Block bl, ^^ir.Sub s, bool nested) {
+        if s.is_asm {
+            ; an asmsub: its assembly, unless it is inlined at every call
+            if s.is_inline or s.asmtext == 0 or s.asm_is_ir
+                return
+            raw("")
+            if nested
+                put(unscoped(s.name))
+            else
+                put(s.name)
+            scope_start(bl)
+            asm_text(s.asmtext, s.asmlen)
+            scope_end(bl)
+            return
+        }
+        raw("")
+        put("; ---- Subroutine: ")
+        put(s.name)
+        raw(" ----")
+        if nested
+            put(unscoped(s.name))
+        else
+            put(s.name)
+        scope_start(bl)
+        peep6502.begin(o)
+        peep6502.pooling = not s.no_pool
+        if not s.reenter
+            peep6502.own_scope(s.name)
+        cursub = s
+        store_register_params(s)
+        if strings.compare(s.name, "p8b_main.p8s_start") == 0 {
+            ; (also when something calls main.start without the startup code, as a library does)
+            ins("jsr", "prog8_lib.program_startup_clear_bss")
+            ins("jsr", "run_global_inits")
+        }
+        ^^ubyte own = unscoped(s.name)
+        ^^ir.Chunk c = s.chunks
+        while c != 0 {
+            ; (the .proc defines the subroutine's own name)
+            if c.label != 0 and strings.compare(c.label, s.name) != 0 and strings.compare(c.label, own) != 0
+                label(c.label)
+            if c.kind == ir.C_ASM
+                asm_text(c.text, c.textlen)
+            else
+                chunk_code(c, s)
+            c = c.next
+        }
+        peep6502.flush()
+        cursub = 0
+        ; the subroutines nested in this one
+        ^^ir.Sub inner = bl.subs
+        while inner != 0 {
+            if inner != s and nested_in(inner.name, s.name) and parent_of(bl, inner) == s
+                subroutine(bl, inner, true)
+            inner = inner.next
+        }
+        scope_end(bl)
+    }
+
+    ; ---- an index through a pointer ----
+    ;
+    ; pointer[index] with a byte index arrives as: copy the pointer, add the index (a
+    ; byte made a word), follow the sum.  When the sum is used for nothing else, the
+    ; 6502 does that in one step, (pointer),y: the copy and the addition are dropped
+    ; and the load or store gets the index register (scale 255 marks it).
+
+    ^^ubyte reg_uses = 0            ; how many times each register is named in the program (255: or more)
+    ^^ubyte reg_zext = 0            ; 1: it is a byte made a word with zeros above
+
+    sub note_register(uword r) {
+        if r != 0 and r <= ir.regcount and reg_uses[r] != 255
+            reg_uses[r]++
+    }
+
+    sub count_chunks(^^ir.Chunk c) {
+        while c != 0 {
+            if c.kind != ir.C_ASM {
+                ^^ir.Instr i = c.first
+                while i != 0 {
+                    note_register(i.r1)
+                    note_register(i.r2)
+                    note_register(i.r3)
+                    ^^ir.Arg a = i.args
+                    while a != 0 {
+                        note_register(a.reg)
+                        a = a.next
+                    }
+                    a = i.results
+                    while a != 0 {
+                        note_register(a.reg)
+                        a = a.next
+                    }
+                    if i.r1 != 0 and i.r1 <= ir.regcount {
+                        if i.op == ir.OP_LOADMZ or (i.op == ir.OP_EXT and i.type == ir.T_BYTE)
+                            reg_zext[i.r1] = 1
+                    }
+                    i = i.next
+                }
+            }
+            c = c.next
+        }
+    }
+
+    sub count_registers() {
+        reg_uses = mem.alloc((ir.regcount as long) + 2)
+        reg_zext = mem.alloc((ir.regcount as long) + 2)
+        count_chunks(prog.initglobals)
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            count_chunks(bl.chunks)
+            ^^ir.Sub sb = bl.subs
+            while sb != 0 {
+                count_chunks(sb.chunks)
+                sb = sb.next
+            }
+            bl = bl.next
+        }
+    }
+
+    sub fuse_indexed(^^ir.Chunk c) {
+        ^^ir.Instr a = c.first
+        while a != 0 {
+            ^^ir.Instr b = a.next
+            if a.op == ir.OP_ADD and a.mode == ir.M_RI and a.r1 != 0 and a.r1 <= ir.regcount and reg_uses[a.r1] == 3
+                    and a.value >= 0 and a.value < 250 and (a.type == ir.T_POINTER or a.type == ir.T_WORD) {
+                ; pointer + constant, followed only: the constant becomes the displacement
+                ^^ir.Instr u = b
+                ubyte steps = 0
+                while u != 0 and steps < 8 {
+                    if (u.op == ir.OP_LOADI or u.op == ir.OP_STOREI or u.op == ir.OP_STOREZI) and u.r2 == a.r1 and u.r1 != a.r1 and u.scale != 255 {
+                        if u.offset >= 0 and u.offset + (a.value as long) + type_size(u.type) <= 256 {
+                            u.offset += a.value as long
+                            a.op = ir.OP_NOP
+                            reg_uses[a.r1] = 2
+                        }
+                        break
+                    }
+                    if u.r1 == a.r1 or u.r2 == a.r1 or u.r3 == a.r1 or u.args != 0
+                        break
+                    u = u.next
+                    steps++
+                }
+            }
+            if b != 0 and b.next != 0 and a.op == ir.OP_LOADR and b.op == ir.OP_ADDR and b.r1 == a.r1 and b.mode == ir.M_RR {
+                ^^ir.Instr d = b.next
+                if (d.op == ir.OP_LOADI or d.op == ir.OP_STOREI or d.op == ir.OP_STOREZI) and d.r2 == a.r1 and d.offset == 0
+                        and d.scale != 255 and type_size(d.type) == 1 and a.r1 <= ir.regcount and b.r2 <= ir.regcount
+                        and reg_uses[a.r1] == 3 and reg_zext[b.r2] == 1 and reg_uses[b.r2] == 2 {
+                    a.op = ir.OP_NOP
+                    b.op = ir.OP_NOP
+                    d.r2 = a.r2
+                    d.r3 = b.r2
+                    d.scale = 255
+                }
+            }
+            a = a.next
+        }
+    }
+
+    sub chunk_code(^^ir.Chunk c, ^^ir.Sub s) {
+        if c == 0
+            return
+        fuse_indexed(c)
+        ^^ir.Instr i = c.first
+        while i != 0 {
+            instruction(i)
+            i = i.next
+        }
+    }
+
+    ; ---- instructions ----
+
+    ; the memory operand of an instruction: its symbol (or a number as text) and offset
+    ^^ubyte mem_symbol = 0
+    long mem_offset = 0
+    ^^buf.Buf mb = 0
+
+    sub memory_operand(^^ir.Instr i) {
+        if mb == 0
+            mb = buf.new(64)
+        if i.sym != 0 {
+            mem_symbol = i.sym
+            mem_offset = i.offset
+            return
+        }
+        ; a fixed address
+        buf.clear(mb)
+        buf.add_byte(mb, '$')
+        long v = i.offset           ; (the address of a fixed memory operand is in the offset field)
+        ubyte shift = 12
+        repeat 4 {
+            buf.add_byte(mb, buf.hex_digit(((v >> shift) & 15) as ubyte))
+            if shift >= 4
+                shift -= 4
+        }
+        buf.add_byte(mb, 0)
+        mem_symbol = mb.data
+        mem_offset = 0
+    }
+
+    long float_errors = 0
+
+    ; ---- operands ----
+    ;
+    ; The second operand of an operation is a constant, a register's cell or a
+    ; memory location; operand_ins writes an instruction that takes its byte k.
+
+    const ubyte K_IMM = 0
+    const ubyte K_REG = 1
+    const ubyte K_MEM = 2
+    ubyte okind = K_IMM
+    quad ovalue = 0
+    uword oreg = 0
+
+    sub operand_imm(quad value) {
+        okind = K_IMM
+        ovalue = value
+    }
+
+    sub operand_reg(uword r) {
+        okind = K_REG
+        oreg = r
+    }
+
+    sub operand_mem(^^ir.Instr i) {
+        okind = K_MEM
+        memory_operand(i)
+    }
+
+    sub operand_ins(str mnemonic, ubyte k) {
+        when okind {
+            K_IMM -> ins_imm(mnemonic, ((ovalue >> (k * 8)) & 255) as long)
+            K_REG -> ins(mnemonic, cell(oreg, k))
+            else -> ins_at(mnemonic, mem_symbol, mem_offset + k)
+        }
+    }
+
+    ; the operand of the instruction's mode: #value, r2, or [memory]
+    sub second_operand(^^ir.Instr i) {
+        when i.mode {
+            ir.M_RI, ir.M_RIT, ir.M_IM -> operand_imm(i.value)
+            ir.M_RM, ir.M_M -> operand_mem(i)
+            else -> operand_reg(i.r2)
+        }
+    }
+
+    ; r1 = r1 op operand, byte by byte ("and", "ora", "eor"; "adc" and "sbc" carry on)
+    sub combine(str mnemonic, uword r, ubyte size) {
+        ubyte k
+        for k in 0 to size - 1 {
+            if okind == K_IMM {
+                ; a byte of the constant that changes nothing, or makes the result zero
+                ubyte what = trivial(mnemonic, ((ovalue >> (k * 8)) & 255) as ubyte)
+                if what == 1
+                    continue
+                if what == 2 {
+                    ins("lda", "#0")
+                    sta_reg(r, k)
+                    continue
+                }
+            }
+            lda_reg(r, k)
+            operand_ins(mnemonic, k)
+            sta_reg(r, k)
+        }
+    }
+
+    ; and/ora/eor with this constant byte: 1 = the value stays as it is, 2 = it becomes 0, 0 = neither
+    sub trivial(str mnemonic, ubyte value) -> ubyte {
+        if mnemonic[0] == 'a' and mnemonic[1] == 'n' {
+            if value == 255
+                return 1
+            if value == 0
+                return 2
+        }
+        else if (mnemonic[0] == 'o' or mnemonic[0] == 'e') and value == 0
+            return 1
+        return 0
+    }
+
+    ; memory = memory op r, byte by byte
+    sub combine_memory(str mnemonic, ^^ir.Instr i, ubyte size) {
+        memory_operand(i)
+        ubyte k
+        for k in 0 to size - 1 {
+            if i.mode == ir.M_IM {
+                ubyte what = trivial(mnemonic, ((i.value >> (k * 8)) & 255) as ubyte)
+                if what == 1
+                    continue
+                if what == 2 {
+                    store_zero(mem_symbol, mem_offset + k)
+                    continue
+                }
+            }
+            ins_at("lda", mem_symbol, mem_offset + k)
+            if i.mode == ir.M_IM
+                ins_imm(mnemonic, ((i.value >> (k * 8)) & 255) as long)
+            else
+                ins(mnemonic, cell(i.r1, k))
+            ins_at("sta", mem_symbol, mem_offset + k)
+        }
+    }
+
+    ; the location that inc, dec, the shifts and the rotates work on: a register's
+    ; cell or a memory operand
+    bool loc_mem = false
+    uword loc_reg = 0
+
+    sub location(^^ir.Instr i) {
+        loc_mem = i.mode == ir.M_M
+        loc_reg = i.r1
+        if loc_mem
+            memory_operand(i)
+    }
+
+    sub loc_ins(str mnemonic, ubyte k) {
+        if loc_mem
+            ins_at(mnemonic, mem_symbol, mem_offset + k)
+        else
+            ins(mnemonic, cell(loc_reg, k))
+    }
+
+    ; one shift to the left of the location; the bit shifted out is in the carry
+    sub shift_left(ubyte size, bool through_carry) {
+        ubyte k
+        for k in 0 to size - 1 {
+            if k == 0 and not through_carry
+                loc_ins("asl", 0)
+            else
+                loc_ins("rol", k)
+        }
+    }
+
+    ; one shift to the right; signed keeps the top bit
+    sub shift_right(ubyte size, bool signed, bool through_carry) {
+        ubyte k = size
+        if signed {
+            loc_ins("lda", size - 1)
+            ins("asl", "a")             ; the sign into the carry
+        }
+        while k > 0 {
+            k--
+            if k == size - 1 and not signed and not through_carry
+                loc_ins("lsr", k)
+            else
+                loc_ins("ror", k)
+        }
+    }
+
+    ; does the library have a routine that multiplies by this constant?
+    sub small_multiply(ubyte size, quad value) -> bool {
+        if size == 1 {
+            when value {
+                3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 20, 25 -> return true
+            }
+        }
+        else if size == 2 {
+            when value {
+                3, 5, 6, 7, 9, 10, 12, 15, 20, 25, 40, 50, 80, 100 -> return true
+            }
+        }
+        return false
+    }
+
+    ; the n of a value that is 2 to the n and fits the size (below 2 to the 31), or -1
+    sub power_of_two(quad value, ubyte size) -> byte {
+        byte n = 0
+        quad bit = 1
+        while n < size * 8 and n < 31 {
+            if value == bit
+                return n
+            bit <<= 1
+            n++
+        }
+        return -1
+    }
+
+    ; a shift by a count that is known: the single shift repeated, in a loop when that is shorter
+    sub shift_times(^^ir.Instr i, ubyte size, long count, ubyte kind) {
+        if count <= 0
+            return
+        if size == 1 and not loc_mem and count >= 2 and count <= 7 {
+            ; a byte in a register, more than once: in A (an instruction of one byte each)
+            lda_reg(loc_reg, 0)
+            repeat count as ubyte {
+                when kind {
+                    0 -> ins("asl", "a")
+                    1 -> ins("lsr", "a")
+                    else -> {
+                        ins("cmp", "#$80")      ; the sign into the carry
+                        ins("ror", "a")
+                    }
+                }
+            }
+            sta_reg(loc_reg, 0)
+            return
+        }
+        if size == 2 and not loc_mem and count >= 8 and count <= 15 and kind != 2 {
+            ; a word by eight or more: its bytes move, and the rest is a shift of one byte
+            if kind == 0 {
+                lda_reg(loc_reg, 0)
+                repeat (count - 8) as ubyte
+                    ins("asl", "a")
+                sta_reg(loc_reg, 1)
+                ins("lda", "#0")
+                sta_reg(loc_reg, 0)
+            }
+            else {
+                lda_reg(loc_reg, 1)
+                repeat (count - 8) as ubyte
+                    ins("lsr", "a")
+                sta_reg(loc_reg, 0)
+                ins("lda", "#0")
+                sta_reg(loc_reg, 1)
+            }
+            return
+        }
+        if count * size <= 6 {
+            repeat count as ubyte
+                one_shift(size, kind)
+            return
+        }
+        ins_imm("ldy", count)
+        anon_label("-")
+        one_shift(size, kind)
+        ins("dey", 0)
+        ins("bne", "-")
+    }
+
+    ; kind 0: left, 1: right unsigned, 2: right signed
+    sub one_shift(ubyte size, ubyte kind) {
+        when kind {
+            0 -> shift_left(size, false)
+            1 -> shift_right(size, false, false)
+            else -> shift_right(size, true, false)
+        }
+    }
+
+    ; a shift by the count in a register
+    sub shift_by_register(^^ir.Instr i, ubyte size, ubyte kind) {
+        ins("ldy", cell(i.r2, 0))
+        ins("beq", "+")
+        anon_label("-")
+        one_shift(size, kind)
+        ins("dey", 0)
+        ins("bne", "-")
+        anon_label("+")
+    }
+
+    ; ---- comparing ----
+
+    ; Compares r with the operand by subtracting, lowest byte first.  Afterwards the
+    ; carry is set when r >= operand (unsigned), and with for_sign the N flag says
+    ; r < operand for signed numbers.  The Z flag is only right for one byte.
+    sub subtract_compare(uword r, ubyte size, bool for_sign) {
+        ubyte k
+        ubyte first = 0
+        if okind == K_IMM and not for_sign {
+            ; the low bytes of a constant that are zero take nothing away: they are left out
+            while first < size - 1 and (ovalue >> (first * 8)) & 255 == 0
+                first++
+        }
+        for k in first to size - 1 {
+            lda_reg(r, k)
+            if k == first and not for_sign
+                operand_ins("cmp", k)
+            else {
+                if k == 0
+                    ins("sec", 0)
+                operand_ins("sbc", k)
+            }
+        }
+        if for_sign {
+            ins("bvc", "+")
+            ins("eor", "#$80")
+            anon_label("+")
+        }
+    }
+
+    ; the same with the two swapped: carry set when operand >= r, N when operand < r
+    sub subtract_compare_swapped(uword r, ubyte size, bool for_sign) {
+        ubyte k
+        for k in 0 to size - 1 {
+            operand_ins("lda", k)
+            if k == 0 and not for_sign
+                ins("cmp", cell(r, 0))
+            else {
+                if k == 0
+                    ins("sec", 0)
+                ins("sbc", cell(r, k))
+            }
+        }
+        if for_sign {
+            ins("bvc", "+")
+            ins("eor", "#$80")
+            anon_label("+")
+        }
+    }
+
+    ; Z set when r equals the operand
+    sub equal_compare(uword r, ubyte size) {
+        ubyte k
+        if okind == K_IMM and ovalue == 0 and size > 1 {
+            ; with zero: all its bytes together
+            lda_reg(r, 0)
+            for k in 1 to size - 1
+                ins("ora", cell(r, k))
+            return
+        }
+        for k in 0 to size - 1 {
+            lda_reg(r, k)
+            operand_ins("cmp", k)
+            if k != size - 1
+                ins("bne", "+")
+        }
+        if size > 1
+            anon_label("+")
+    }
+
+    ; cmp and cmpi set the flags for the branch on status that follows
+    sub compare(^^ir.Instr i, ubyte size) {
+        second_operand(i)
+        ubyte following = ir.OP_NOP
+        if i.next != 0
+            following = i.next.op
+        if size == 1
+            subtract_compare(i.r1, 1, false)
+        else if following == ir.OP_BSTEQ or following == ir.OP_BSTNE
+            equal_compare(i.r1, size)
+        else if following == ir.OP_BSTNEG or following == ir.OP_BSTPOS {
+            ; the sign of the difference
+            subtract_compare(i.r1, size, false)
+        }
+        else
+            subtract_compare(i.r1, size, false)
+    }
+
+    ; the compare and branch instructions: bgt, bge, blt, ble, signed or not, r1 with #value or r2
+    sub compare_branch(^^ir.Instr i, ubyte size) {
+        if i.mode == ir.M_RIT
+            operand_imm(i.value)
+        else
+            operand_reg(i.r2)
+        when i.op {
+            ir.OP_BGE, ir.OP_BGER -> {
+                subtract_compare(i.r1, size, false)
+                ins("bcs", i.sym)
+            }
+            ir.OP_BLT -> {
+                subtract_compare(i.r1, size, false)
+                ins("bcc", i.sym)
+            }
+            ir.OP_BGT, ir.OP_BGTR -> {
+                subtract_compare_swapped(i.r1, size, false)
+                ins("bcc", i.sym)
+            }
+            ir.OP_BLE -> {
+                subtract_compare_swapped(i.r1, size, false)
+                ins("bcs", i.sym)
+            }
+            ir.OP_BGES, ir.OP_BGESR -> {
+                subtract_compare(i.r1, size, true)
+                ins("bpl", i.sym)
+            }
+            ir.OP_BLTS -> {
+                subtract_compare(i.r1, size, true)
+                ins("bmi", i.sym)
+            }
+            ir.OP_BGTS, ir.OP_BGTSR -> {
+                subtract_compare_swapped(i.r1, size, true)
+                ins("bmi", i.sym)
+            }
+            ir.OP_BLES -> {
+                subtract_compare_swapped(i.r1, size, true)
+                ins("bpl", i.sym)
+            }
+        }
+    }
+
+    ; the operands of a 32 bit multiplication or division: r1 in cx16.r12 and r13, the
+    ; operand in cx16.r14 and r15, where the result appears too
+    sub long_operands(^^ir.Instr i) {
+        ubyte k
+        for k in 0 to 3 {
+            lda_reg(i.r1, k)
+            ins_at("sta", "cx16.r12", k)
+        }
+        for k in 0 to 3 {
+            operand_ins("lda", k)
+            ins_at("sta", "cx16.r14", k)
+        }
+    }
+
+    sub long_result(uword r) {
+        ubyte k
+        for k in 0 to 3 {
+            ins_at("lda", "cx16.r14", k)
+            sta_reg(r, k)
+        }
+    }
+
+    ; ---- pointers and indexes ----
+
+    ; the pointer in a register into the scratch pair, to be followed with (zp),y
+    sub pointer_to_scratch(uword r) {
+        lda_reg(r, 0)
+        ins("sta", "P8ZP_SCRATCH_W1")
+        lda_reg(r, 1)
+        ins("sta", "P8ZP_SCRATCH_W1+1")
+    }
+
+    ; Y for element r2 of an array of elements of this size (1, 2 or 4 bytes)
+    sub index_to_y(^^ir.Instr i) {
+        if i.scale <= 1 {
+            ins("ldy", cell(i.r2, 0))
+            return
+        }
+        lda_reg(i.r2, 0)
+        ins("asl", "a")
+        if i.scale == 4
+            ins("asl", "a")
+        else if i.scale == 5 {
+            ; a float: four times and once more
+            ins("asl", "a")
+            ins("clc", 0)
+            ins("adc", cell(i.r2, 0))
+        }
+        else if i.scale != 2
+            error("array elements of this size not supported yet", i.sym)
+        ins("tay", 0)
+    }
+
+    ; ---- floats ----
+    ;
+    ; A float is five bytes in Microsoft's format, in a cell or a variable like any
+    ; other value.  Arithmetic goes through the ROM's accumulator FAC1 with the
+    ; routines of the floats library, which take the address of a float in A and Y
+    ; (X and Y to store).
+
+    ubyte[5] fbytes
+
+    ; the five bytes of a number, as upstream's Mflpt5 makes them (not rounded)
+    sub float_bytes(float value) {
+        ubyte k
+        for k in 0 to 4
+            fbytes[k] = 0
+        if value == 0.0
+            return
+        ubyte sign = 0
+        if value < 0.0 {
+            sign = $80
+            value = -value
+        }
+        long exponent = 128 + 32
+        while value >= 4294967296.0 {
+            value /= 2.0
+            exponent++
+        }
+        while value < 2147483648.0 {
+            value *= 2.0
+            exponent--
+        }
+        if exponent <= 0
+            return              ; too small: zero
+        if exponent > 255 {
+            error("floating point number out of range", 0)
+            return
+        }
+        fbytes[0] = exponent as ubyte
+        ubyte digit = (value / 16777216.0) as ubyte
+        value -= (digit as float) * 16777216.0
+        fbytes[1] = (digit & $7f) | sign
+        digit = (value / 65536.0) as ubyte
+        value -= (digit as float) * 65536.0
+        fbytes[2] = digit
+        digit = (value / 256.0) as ubyte
+        value -= (digit as float) * 256.0
+        fbytes[3] = digit
+        fbytes[4] = value as ubyte
+    }
+
+    ; the address of a register's cell in A and Y, or in X and Y
+    sub cell_address(uword r, str low) {
+        long offset = 0
+        if r < cell_cap
+            offset = cell_of[r]
+        ins_half(low, '<', "p8_regfile", offset)
+        ins_half("ldy", '>', "p8_regfile", offset)
+    }
+
+    sub fac1_load(uword r) {
+        cell_address(r, "lda")
+        ins("jsr", "floats.MOVFM")
+    }
+
+    sub fac1_store(uword r) {
+        cell_address(r, "ldx")
+        ins("jsr", "floats.MOVMF")
+    }
+
+    ; r1 = r1 op r2 with a routine that works on FAC1 and the float at A and Y
+    ; (for the two that are not symmetric, FSUB and FDIV, FAC1 is the second operand)
+    sub float_arithmetic(^^ir.Instr i, str routine) {
+        if i.mode != ir.M_RR {
+            error("this form of float arithmetic is not supported yet", 0)
+            return
+        }
+        fac1_load(i.r2)
+        cell_address(i.r1, "lda")
+        ins("jsr", routine)
+        fac1_store(i.r1)
+    }
+
+    ; Translates a float instruction; false when it is one that the code for integers
+    ; handles as five bytes.
+    sub float_instruction(^^ir.Instr i) -> bool {
+        ubyte k
+        when i.op {
+            ir.OP_LOADM, ir.OP_STOREM, ir.OP_LOADR, ir.OP_LOADX, ir.OP_STOREX, ir.OP_LOADI, ir.OP_STOREI,
+            ir.OP_STOREZM, ir.OP_STOREZX, ir.OP_STOREZI, ir.OP_CALL, ir.OP_CALLI, ir.OP_CALLFAR, ir.OP_CALLFARVB, ir.OP_SYSCALL,
+            ir.OP_PUSH, ir.OP_POP -> return false
+            ir.OP_LOAD -> {
+                float_bytes(i.fvalue)
+                for k in 0 to 4 {
+                    ins_imm("lda", fbytes[k])
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_STOREIM -> {
+                float_bytes(i.fvalue)
+                memory_operand(i)
+                for k in 0 to 4 {
+                    ins_imm("lda", fbytes[k])
+                    ins_at("sta", mem_symbol, mem_offset + k)
+                }
+            }
+            ir.OP_ADDR, ir.OP_ADD -> float_arithmetic(i, "floats.FADD")
+            ir.OP_SUBR, ir.OP_SUB -> float_arithmetic(i, "floats.FSUB")
+            ir.OP_MULR, ir.OP_MULSR, ir.OP_MUL, ir.OP_MULS -> float_arithmetic(i, "floats.FMULT")
+            ir.OP_DIVR, ir.OP_DIVSR, ir.OP_DIV, ir.OP_DIVS -> float_arithmetic(i, "floats.FDIV")
+            ir.OP_NEG -> {
+                ; the sign bit, unless the number is zero
+                lda_reg(i.r1, 0)
+                ins("beq", "+")
+                lda_reg(i.r1, 1)
+                ins("eor", "#$80")
+                sta_reg(i.r1, 1)
+                anon_label("+")
+            }
+            ir.OP_FABS -> {
+                for k in 0 to 4 {
+                    lda_reg(i.r2, k)
+                    if k == 1
+                        ins("and", "#$7f")
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_SGN -> {
+                fac1_load(i.r2)
+                ins("jsr", "floats.SIGN")
+                sta_reg(i.r1, 0)
+            }
+            ir.OP_SQRT -> {
+                fac1_load(i.r2)
+                ins("jsr", "floats.SQR")
+                fac1_store(i.r1)
+            }
+            ir.OP_INC -> {
+                cell_address(i.r1, "lda")
+                ins("jsr", "floats.inc_var_f")
+            }
+            ir.OP_DEC -> {
+                cell_address(i.r1, "lda")
+                ins("jsr", "floats.dec_var_f")
+            }
+            ir.OP_INCM, ir.OP_DECM -> {
+                memory_operand(i)
+                ins_half("lda", '<', mem_symbol, mem_offset)
+                ins_half("ldy", '>', mem_symbol, mem_offset)
+                if i.op == ir.OP_INCM
+                    ins("jsr", "floats.inc_var_f")
+                else
+                    ins("jsr", "floats.dec_var_f")
+            }
+            ir.OP_FFROMUB -> {
+                ins("ldy", cell(i.r2, 0))
+                ins("jsr", "floats.FREADUY")
+                fac1_store(i.r1)
+            }
+            ir.OP_FFROMSB -> {
+                lda_reg(i.r2, 0)
+                ins("jsr", "floats.FREADSA")
+                fac1_store(i.r1)
+            }
+            ir.OP_FFROMUW, ir.OP_FFROMSW -> {
+                ins("ldy", cell(i.r2, 1))
+                lda_reg(i.r2, 0)
+                if i.op == ir.OP_FFROMUW
+                    ins("jsr", "floats.GIVUAYFAY")
+                else
+                    ins("jsr", "floats.GIVAYFAY")
+                fac1_store(i.r1)
+            }
+            ir.OP_FTOUB, ir.OP_FTOUW -> {
+                fac1_load(i.r2)
+                ins("jsr", "floats.cast_FAC1_as_uw_into_ya")
+                ins("sty", cell(i.r1, 0))
+                if i.op == ir.OP_FTOUW
+                    sta_reg(i.r1, 1)
+            }
+            ir.OP_FTOSB, ir.OP_FTOSW -> {
+                fac1_load(i.r2)
+                ins("jsr", "floats.cast_FAC1_as_w_into_ay")
+                sta_reg(i.r1, 0)
+                if i.op == ir.OP_FTOSW
+                    ins("sty", cell(i.r1, 1))
+            }
+            ir.OP_FCOMP -> {
+                ; 0, 1 when the first is greater, 255 when it is less
+                fac1_load(i.r2)
+                cell_address(i.r3, "lda")
+                ins("jsr", "floats.FCOMP")
+                sta_reg(i.r1, 0)
+            }
+            ir.OP_RETURNR -> {
+                fac1_load(i.r1)
+                ins("rts", 0)
+            }
+            else -> {
+                if float_errors == 0
+                    error("a floating point instruction is not supported yet by this code generator", ir.opcode_names[i.op])
+                float_errors++
+            }
+        }
+        return true
+    }
+
+    ^^ir.Sub cursub = 0             ; the subroutine whose code is being written, or 0
+
+    ; A return: which registers carry a value to the caller (for peep6502).  Only for a
+    ; subroutine that returns nothing or one value is that known here; one that
+    ; returns several has put them in registers before.
+    sub return_uses(ubyte size) {
+        ubyte mask = 255
+        if cursub != 0 and not cursub.is_asm {
+            ^^ubyte r = cursub.returns
+            if r == 0 or r[0] == 0
+                mask = 0
+            else {
+                bool several = false
+                long k = 0
+                while r[k] != 0 {
+                    if r[k] == ','
+                        several = true
+                    k++
+                }
+                if not several {
+                    when size {
+                        1 -> mask = 1
+                        2 -> mask = 5
+                        4, 5 -> mask = 0        ; (in the virtual registers, or in FAC1)
+                    }
+                }
+            }
+        }
+        ins("rts", 0)
+        peep6502.last_uses(mask)
+    }
+
+    ; the registers that the arguments of a call are in
+    sub call_uses(^^ir.Instr i, bool in_registers) -> ubyte {
+        ubyte mask = 0
+        if in_registers {
+            when convention(find_sub(i.sym)) {
+                CONV_A -> mask = 1
+                CONV_A_Y, CONV_AY -> mask = 5
+            }
+        }
+        ^^ir.Arg a = i.args
+        while a != 0 {
+            when a.slot {
+                0 -> mask |= 1
+                1 -> mask |= 2
+                2 -> mask |= 4
+                3 -> mask |= 3
+                4 -> mask |= 5
+                5 -> mask |= 6
+            }
+            a = a.next
+        }
+        return mask
+    }
+
+    sub instruction(^^ir.Instr i) {
+        ubyte size = type_size(i.type)
+        ubyte k
+        if i.type == ir.T_FLOAT or i.t1 == ir.T_FLOAT or (i.op >= ir.OP_FFROMUB and i.op <= ir.OP_FCOMP) {
+            ; (the loads, stores and copies of a float are those of five bytes, below)
+            if float_instruction(i)
+                return
+        }
+        when i.op {
+            ir.OP_NOP -> {
+            }
+            ir.OP_LOAD -> {
+                if i.sym != 0 {
+                    ; the address of a symbol
+                    ins_half("lda", '<', i.sym, i.offset)
+                    sta_reg(i.r1, 0)
+                    ins_half("lda", '>', i.sym, i.offset)
+                    sta_reg(i.r1, 1)
+                }
+                else {
+                    for k in 0 to size - 1 {
+                        ins_imm("lda", ((i.value >> (k * 8)) & 255) as long)
+                        sta_reg(i.r1, k)
+                    }
+                }
+            }
+            ir.OP_LOADM -> {
+                memory_operand(i)
+                for k in 0 to size - 1 {
+                    ins_at("lda", mem_symbol, mem_offset + k)
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_LOADMZ -> {
+                memory_operand(i)
+                ins_at("lda", mem_symbol, mem_offset)
+                sta_reg(i.r1, 0)
+                ins("lda", "#0")
+                sta_reg(i.r1, 1)
+            }
+            ir.OP_LOADR -> {
+                for k in 0 to size - 1 {
+                    lda_reg(i.r2, k)
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_LOADX -> {
+                memory_operand(i)
+                index_to_y(i)
+                for k in 0 to size - 1 {
+                    ins_indexed("lda", mem_symbol, mem_offset + k, 'y')
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_STOREX, ir.OP_STOREZX -> {
+                memory_operand(i)
+                index_to_y(i)
+                for k in 0 to size - 1 {
+                    if i.op == ir.OP_STOREZX
+                        ins("lda", "#0")
+                    else
+                        lda_reg(i.r1, k)
+                    ins_indexed("sta", mem_symbol, mem_offset + k, 'y')
+                }
+            }
+            ir.OP_LOADI -> {
+                pointer_to_scratch(i.r2)
+                if i.scale == 255 {
+                    ; a byte at the pointer plus a byte index (fuse_indexed)
+                    ins("ldy", cell(i.r3, 0))
+                    ins("lda", "(P8ZP_SCRATCH_W1),y")
+                    sta_reg(i.r1, 0)
+                    return
+                }
+                for k in 0 to size - 1 {
+                    ins_imm("ldy", i.offset + k)
+                    ins("lda", "(P8ZP_SCRATCH_W1),y")
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_STOREI, ir.OP_STOREZI -> {
+                pointer_to_scratch(i.r2)
+                if i.scale == 255 {
+                    ins("ldy", cell(i.r3, 0))
+                    if i.op == ir.OP_STOREZI
+                        ins("lda", "#0")
+                    else
+                        lda_reg(i.r1, 0)
+                    ins("sta", "(P8ZP_SCRATCH_W1),y")
+                    return
+                }
+                for k in 0 to size - 1 {
+                    ins_imm("ldy", i.offset + k)
+                    if i.op == ir.OP_STOREZI
+                        ins("lda", "#0")
+                    else
+                        lda_reg(i.r1, k)
+                    ins("sta", "(P8ZP_SCRATCH_W1),y")
+                }
+            }
+            ir.OP_STOREM -> {
+                memory_operand(i)
+                for k in 0 to size - 1 {
+                    lda_reg(i.r1, k)
+                    ins_at("sta", mem_symbol, mem_offset + k)
+                }
+            }
+            ir.OP_STOREZM -> {
+                memory_operand(i)
+                for k in 0 to size - 1
+                    store_zero(mem_symbol, mem_offset + k)
+            }
+            ir.OP_STOREIM -> {
+                memory_operand(i)
+                for k in 0 to size - 1 {
+                    ubyte part = ((i.value >> (k * 8)) & 255) as ubyte
+                    if part == 0
+                        store_zero(mem_symbol, mem_offset + k)
+                    else {
+                        ins_imm("lda", part)
+                        ins_at("sta", mem_symbol, mem_offset + k)
+                    }
+                }
+            }
+            ir.OP_LOADHR -> {
+                ; from a CPU register: slot 0 A, 1 X, 2 Y, 3 AX, 4 AY, 5 XY
+                when i.slot {
+                    0 -> sta_reg(i.r1, 0)
+                    1 -> ins("stx", cell(i.r1, 0))
+                    2 -> ins("sty", cell(i.r1, 0))
+                    3 -> {
+                        sta_reg(i.r1, 0)
+                        ins("stx", cell(i.r1, 1))
+                    }
+                    4 -> {
+                        sta_reg(i.r1, 0)
+                        ins("sty", cell(i.r1, 1))
+                    }
+                    5 -> {
+                        ins("stx", cell(i.r1, 0))
+                        ins("sty", cell(i.r1, 1))
+                    }
+                    else -> error("hardware register not supported yet", 0)
+                }
+            }
+            ir.OP_STOREHR -> {
+                when i.slot {
+                    0 -> lda_reg(i.r1, 0)
+                    1 -> ins("ldx", cell(i.r1, 0))
+                    2 -> ins("ldy", cell(i.r1, 0))
+                    3 -> {
+                        ins("ldx", cell(i.r1, 1))
+                        lda_reg(i.r1, 0)
+                    }
+                    4 -> {
+                        ins("ldy", cell(i.r1, 1))
+                        lda_reg(i.r1, 0)
+                    }
+                    5 -> {
+                        ins("ldx", cell(i.r1, 0))
+                        ins("ldy", cell(i.r1, 1))
+                    }
+                    else -> error("hardware register not supported yet", 0)
+                }
+            }
+            ir.OP_JUMP -> jump_always(i.sym)
+            ir.OP_JUMPI -> {
+                pointer_to_scratch(i.r1)
+                ins("jmp", "(P8ZP_SCRATCH_W1)")
+            }
+            ir.OP_RETURN -> return_uses(0)
+            ir.OP_RETURNR -> {
+                ; the value in A, or A and Y for a word
+                if size == 2 {
+                    ins("ldy", cell(i.r1, 1))
+                    lda_reg(i.r1, 0)
+                }
+                else if size == 1
+                    lda_reg(i.r1, 0)
+                else if size == 4 {
+                    ; a long goes back in the virtual registers R14 and R15
+                    for k in 0 to 3 {
+                        lda_reg(i.r1, k)
+                        ins_at("sta", "cx16.r14", k)
+                    }
+                }
+                else
+                    error("return of this size not supported yet", 0)
+                return_uses(size)
+            }
+            ir.OP_RETURNI -> {
+                if size == 4 {
+                    for k in 0 to 3 {
+                        ins_imm("lda", ((i.value >> (k * 8)) & 255) as long)
+                        ins_at("sta", "cx16.r14", k)
+                    }
+                    return_uses(4)
+                    return
+                }
+                if size == 2
+                    ins_imm("ldy", ((i.value >> 8) & 255) as long)
+                ins_imm("lda", (i.value & 255) as long)
+                return_uses(size)
+            }
+            ir.OP_CALL, ir.OP_CALLFAR, ir.OP_CALLFARVB -> call_instr(i)
+            ir.OP_CALLI -> {
+                ; a subroutine call through a pointer: the return address by hand
+                pointer_to_scratch(i.r1)
+                ins("lda", "#>((+)-1)")
+                ins("pha", 0)
+                ins("lda", "#<((+)-1)")
+                ins("pha", 0)
+                ins("jmp", "(P8ZP_SCRATCH_W1)")
+                anon_label("+")
+            }
+            ir.OP_SYSCALL -> syscall(i)
+            ir.OP_BSTCC -> ins("bcc", i.sym)
+            ir.OP_BSTCS -> ins("bcs", i.sym)
+            ir.OP_BSTEQ -> ins("beq", i.sym)
+            ir.OP_BSTNE -> ins("bne", i.sym)
+            ir.OP_BSTNEG -> ins("bmi", i.sym)
+            ir.OP_BSTPOS -> ins("bpl", i.sym)
+            ir.OP_BSTVC -> ins("bvc", i.sym)
+            ir.OP_BSTVS -> ins("bvs", i.sym)
+            ir.OP_CMP, ir.OP_CMPI -> compare(i, size)
+            ir.OP_BGT, ir.OP_BGTR, ir.OP_BGE, ir.OP_BGER, ir.OP_BLT, ir.OP_BLE,
+            ir.OP_BGTS, ir.OP_BGTSR, ir.OP_BGES, ir.OP_BGESR, ir.OP_BLTS, ir.OP_BLES -> compare_branch(i, size)
+            ir.OP_AND, ir.OP_ANDR -> {
+                second_operand(i)
+                combine("and", i.r1, size)
+            }
+            ir.OP_OR, ir.OP_ORR -> {
+                second_operand(i)
+                combine("ora", i.r1, size)
+            }
+            ir.OP_XOR, ir.OP_XORR -> {
+                second_operand(i)
+                combine("eor", i.r1, size)
+            }
+            ir.OP_ADD, ir.OP_ADDR -> {
+                second_operand(i)
+                ins("clc", 0)
+                combine("adc", i.r1, size)
+            }
+            ir.OP_SUB, ir.OP_SUBR -> {
+                second_operand(i)
+                ins("sec", 0)
+                combine("sbc", i.r1, size)
+            }
+            ir.OP_ANDM -> combine_memory("and", i, size)
+            ir.OP_ORM -> combine_memory("ora", i, size)
+            ir.OP_XORM -> combine_memory("eor", i, size)
+            ir.OP_ADDM, ir.OP_ADDIM -> {
+                ins("clc", 0)
+                combine_memory("adc", i, size)
+            }
+            ir.OP_SUBM, ir.OP_SUBIM -> {
+                ins("sec", 0)
+                combine_memory("sbc", i, size)
+            }
+            ir.OP_INC, ir.OP_INCM -> {
+                location(i)
+                if size == 1 and not loc_mem {
+                    ; in A: the value is there more often than not, and so is what wants the result
+                    lda_reg(i.r1, 0)
+                    if c02
+                        ins("inc", "a")
+                    else {
+                        ins("clc", 0)
+                        ins("adc", "#1")
+                    }
+                    sta_reg(i.r1, 0)
+                    return
+                }
+                for k in 0 to size - 1 {
+                    loc_ins("inc", k)
+                    if k != size - 1
+                        ins("bne", "+")
+                }
+                if size > 1
+                    anon_label("+")
+            }
+            ir.OP_DEC, ir.OP_DECM -> {
+                location(i)
+                if size == 1 and not loc_mem {
+                    lda_reg(i.r1, 0)
+                    if c02
+                        ins("dec", "a")
+                    else {
+                        ins("sec", 0)
+                        ins("sbc", "#1")
+                    }
+                    sta_reg(i.r1, 0)
+                    return
+                }
+                if size == 1
+                    loc_ins("dec", 0)
+                else {
+                    ins("sec", 0)
+                    for k in 0 to size - 1 {
+                        loc_ins("lda", k)
+                        if k == 0
+                            ins("sbc", "#1")
+                        else
+                            ins("sbc", "#0")
+                        loc_ins("sta", k)
+                    }
+                }
+            }
+            ir.OP_NEG, ir.OP_NEGM -> {
+                location(i)
+                ins("sec", 0)
+                for k in 0 to size - 1 {
+                    ins("lda", "#0")
+                    loc_ins("sbc", k)
+                    loc_ins("sta", k)
+                }
+            }
+            ir.OP_INV, ir.OP_INVM -> {
+                location(i)
+                for k in 0 to size - 1 {
+                    loc_ins("lda", k)
+                    ins("eor", "#$ff")
+                    loc_ins("sta", k)
+                }
+            }
+            ir.OP_LSL, ir.OP_LSLM -> {
+                location(i)
+                shift_left(size, false)
+            }
+            ir.OP_LSR, ir.OP_LSRM -> {
+                location(i)
+                shift_right(size, false, false)
+            }
+            ir.OP_ASR, ir.OP_ASRM -> {
+                location(i)
+                shift_right(size, true, false)
+            }
+            ir.OP_ROXL, ir.OP_ROXLM -> {
+                location(i)
+                shift_left(size, true)
+            }
+            ir.OP_ROXR, ir.OP_ROXRM -> {
+                location(i)
+                shift_right(size, false, true)
+            }
+            ir.OP_ROL, ir.OP_ROLM -> {
+                ; the bit that leaves at the top comes in at the bottom
+                location(i)
+                shift_left(size, false)
+                ins("bcc", "+")
+                loc_ins("inc", 0)
+                anon_label("+")
+            }
+            ir.OP_ROR, ir.OP_RORM -> {
+                location(i)
+                shift_right(size, false, false)
+                ins("bcc", "+")
+                loc_ins("lda", size - 1)
+                ins("ora", "#$80")
+                loc_ins("sta", size - 1)
+                anon_label("+")
+            }
+            ir.OP_LSLI -> {
+                loc_mem = false
+                loc_reg = i.r1
+                shift_times(i, size, i.value as long, 0)
+            }
+            ir.OP_LSRI -> {
+                loc_mem = false
+                loc_reg = i.r1
+                shift_times(i, size, i.value as long, 1)
+            }
+            ir.OP_ASRI -> {
+                loc_mem = false
+                loc_reg = i.r1
+                shift_times(i, size, i.value as long, 2)
+            }
+            ir.OP_LSLN -> {
+                loc_mem = false
+                loc_reg = i.r1
+                shift_by_register(i, size, 0)
+            }
+            ir.OP_LSRN -> {
+                loc_mem = false
+                loc_reg = i.r1
+                shift_by_register(i, size, 1)
+            }
+            ir.OP_ASRN -> {
+                loc_mem = false
+                loc_reg = i.r1
+                shift_by_register(i, size, 2)
+            }
+            ir.OP_EXT, ir.OP_EXTL -> {
+                ; r1 (the wider type) = r2 with zeros above
+                ubyte wide = type_size(i.t1)
+                for k in 0 to wide - 1 {
+                    if k < size
+                        lda_reg(i.r2, k)
+                    else if k == size
+                        ins("lda", "#0")
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_EXTS, ir.OP_EXTLS -> {
+                ubyte swide = type_size(i.t1)
+                for k in 0 to size - 1 {
+                    lda_reg(i.r2, k)
+                    sta_reg(i.r1, k)
+                }
+                ; the sign in every higher byte
+                ins("ora", "#$7f")
+                ins("bmi", "+")
+                ins("lda", "#0")
+                anon_label("+")
+                for k in size to swide - 1
+                    sta_reg(i.r1, k)
+            }
+            ir.OP_LSIGB, ir.OP_LSIGW, ir.OP_LSIGL -> {
+                ubyte narrow = type_size(i.t1)
+                for k in 0 to narrow - 1 {
+                    lda_reg(i.r2, k)
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_MSIGB -> {
+                ; the high byte of a word (of a long: bits 8 to 15, as msb() gives)
+                lda_reg(i.r2, 1)
+                sta_reg(i.r1, 0)
+            }
+            ir.OP_MSIGW -> {
+                lda_reg(i.r2, 2)
+                sta_reg(i.r1, 0)
+                lda_reg(i.r2, 3)
+                sta_reg(i.r1, 1)
+            }
+            ir.OP_CONCAT -> {
+                ; r1 = r2 above r3, each of the instruction's type
+                for k in 0 to size - 1 {
+                    lda_reg(i.r3, k)
+                    sta_reg(i.r1, k)
+                    lda_reg(i.r2, k)
+                    sta_reg(i.r1, size + k)
+                }
+            }
+            ir.OP_MUL, ir.OP_MULR, ir.OP_MULS, ir.OP_MULSR -> {
+                ; (the low part of a product is the same for signed numbers)
+                second_operand(i)
+                byte mshift = -1
+                if okind == K_IMM
+                    mshift = power_of_two(ovalue, size)
+                if mshift >= 0 {
+                    ; times a power of two: shifts
+                    loc_mem = false
+                    loc_reg = i.r1
+                    shift_times(i, size, mshift, 0)
+                }
+                else if okind == K_IMM and small_multiply(size, ovalue) {
+                    ; one of the library's routines for a small constant: A, or A and Y, in place
+                    buf.clear(nb)
+                    if size == 1
+                        buf.add_str(nb, "prog8_math.mul_byte_")
+                    else
+                        buf.add_str(nb, "prog8_math.mul_word_")
+                    buf.add_long(nb, ovalue as long)
+                    buf.add_byte(nb, 0)
+                    ^^ubyte routine = strtab.intern_cstr(nb.data)
+                    if size == 2
+                        ins("ldy", cell(i.r1, 1))
+                    lda_reg(i.r1, 0)
+                    ins("jsr", routine)
+                    sta_reg(i.r1, 0)
+                    if size == 2
+                        ins("sty", cell(i.r1, 1))
+                }
+                else if size == 2 and okind == K_REG and oreg <= ir.regcount and reg_zext[oreg] == 1 and reg_uses[oreg] == 2 {
+                    ; a word times an unsigned byte (a register that was made from one, and is
+                    ; named nowhere else): eight rounds, not sixteen
+                    uword bytereg = oreg
+                    uword wordreg = i.r1
+                    lda_reg(wordreg, 0)
+                    ins("sta", "P8ZP_SCRATCH_W1")
+                    lda_reg(wordreg, 1)
+                    ins("sta", "P8ZP_SCRATCH_W1+1")
+                    lda_reg(bytereg, 0)
+                    ins("jsr", "prog8_math.multiply_ubyte_word")
+                    sta_reg(i.r1, 0)
+                    ins("sty", cell(i.r1, 1))
+                }
+                else if size == 1 {
+                    lda_reg(i.r1, 0)
+                    operand_ins("ldy", 0)
+                    ins("jsr", "prog8_math.multiply_bytes")
+                    sta_reg(i.r1, 0)
+                }
+                else if size == 2 {
+                    operand_ins("lda", 0)
+                    ins("sta", "prog8_math.multiply_words.multiplier")
+                    operand_ins("lda", 1)
+                    ins("sta", "prog8_math.multiply_words.multiplier+1")
+                    lda_reg(i.r1, 0)
+                    ins("ldy", cell(i.r1, 1))
+                    ins("jsr", "prog8_math.multiply_words")
+                    sta_reg(i.r1, 0)
+                    ins("sty", cell(i.r1, 1))
+                }
+                else if size == 4 {
+                    long_operands(i)
+                    ins("jsr", "prog8_math.multiply_longs")
+                    long_result(i.r1)
+                }
+                else
+                    error("multiplication of this size not supported yet", 0)
+            }
+            ir.OP_DIV, ir.OP_DIVR, ir.OP_MOD, ir.OP_MODR, ir.OP_DIVS, ir.OP_DIVSR, ir.OP_DIVMODR, ir.OP_DIVMOD -> {
+                second_operand(i)
+                bool signed_div = i.op == ir.OP_DIVS or i.op == ir.OP_DIVSR
+                bool want_mod = i.op == ir.OP_MOD or i.op == ir.OP_MODR
+                bool both = i.op == ir.OP_DIVMODR or i.op == ir.OP_DIVMOD
+                byte dshift = -1
+                if okind == K_IMM and not signed_div and not both
+                    dshift = power_of_two(ovalue, size)
+                if dshift >= 0 {
+                    if want_mod {
+                        ; the remainder of a power of two: the low bits
+                        long mask = 1
+                        mask <<= dshift as ubyte
+                        mask--
+                        for k in 0 to size - 1 {
+                            ubyte maskbyte = ((mask >> (k * 8)) & 255) as ubyte
+                            if maskbyte == 0 {
+                                ins("lda", "#0")
+                                sta_reg(i.r1, k)
+                            }
+                            else if maskbyte != 255 {
+                                lda_reg(i.r1, k)
+                                ins_imm("and", maskbyte)
+                                sta_reg(i.r1, k)
+                            }
+                        }
+                    }
+                    else {
+                        loc_mem = false
+                        loc_reg = i.r1
+                        shift_times(i, size, dshift, 1)
+                    }
+                }
+                else if size == 1 {
+                    ; A divided by Y: the quotient in Y, the remainder in A
+                    lda_reg(i.r1, 0)
+                    operand_ins("ldy", 0)
+                    if signed_div
+                        ins("jsr", "prog8_math.divmod_b_asm")
+                    else
+                        ins("jsr", "prog8_math.divmod_ub_asm")
+                    if want_mod
+                        sta_reg(i.r1, 0)
+                    else {
+                        ins("sty", cell(i.r1, 0))
+                        if both and i.mode == ir.M_RR
+                            sta_reg(i.r2, 0)
+                    }
+                }
+                else if size == 2 {
+                    ; the scratch word divided by AY: the quotient in AY, the remainder in the second scratch word
+                    lda_reg(i.r1, 0)
+                    ins("sta", "P8ZP_SCRATCH_W1")
+                    lda_reg(i.r1, 1)
+                    ins("sta", "P8ZP_SCRATCH_W1+1")
+                    operand_ins("lda", 0)
+                    operand_ins("ldy", 1)
+                    if signed_div
+                        ins("jsr", "prog8_math.divmod_w_asm")
+                    else
+                        ins("jsr", "prog8_math.divmod_uw_asm")
+                    if not want_mod {
+                        sta_reg(i.r1, 0)
+                        ins("sty", cell(i.r1, 1))
+                    }
+                    if want_mod or (both and i.mode == ir.M_RR) {
+                        uword target = i.r1
+                        if both
+                            target = i.r2
+                        ins("lda", "P8ZP_SCRATCH_W2")
+                        sta_reg(target, 0)
+                        ins("lda", "P8ZP_SCRATCH_W2+1")
+                        sta_reg(target, 1)
+                    }
+                }
+                else if size == 4 and not want_mod and not both {
+                    ; (the library's 32 bit division is the signed one)
+                    long_operands(i)
+                    ins("jsr", "prog8_math.div_longs")
+                    long_result(i.r1)
+                }
+                else
+                    error("division of this size not supported yet", 0)
+            }
+            ir.OP_SGN -> {
+                ; r1 (a byte) = -1, 0 or 1 by the sign of r2
+                lda_reg(i.r2, size - 1)
+                ins("bmi", "+")
+                for k in 0 to size - 1 {
+                    if k != size - 1
+                        ins("ora", cell(i.r2, k))
+                }
+                ins("beq", "++")
+                ins("lda", "#1")
+                ins("bne", "++")
+                anon_label("+")
+                ins("lda", "#$ff")
+                anon_label("+")
+                sta_reg(i.r1, 0)
+            }
+            ir.OP_SQRT -> {
+                if size > 2
+                    error("square root of this size not supported yet", 0)
+                lda_reg(i.r2, 0)
+                if size == 2
+                    ins("ldy", cell(i.r2, 1))
+                else
+                    ins("ldy", "#0")
+                ins("jsr", "prog8_lib.func_sqrt16_into_A")
+                sta_reg(i.r1, 0)
+            }
+            ir.OP_SQUARE -> {
+                if size == 1 {
+                    lda_reg(i.r2, 0)
+                    ins("tay", 0)
+                    ins("jsr", "prog8_math.multiply_bytes")
+                    sta_reg(i.r1, 0)
+                }
+                else if size == 2 {
+                    lda_reg(i.r2, 0)
+                    ins("sta", "prog8_math.multiply_words.multiplier")
+                    ins("ldy", cell(i.r2, 1))
+                    ins("sty", "prog8_math.multiply_words.multiplier+1")
+                    ins("jsr", "prog8_math.multiply_words")
+                    sta_reg(i.r1, 0)
+                    ins("sty", cell(i.r1, 1))
+                }
+                else
+                    error("square of this size not supported yet", 0)
+            }
+            ir.OP_PUSH -> {
+                for k in 0 to size - 1 {
+                    lda_reg(i.r1, k)
+                    ins("pha", 0)
+                }
+            }
+            ir.OP_POP -> {
+                k = size
+                while k > 0 {
+                    k--
+                    ins("pla", 0)
+                    sta_reg(i.r1, k)
+                }
+            }
+            ir.OP_PUSHST -> ins("php", 0)
+            ir.OP_POPST -> ins("plp", 0)
+            ir.OP_CLC -> ins("clc", 0)
+            ir.OP_SEC -> ins("sec", 0)
+            ir.OP_SEI -> ins("sei", 0)
+            ir.OP_CLI -> ins("cli", 0)
+            else -> {
+                buf.clear(nb)
+                ir.text = nb
+                ir.write_instr(i)
+                buf.add_byte(nb, 0)
+                error("instruction not supported yet", nb.data)
+            }
+        }
+    }
+
+    ; A call.  The arguments go where the IR says: a named parameter variable
+    ; of the subroutine, or a CPU register (hardware slot 0 A, 1 X, 2 Y, 3 AX,
+    ; 4 AY, 5 XY).  Register arguments are loaded last, A last of all, as the
+    ; loads of the others use A.
+    ; ---- arguments in registers ----
+    ;
+    ; As upstream documents it for the 6502: a subroutine with one byte parameter gets
+    ; it in A, with two byte parameters in A and Y, with one word or pointer parameter
+    ; in A and Y; the subroutine stores them in its parameter variables itself.  Any
+    ; other subroutine has its variables filled by the caller.
+
+    const ubyte CONV_NONE = 0
+    const ubyte CONV_A = 1
+    const ubyte CONV_A_Y = 2
+    const ubyte CONV_AY = 3
+
+    sub find_sub(^^ubyte name) -> ^^ir.Sub {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                if strings.compare(s.name, name) == 0
+                    return s
+                s = s.next
+            }
+            bl = bl.next
+        }
+        return 0
+    }
+
+    ; the size of a parameter that can travel in a register, or 0
+    sub register_param(^^ir.Param p) -> ubyte {
+        if p.typestr == 0 or array_length(p.typestr) != 0 or starts_with(p.typestr, "float")
+            return 0
+        long size = element_size(p.typestr)
+        if size == 1 or size == 2
+            return size as ubyte
+        return 0
+    }
+
+    sub convention(^^ir.Sub s) -> ubyte {
+        if s == 0 or s.is_asm or s.params == 0
+            return CONV_NONE
+        ^^ir.Param first = s.params
+        ^^ir.Param second = first.next
+        ubyte size = register_param(first)
+        if second == 0 {
+            if size == 1
+                return CONV_A
+            if size == 2
+                return CONV_AY
+            return CONV_NONE
+        }
+        if second.next == 0 and size == 1 and register_param(second) == 1
+            return CONV_A_Y
+        return CONV_NONE
+    }
+
+    ; the subroutine's side: the registers into the parameter variables
+    sub store_register_params(^^ir.Sub s) {
+        ^^ir.Param first = s.params
+        when convention(s) {
+            CONV_A -> ins_at("sta", first.name, 0)
+            CONV_A_Y -> {
+                ins_at("sta", first.name, 0)
+                ins_at("sty", first.next.name, 0)
+            }
+            CONV_AY -> {
+                ins_at("sta", first.name, 0)
+                ins_at("sty", first.name, 1)
+            }
+        }
+    }
+
+    ; the argument of a call for this parameter (the argument has the name without its scope)
+    sub param_arg(^^ir.Instr i, ^^ir.Param p) -> ^^ir.Arg {
+        long plen = buf.cstr_len(p.name)
+        ^^ir.Arg a = i.args
+        while a != 0 {
+            if a.slot == 255 and a.name != 0 {
+                long alen = buf.cstr_len(a.name)
+                if alen == plen and strings.compare(a.name, p.name) == 0
+                    return a
+                if alen < plen and p.name[plen - alen - 1] == '.' and strings.compare(p.name + (plen - alen), a.name) == 0
+                    return a
+            }
+            a = a.next
+        }
+        return 0
+    }
+
+    ; the caller's side; false when the call does not have the arguments the subroutine wants
+    sub load_register_params(^^ir.Instr i) -> bool {
+        ^^ir.Sub s = find_sub(i.sym)
+        ubyte conv = convention(s)
+        if conv == CONV_NONE
+            return false
+        ^^ir.Arg first = param_arg(i, s.params)
+        if first == 0
+            return false
+        when conv {
+            CONV_A -> load_register('a', first, 0)
+            CONV_A_Y -> {
+                ^^ir.Arg second = param_arg(i, s.params.next)
+                if second == 0
+                    return false
+                load_register('y', second, 0)
+                load_register('a', first, 0)
+            }
+            CONV_AY -> {
+                load_register('y', first, 1)
+                load_register('a', first, 0)
+            }
+        }
+        return true
+    }
+
+    sub call_instr(^^ir.Instr i) {
+        ^^ir.Arg a = i.args
+        ; arguments in registers, or else in the parameter variables
+        bool in_registers = i.op == ir.OP_CALL and convention(find_sub(i.sym)) != CONV_NONE
+        while a != 0 {
+            if a.slot == 255 and a.name != 0 and not in_registers {
+                ubyte size = type_size(a.type)
+                ubyte k
+                for k in 0 to size - 1 {
+                    if a.reg != 0
+                        lda_reg(a.reg, k)
+                    else
+                        ins_imm("lda", ((a.value >> (k * 8)) & 255) as long)
+                    if starts_with(a.name, "cx16.")
+                        ins_at("sta", a.name, k)        ; (a virtual register is named in full)
+                    else {
+                        ; a parameter of the subroutine
+                        if pb == 0
+                            pb = buf.new(128)
+                        buf.clear(pb)
+                        buf.add_str(pb, i.sym)
+                        buf.add_byte(pb, '.')
+                        buf.add_str(pb, a.name)
+                        buf.add_byte(pb, 0)
+                        ins_at("sta", pb.data, k)
+                    }
+                }
+            }
+            a = a.next
+        }
+        ; a status flag argument: the carry from the value's lowest bit (the loads that follow leave it alone)
+        a = i.args
+        while a != 0 {
+            if a.slot >= ir.SLOT_FLAGS and a.slot != 255 {
+                if a.slot != ir.SLOT_FLAGS
+                    error("only the carry can be a status flag argument", i.sym)
+                else if a.reg != 0 {
+                    lda_reg(a.reg, 0)
+                    ins("lsr", "a")
+                }
+                else if (a.value & 1) != 0
+                    ins("sec", 0)
+                else
+                    ins("clc", 0)
+            }
+            a = a.next
+        }
+        ; a float in FAC2 and FAC1 (loading them uses A, X and Y)
+        a = i.args
+        while a != 0 {
+            if a.slot == 7 and a.reg != 0 {
+                cell_address(a.reg, "lda")
+                ins("jsr", "floats.CONUPK")
+            }
+            a = a.next
+        }
+        a = i.args
+        while a != 0 {
+            if a.slot == 6 and a.reg != 0
+                fac1_load(a.reg)
+            a = a.next
+        }
+        ; then X and Y, then A
+        ubyte pass
+        for pass in 0 to 1 {
+            a = i.args
+            while a != 0 {
+                if a.slot <= 5
+                    register_argument(a, pass)
+                a = a.next
+            }
+        }
+        if in_registers {
+            if not load_register_params(i)
+                error("the arguments of this call do not match the subroutine's parameters", i.sym)
+        }
+        when i.op {
+            ir.OP_CALLFAR, ir.OP_CALLFARVB -> far_call(i)
+            else -> {
+                ^^ir.Sub inlined = inline_asmsub(i.sym)
+                if inlined != 0
+                    asm_text(inlined.asmtext, inlined.asmlen)       ; its body, in place of the call
+                else {
+                    ins("jsr", i.sym)
+                    ubyte used = call_uses(i, in_registers)
+                    ^^ir.Sub callee = find_sub(i.sym)
+                    if callee == 0 or callee.is_asm
+                        used |= 8               ; (it may take the carry too)
+                    peep6502.last_uses(used)
+                }
+            }
+        }
+        ; a result comes back in A, or in A and Y
+        ^^ir.Arg r = i.results
+        if r != 0 and r.reg != 0 and r.next == 0 {
+            ubyte rsize = type_size(r.type)
+            long vreg = -1
+            if r.slot == 255
+                vreg = result_vreg(i.sym, rsize)
+            if vreg >= 0 {
+                ; the result is in a virtual register (an asmsub's, or the R14R15 of a long)
+                ubyte vk
+                for vk in 0 to rsize - 1 {
+                    if pb == 0
+                        pb = buf.new(128)
+                    buf.clear(pb)
+                    buf.add_str(pb, "cx16.r")
+                    buf.add_long(pb, vreg)
+                    buf.add_byte(pb, 0)
+                    ins_at("lda", pb.data, vk)
+                    sta_reg(r.reg, vk)
+                }
+            }
+            else if r.slot >= ir.SLOT_FLAGS and r.slot != 255 {
+                ; a status flag: the instructions that follow the call make it a value
+                ; (a rotate into zero for the carry, a branch for the others)
+            }
+            else if rsize == 1 {
+                when r.slot {
+                    1 -> ins("stx", cell(r.reg, 0))
+                    2 -> ins("sty", cell(r.reg, 0))
+                    else -> sta_reg(r.reg, 0)
+                }
+            }
+            else if rsize == 2 {
+                when r.slot {
+                    3 -> {
+                        sta_reg(r.reg, 0)
+                        ins("stx", cell(r.reg, 1))
+                    }
+                    5 -> {
+                        ins("stx", cell(r.reg, 0))
+                        ins("sty", cell(r.reg, 1))
+                    }
+                    else -> {
+                        sta_reg(r.reg, 0)
+                        ins("sty", cell(r.reg, 1))
+                    }
+                }
+            }
+            else if rsize == 5
+                fac1_store(r.reg)       ; a float comes back in FAC1
+            else
+                error("call result of this size not supported yet", i.sym)
+        }
+    }
+
+    ; The virtual register that the single result of a call to this routine is in, or -1
+    ; when it is in the CPU registers: the one an asmsub's declaration names (R0, or the
+    ; first of a pair like R0R1), and R14 for the long that an ordinary subroutine returns.
+    sub result_vreg(^^ubyte name, ubyte size) -> long {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                if strings.compare(s.name, name) == 0 {
+                    if s.is_asm {
+                        ^^ubyte r = s.asmreturns
+                        if r != 0 and (r[0] & $df) == 'R' and r[1] >= '0' and r[1] <= '9' {
+                            long n = r[1] - '0'
+                            if r[2] >= '0' and r[2] <= '9'
+                                n = n * 10 + (r[2] - '0')
+                            return n
+                        }
+                        return -1
+                    }
+                    if size == 4
+                        return 14
+                    return -1
+                }
+                s = s.next
+            }
+            bl = bl.next
+        }
+        if size == 4
+            return 14
+        return -1
+    }
+
+    ; the inline asmsub of this name, or 0: such a routine has no code of its own
+    sub inline_asmsub(^^ubyte name) -> ^^ir.Sub {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                if s.is_asm and s.is_inline and s.asmtext != 0 and not s.asm_is_ir and strings.compare(s.name, name) == 0
+                    return s
+                s = s.next
+            }
+            bl = bl.next
+        }
+        return 0
+    }
+
+    ; the routine that calls into another bank: the address and bank follow the jsr
+    sub far_routine() -> ^^ubyte {
+        if target.text("jsrfar_routine") != 0
+            return target.text("jsrfar_routine")
+        buf.clear(nb)
+        buf.add_str(nb, prog.target)
+        buf.add_str(nb, ".x16jsrfar")
+        buf.add_byte(nb, 0)
+        return strtab.intern_cstr(nb.data)
+    }
+
+    long patch_seq = 0
+
+    ; callfar "#bank,address,name" and callfarvb "rN.b,address,name"
+    sub far_call(^^ir.Instr i) {
+        ^^ubyte t = i.sym
+        long comma = 0
+        while t[comma] != 0 and t[comma] != ','
+            comma++
+        long stop = comma + 1
+        while t[stop] != 0 and t[stop] != ','
+            stop++
+        ^^ubyte address = strtab.intern(t + comma + 1, (stop - comma - 1) as uword)
+        ^^ubyte routine = far_routine()
+        if t[0] == '#' {
+            ins("jsr", routine)
+            put("    .word  ")
+            put(address)
+            nl()
+            put("    .byte  ")
+            buf.add_bytes(w(), t + 1, comma - 1)
+            nl()
+            return
+        }
+        ; the bank is in a register: written into the byte after the address.  A holds
+        ; an argument by now, so it goes by way of the stack.
+        patch_seq++
+        ins("pha", 0)
+        uword bankreg = 0
+        long k = 1
+        while t[k] >= '0' and t[k] <= '9' {
+            bankreg = bankreg * 10 + (t[k] - '0')
+            k++
+        }
+        lda_reg(bankreg, 0)
+        put("    sta  p8_farcall_")
+        putn(patch_seq)
+        raw("+2")
+        ins("pla", 0)
+        ins("jsr", routine)
+        put("p8_farcall_")
+        putn(patch_seq)
+        raw(":")
+        put("    .word  ")
+        put(address)
+        nl()
+        raw("    .byte  0")
+    }
+
+    ; the register of argument number n (from 0) of a call or syscall
+    sub arg_reg(^^ir.Instr i, ubyte n) -> uword {
+        ^^ir.Arg a = i.args
+        while a != 0 and n > 0 {
+            a = a.next
+            n--
+        }
+        if a == 0 or a.reg == 0 {
+            error("a syscall argument that is not in a register", i.sym)
+            return 0
+        }
+        return a.reg
+    }
+
+    sub reg_to_scratch(uword r, str scratch, ubyte bytes) {
+        lda_reg(r, 0)
+        ins("sta", scratch)
+        if bytes == 2 {
+            lda_reg(r, 1)
+            ins_at("sta", scratch, 1)
+        }
+    }
+
+    ; The syscalls that the compiler itself emits for builtin functions and operators:
+    ; library routines with their own conventions.  The result comes back in A, or A and Y.
+    sub syscall(^^ir.Instr i) {
+        long n = number(i.sym)
+        ubyte result_size = 1
+        when n {
+            $1012, $1013 -> {
+                ; clamp a byte: the minimum and maximum in the scratch word, the value in A
+                lda_reg(arg_reg(i, 1), 0)
+                ins("sta", "P8ZP_SCRATCH_W1")
+                lda_reg(arg_reg(i, 2), 0)
+                ins("sta", "P8ZP_SCRATCH_W1+1")
+                lda_reg(arg_reg(i, 0), 0)
+                if n == $1012
+                    ins("jsr", "prog8_lib.func_clamp_ubyte")
+                else
+                    ins("jsr", "prog8_lib.func_clamp_byte")
+            }
+            $1014, $1015 -> {
+                reg_to_scratch(arg_reg(i, 1), "P8ZP_SCRATCH_W1", 2)
+                reg_to_scratch(arg_reg(i, 2), "P8ZP_SCRATCH_W2", 2)
+                lda_reg(arg_reg(i, 0), 0)
+                ins("ldy", cell(arg_reg(i, 0), 1))
+                if n == $1014
+                    ins("jsr", "prog8_lib.func_clamp_uword")
+                else
+                    ins("jsr", "prog8_lib.func_clamp_word")
+                result_size = 2
+            }
+            $100d -> {
+                ; compare two strings: -1, 0 or 1
+                reg_to_scratch(arg_reg(i, 1), "P8ZP_SCRATCH_W2", 2)
+                lda_reg(arg_reg(i, 0), 0)
+                ins("ldy", cell(arg_reg(i, 0), 1))
+                ins("jsr", "prog8_lib.strcmp_mem")
+            }
+            $100e -> {
+                ; is a character in a string
+                lda_reg(arg_reg(i, 0), 0)
+                ins("sta", "P8ZP_SCRATCH_W2")
+                reg_to_scratch(arg_reg(i, 1), "P8ZP_SCRATCH_W1", 2)
+                ins("ldy", "#0")
+                anon_label("-")
+                ins("lda", "(P8ZP_SCRATCH_W1),y")
+                ins("beq", "+")
+                ins("cmp", "P8ZP_SCRATCH_W2")
+                ins("beq", "++")
+                ins("iny", 0)
+                ins("bne", "-")
+                anon_label("+")
+                ins("lda", "#0")
+                ins("beq", "+++")
+                anon_label("+")
+                ins("lda", "#1")
+                anon_label("+")
+            }
+            $100f -> {
+                ; is a byte in an array: (element, array, length)
+                lda_reg(arg_reg(i, 2), 0)
+                ins("sta", "P8ZP_SCRATCH_W2")
+                reg_to_scratch(arg_reg(i, 1), "P8ZP_SCRATCH_W1", 2)
+                lda_reg(arg_reg(i, 0), 0)
+                ins("ldy", "P8ZP_SCRATCH_W2")
+                ins("jsr", "prog8_lib.containment_bytearray")
+            }
+            $1010, $101a -> {
+                ; is a word in an array (of words, or split in two byte arrays)
+                reg_to_scratch(arg_reg(i, 1), "P8ZP_SCRATCH_W2", 2)
+                reg_to_scratch(arg_reg(i, 0), "P8ZP_SCRATCH_W1", 2)
+                ins("ldy", cell(arg_reg(i, 2), 0))
+                if n == $1010
+                    ins("jsr", "prog8_lib.containment_linearwordarray")
+                else
+                    ins("jsr", "prog8_lib.containment_splitwordarray")
+            }
+            $1017 -> {
+                ; callfar(bank, address, argument in AY)
+                patch_seq++
+                syscall_patch(i)
+                lda_reg(arg_reg(i, 2), 0)
+                ins("ldy", cell(arg_reg(i, 2), 1))
+                ins("jsr", far_routine())
+                syscall_patch_site()
+                result_size = 2
+            }
+            $1018 -> {
+                ; callfar2(bank, address, A, X, Y, carry)
+                patch_seq++
+                syscall_patch(i)
+                lda_reg(arg_reg(i, 5), 0)
+                ins("lsr", "a")                         ; the carry
+                ins("ldx", cell(arg_reg(i, 3), 0))
+                ins("ldy", cell(arg_reg(i, 4), 0))
+                lda_reg(arg_reg(i, 2), 0)
+                ins("jsr", far_routine())
+                syscall_patch_site()
+                result_size = 2
+            }
+            else -> {
+                error("syscall not supported yet", i.sym)
+                return
+            }
+        }
+        ^^ir.Arg r = i.results
+        if r != 0 and r.reg != 0 {
+            sta_reg(r.reg, 0)
+            if result_size == 2 and type_size(r.type) >= 2
+                ins("sty", cell(r.reg, 1))
+        }
+    }
+
+    ; writes the bank and address of a callfar into the three bytes after its jsr
+    sub syscall_patch(^^ir.Instr i) {
+        lda_reg(arg_reg(i, 0), 0)
+        put("    sta  p8_farcall_")
+        putn(patch_seq)
+        raw("+2")
+        lda_reg(arg_reg(i, 1), 0)
+        put("    sta  p8_farcall_")
+        putn(patch_seq)
+        nl()
+        lda_reg(arg_reg(i, 1), 1)
+        put("    sta  p8_farcall_")
+        putn(patch_seq)
+        raw("+1")
+    }
+
+    sub syscall_patch_site() {
+        put("p8_farcall_")
+        putn(patch_seq)
+        raw(":")
+        raw("    .word  0")
+        raw("    .byte  0")
+    }
+
+    ; pass 0 loads X and Y (and the X or Y half of a pair), pass 1 loads A
+    sub register_argument(^^ir.Arg a, ubyte pass) {
+        ; which register takes the low byte and which the high byte: 'a', 'x', 'y' or 0
+        ubyte low = 'a'
+        ubyte high = 0
+        when a.slot {
+            1 -> low = 'x'
+            2 -> low = 'y'
+            3 -> high = 'x'
+            4 -> high = 'y'
+            5 -> {
+                low = 'x'
+                high = 'y'
+            }
+        }
+        if pass == 0 {
+            if low != 'a'
+                load_register(low, a, 0)
+            if high != 0
+                load_register(high, a, 1)
+        }
+        else if low == 'a'
+            load_register('a', a, 0)
+    }
+
+    sub load_register(ubyte which, ^^ir.Arg a, ubyte byteoffset) {
+        str mnemonic = "lda"
+        mnemonic[2] = which
+        if a.reg != 0
+            ins(mnemonic, cell(a.reg, byteoffset))
+        else
+            ins_imm(mnemonic, ((a.value >> (byteoffset * 8)) & 255) as long)
+    }
+
+    ; ---- data ----
+
+    ; the number of elements of an array type text, or 0 for a scalar
+    sub array_length(^^ubyte t) -> long {
+        long i = 0
+        while t[i] != 0 and t[i] != '['
+            i++
+        if t[i] == 0
+            return 0
+        return number(t + i + 1)
+    }
+
+    ; the size in bytes of one element of a type text
+    sub element_size(^^ubyte t) -> long {
+        if starts_with(t, "ubyte") or starts_with(t, "byte") or starts_with(t, "bool")
+            return 1
+        if starts_with(t, "uword") or starts_with(t, "word") or starts_with(t, "pointer") or t[0] == '^'
+            return 2
+        if starts_with(t, "long")
+            return 4
+        if starts_with(t, "float")
+            return 5
+        ; an array of struct instances: the struct's size
+        long i = 0
+        while t[i] != 0 and t[i] != '['
+            i++
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_STRUCT and buf.cstr_len(v.name) == i and buf.bytes_equal(v.name, t, i)
+                return v.size
+            v = v.next
+        }
+        return 1
+    }
+
+    ; is this the type of an array of struct instances
+    sub is_struct_array(^^ubyte t) -> bool {
+        long i = 0
+        while t[i] != 0 and t[i] != '['
+            i++
+        if t[i] == 0
+            return false
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_STRUCT and buf.cstr_len(v.name) == i and buf.bytes_equal(v.name, t, i)
+                return true
+            v = v.next
+        }
+        return false
+    }
+
+    ; "@instance,@instance": each instance's field values (zeros for one without)
+    sub struct_array_values(^^ubyte t, long struct_size) {
+        long p = 0
+        while t[p] != 0 {
+            long stop = p
+            while t[stop] != 0 and t[stop] != ','
+                stop++
+            ^^ir.Var inst = 0
+            if t[p] == '@' {
+                ^^ubyte iname = strtab.intern(t + p + 1, (stop - p - 1) as uword)
+                ^^ir.Var v = prog.vars
+                while v != 0 {
+                    if v.kind == ir.V_INSTANCE and v.name == iname {
+                        inst = v
+                        break
+                    }
+                    v = v.next
+                }
+            }
+            if inst != 0 and inst.init != 0
+                instance_values(inst.init)
+            else {
+                put("    .fill  ")
+                putn(struct_size)
+                nl()
+            }
+            p = stop
+            if t[p] == ','
+                p++
+        }
+    }
+
+    sub var_size(^^ir.Var v) -> long {
+        long n = array_length(v.typestr)
+        if n == 0
+            n = 1
+        return n * element_size(v.typestr)
+    }
+
+    ; One value of an initializer, from position p: a number, or @symbol, @<symbol,
+    ; @>symbol for an address or half of one.  Gives the position after it.
+    sub put_value(^^ubyte t, long p) -> long {
+        if t[p] == '@' {
+            p++
+            if t[p] == '<' or t[p] == '>' {
+                buf.add_byte(w(), t[p])
+                p++
+            }
+        }
+        if data_size == 5 {
+            ; a float: its five bytes
+            long fstop = p
+            buf.clear(nb)
+            while t[fstop] != 0 and t[fstop] != ',' {
+                buf.add_byte(nb, t[fstop])
+                fstop++
+            }
+            buf.add_byte(nb, 0)
+            float_bytes(irparse.parse_float(nb.data))
+            ubyte fk
+            for fk in 0 to 4 {
+                if fk != 0
+                    put(",")
+                putn(fbytes[fk])
+            }
+            return fstop
+        }
+        if t[p] == '-' {
+            ; (the assembler wants bytes and words without a sign)
+            long stop = p
+            while t[stop] != 0 and t[stop] != ','
+                stop++
+            long v = number(t + p)
+            if data_size == 1
+                putn(v & 255)
+            else if data_size == 2
+                putn(v & $ffff)
+            else
+                putn(v)
+            return stop
+        }
+        while t[p] != 0 and t[p] != ',' {
+            buf.add_byte(w(), t[p])
+            p++
+        }
+        return p
+    }
+
+    long data_size = 1          ; the size of the elements that put_value writes
+
+    sub data() {
+        raw("; variables with initial values")
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_VAR and v.init != 0 and v.zpaddr == 0 and not ram_initialized(v) {
+                if v.align > 1 {
+                    put("    .align  ")
+                    putn(v.align)
+                    nl()
+                }
+                long esize = element_size(v.typestr)
+                data_size = esize
+                if is_struct_array(v.typestr) {
+                    ; the elements are the instances that the initializer names, laid out one after the other
+                    put(v.name)
+                    raw(":")
+                    struct_array_values(v.init, esize)
+                    v = v.next
+                    continue
+                }
+                ^^ubyte directive = "  .byte  "
+                when esize {
+                    2 -> directive = "  .word  "
+                    4 -> directive = "  .dint  "
+                }
+                put(v.name)
+                long p = 0
+                ubyte column = 0
+                while v.init[p] != 0 {
+                    if column == 0 {
+                        if p != 0
+                            put("     ")
+                        put(directive)
+                    }
+                    else
+                        put(",")
+                    p = put_value(v.init, p)
+                    if v.init[p] == ','
+                        p++
+                    column++
+                    if column == 16 {
+                        nl()
+                        column = 0
+                    }
+                }
+                if column != 0
+                    nl()
+            }
+            v = v.next
+        }
+        raw("")
+    }
+
+    ; memory() blocks, and static struct instances
+    sub slabs_and_instances() {
+        bool any = false
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_SLAB {
+                if not any {
+                    raw("    .section BSS_SLABS")
+                    raw("prog8_slabs  .block")
+                    any = true
+                }
+                if v.align > 1 {
+                    put("    .align  ")
+                    putn(v.align)
+                    nl()
+                }
+                put(unscoped(v.name))
+                put("  .fill  ")
+                putn(v.size)
+                nl()
+            }
+            v = v.next
+        }
+        if any {
+            raw("    .bend")
+            raw("    .send BSS_SLABS")
+            raw("")
+        }
+        ; instances without values: cleared at startup
+        any = false
+        v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_INSTANCE and v.init == 0 {
+                if not any {
+                    raw("    .section BSS")
+                    raw("prog8_struct_instances_bss  .block")
+                    any = true
+                }
+                put(unscoped(v.name))
+                put("  .fill  ")
+                putn(v.size)
+                nl()
+            }
+            v = v.next
+        }
+        if any {
+            raw("    .bend")
+            raw("    .send BSS")
+            raw("")
+        }
+        any = false
+        v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_INSTANCE and v.init != 0 {
+                if not any {
+                    raw("    .section STRUCTINSTANCES")
+                    raw("prog8_struct_instances  .block")
+                    any = true
+                }
+                put(unscoped(v.name))
+                raw(":")
+                instance_values(v.init)
+            }
+            v = v.next
+        }
+        if any {
+            raw("    .bend")
+            raw("    .send STRUCTINSTANCES")
+            raw("")
+        }
+    }
+
+    ; "type:value,type:value": a line of data for each field
+    sub instance_values(^^ubyte t) {
+        long p = 0
+        while t[p] != 0 {
+            long colon = p
+            while t[colon] != ':'
+                colon++
+            buf.clear(nb)
+            buf.add_bytes(nb, t + p, colon - p)
+            buf.add_byte(nb, 0)
+            data_size = element_size(nb.data)
+            when data_size {
+                1 -> put("    .byte  ")
+                2 -> put("    .word  ")
+                4 -> put("    .dint  ")
+                else -> put("    .byte  ")       ; a float
+            }
+            p = put_value(t, colon + 1)
+            nl()
+            if t[p] == ','
+                p++
+        }
+    }
+
+    sub bss() {
+        slabs_and_instances()
+        ; variables that keep what they had: not cleared at startup
+        raw("    .section BSS_NOCLEAR")
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_VAR and v.init == 0 and v.dirty and v.zpaddr == 0
+                bss_var(v)
+            v = v.next
+        }
+        raw("p8_regfile:")
+        put("    .fill  ")
+        putn(regfile_used + 1)
+        nl()
+        raw("    .send BSS_NOCLEAR")
+        raw("")
+        raw("    .section BSS")
+        v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_VAR and ((v.init == 0 and not v.dirty) or ram_initialized(v)) and v.zpaddr == 0
+                bss_var(v)
+            v = v.next
+        }
+        raw("prog8_fp_temp  .fill  5")
+        raw("    .send BSS")
+        raw("")
+        raw("  .dsection STRUCTINSTANCES")
+        raw("")
+        raw("; bss sections")
+        ; Where the variables without an initial value go: after the program, or with
+        ; -varsgolden, -varshigh or -varsaddress (or the target's vars_address) in memory
+        ; of their own, which leaves that much more for the program.
+        long vars_start = -1
+        long vars_end = 0
+        if vars_address >= 0 {
+            vars_start = vars_address
+            vars_end = $ffff
+            if memtop > 0
+                vars_end = memtop
+        }
+        else if vars_golden {
+            vars_start = target.number("bss_goldenram_start", 0)
+            vars_end = target.number("bss_goldenram_end", 0)
+            if vars_start == 0 or vars_end <= vars_start
+                error("the target has no golden ram area (bss_goldenram_start, bss_goldenram_end) for -varsgolden", 0)
+        }
+        else if vars_high_bank >= 0 {
+            vars_start = target.number("bss_highram_start", 0)
+            vars_end = target.number("bss_highram_end", 0)
+            if vars_start == 0 or vars_end <= vars_start
+                error("the target has no high ram area (bss_highram_start, bss_highram_end) for -varshigh", 0)
+        }
+        else if target.text("vars_address") != 0 {
+            vars_start = target.number("vars_address", 0)
+            vars_end = $ffff
+            if memtop > 0
+                vars_end = memtop
+        }
+        put("PROG8_VARSHIGH_RAMBANK = ")
+        if vars_high_bank >= 0
+            putn(vars_high_bank)
+        else
+            putn(1)
+        nl()
+        if vars_start >= 0 {
+            raw("prog8_program_end:")
+            put("  * = ")
+            puthex(vars_start)
+            nl()
+            raw("  .dsection BSS_NOCLEAR")
+            raw("prog8_bss_section_start:")
+            raw("  .dsection BSS")
+            raw("  .dsection BSS_SLABS")
+            put("  .cerror * > ")
+            puthex(vars_end)
+            raw(", \"too many variables/data for BSS section\"")
+            raw("prog8_bss_section_size = * - prog8_bss_section_start")
+        }
+        else {
+            raw("  .dsection BSS_NOCLEAR")
+            raw("prog8_bss_section_start:")
+            raw("  .dsection BSS")
+            raw("prog8_bss_section_size = * - prog8_bss_section_start")
+            raw("  .dsection BSS_SLABS")
+            raw("prog8_program_end:")
+        }
+        raw("")
+        if memtop > 0 {
+            ; (the end of the program itself, wherever the variables are)
+            put("    .cerror prog8_program_end >= ")
+            puthex(memtop)
+            put(", \"Program too long by \", prog8_program_end - ")
+            puthex(memtop - 1)
+            put(", \" bytes, memtop=")
+            puthex(memtop)
+            raw("\"")
+        }
+    }
+
+    sub bss_var(^^ir.Var v) {
+        if v.align > 1 {
+            put("    .align  ")
+            putn(v.align)
+            nl()
+        }
+        put(v.name)
+        put("  .fill  ")
+        putn(var_size(v))
+        nl()
+    }
+}

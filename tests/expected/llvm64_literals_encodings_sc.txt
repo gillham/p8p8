@@ -1,0 +1,34 @@
+; module encodings_sc from tests/encodings_sc.p8
+MODULE
+  a: DIRECTIVE encoding
+    a: IDENT sc
+  a: BLOCK main
+    a: SUB start
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR Hello\n bytes=48050c0c0f8d : str
+        c: IDENT a
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR Hello\n bytes=48656c6c6f0a : str
+          a: IDENT iso
+        c: IDENT b
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR a value=1 : ubyte
+        c: IDENT c
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR a value=65 : ubyte
+          a: IDENT petscii
+        c: IDENT d
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 0 value=0 : ubyte
+        b: INDEX : ubyte
+          a: IDENT b : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: IDENT c : ubyte
+        b: IDENT d : ubyte

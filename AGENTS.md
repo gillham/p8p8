@@ -1,0 +1,122 @@
+# AGENTS
+
+p8p8 is a Prog8 compiler written in Prog8.  Its command is `p8c`.  It is an
+independent project: "a Prog8 compiler", never "the Prog8 compiler".  The
+reference compiler and the language are upstream's
+(<https://github.com/irmen/prog8>).
+
+Read `README.md` for what the compiler does and `docs/DESIGN.md` for how it
+is put together.  `docs/TARGETS.md` describes target files and where the
+library is found.  If `notes/PLAN.md` exists (it is private and not part of
+the repository), it is the log of the work: every decision, with what was
+tried and dropped.
+
+## Setup check
+
+The compiler is built with `prog8c-llvm` (the LLVM branch of Prog8).  Do not
+use plain `prog8c`: it has no llvm targets.
+
+The library that programs are built with is the submodule at `lib/`
+(`prog8lib/` is upstream's library and is never edited; additions and
+changed modules go in `common/` and `targets/`, see `lib/README.md`).  If
+`lib/prog8lib` does not exist, ask the user to run
+`git submodule update --init`.
+
+The tests use Prog8's examples and compiler tests from `.prog8-reference`.
+If `.prog8-reference/VERSION` does not exist, ask the user to run
+`python3 setup.py`, or offer to run it.
+
+## Writing Prog8
+
+The compiler's source is Prog8, so the upstream skills apply:
+
+- `.prog8-reference/.agents/skills/prog8-coder/SKILL.md` when writing or
+  reviewing Prog8 (skip it if your tool already loaded it as a skill).
+- `.prog8-reference/.agents/skills/asm6502-coder/SKILL.md` for the 6502
+  assembly the code generator writes.
+
+For a syntax question, grep the grammar:
+`.prog8-reference/parser/src/main/antlr/Prog8ANTLR.g4`.  The standard library
+is in `lib/`; never read whole library or example files, grep them.
+
+Things that have bitten here:
+
+- The source must stay portable: `pointer` and `^^type`, not `uquad`, for
+  addresses; no local arrays or strings in subroutines that recurse.
+- `to`, `call`, `word` and the other keywords and builtin names cannot be
+  variable names.
+- A `for` loop's range end must fit the loop variable's type.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `src/` | the compiler; `src/llvm64/*_platform.p8` is the host layer |
+| `src/lexer.p8`, `parser.p8`, `symtab.p8`, `resolver.p8`, `typer.p8`, `checker.p8` | the front end |
+| `src/irgen.p8`, `irprune.p8`, `ir.p8` | the IR, in upstream's `.p8ir` format |
+| `src/gen6502.p8`, `peep6502.p8` | the 6502/65C02 code generator and its peephole passes |
+| `src/llvmgen.p8` | LLVM IR for the host |
+| `src/target.p8`, `importer.p8`, `main.p8` | target files, module lookup, the driver |
+| `lib/` | the library programs are built with (a submodule; see its README) |
+| `runtime/` | support sources some programs are built with |
+| `tests/` | test programs, scripts, expected output |
+| `tools/` | helper scripts for the tests and generated sources |
+
+## Build and test
+
+```
+make            # build/llvm64/p8c
+make check      # syntax check only, fast
+make test       # unit tests and dumps
+```
+
+Which suite after which change (see the Makefile for all of them):
+
+| Change | Run |
+|---|---|
+| anything | `make test`, `make bootstrap` (p8c compiled by itself must reproduce itself) |
+| front end | `make programs`, `make roundtrip` |
+| IR generation | `make vmcmp`, `make nativecmp` |
+| 6502 code generator or peephole | `BUILDALL_CODEGEN=own make buildall`, `EMUCMP_CODEGEN=own make emucmp`, `EMUCMP_CODEGEN=own make emucmp64` |
+| what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |
+
+The comparison suites build each program with the reference compiler and
+with p8c and compare what they print.  The emulator suites need x16emu and
+VICE, take many minutes, and must not run at the same time as each other or
+as anything else that uses an emulator: run them in the background, one
+after the other.
+
+A new feature gets a test program in `tests/programs/` (the comparison
+suites pick it up) and, where it is a dump or an error, an expected file in
+`tests/expected/` with a line in the Makefile's `test` target.
+
+## Rules
+
+- **Follow upstream.**  The language, the command line and the behaviour of
+  programs match the reference compiler by default.  An option of p8p8's own
+  is acceptable when it changes nothing unless it is given; say that it is an
+  extension, and list it in the README.
+- **Never emit `bbr`, `bbs`, `rmb` or `smb`.**  The 65816 that many Commander
+  X16s have does not have them.
+- **Adding tests is fine; changing an existing test or its expected output
+  needs the user's agreement.**
+- **A bug in the compiler p8p8 is built with** is not worked around
+  silently: write the smallest program that shows it, with what happens and
+  what should, and give it to the user to report.  Such reports are issue
+  material and are not committed here.
+- **Nothing private in the repository:** no host names of the user's
+  machines, no absolute paths from their home directory.
+- **Commit finished, verified work** without being asked, with what was
+  measured in the message when the change is about size or speed.
+- **Report measurements as they are.**  Size and cycle numbers come from a
+  build that was just made, with the comparison stated.
+- **Keep the documents true.**  A change to how the compiler is put
+  together goes into `docs/DESIGN.md`; a new option into the README.  When
+  `notes/PLAN.md` exists, add a dated section there for a piece of work.
+
+## Upstream's sources
+
+Reading the reference compiler's Kotlin sources helps with questions the
+docs do not answer.  They are not part of this repository.  Where a script
+needs them (`tools/gen_enctables.py`), it takes the directory of a checkout
+from `PROG8_SRC`.

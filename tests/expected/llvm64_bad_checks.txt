@@ -1,0 +1,48 @@
+tests/bad_checks.p8:30:13: error: value type byte doesn't match target type ubyte
+tests/bad_checks.p8:5:1: error: directive can just occur once
+tests/bad_checks.p8:6:1: error: directive can just occur once
+tests/bad_checks.p8:9:5: error: using an option that is not valid for blocks
+tests/bad_checks.p8:10:23: error: const declaration needs a compile-time constant initializer value
+tests/bad_checks.p8:11:5: error: string var must be initialized with a string literal
+tests/bad_checks.p8:12:5: error: array variable is missing a size specification
+tests/bad_checks.p8:13:5: error: string and byte array length must be 1-65535
+tests/bad_checks.p8:14:22: error: array size mismatch (expecting 3, got 2)
+tests/bad_checks.p8:15:21: error: value of memory mapped variable can only be a constant number, maybe use an address pointer type instead?
+tests/bad_checks.p8:23:13: error: choice value already occurs elsewhere
+tests/bad_checks.p8:26:9: error: cannot assign to string by value (use strings.(n)copy)
+tests/bad_checks.p8:27:9: error: cannot assign new value to a constant
+tests/bad_checks.p8:28:19: error: index out of bounds
+tests/bad_checks.p8:29:17: error: division by zero
+tests/bad_checks.p8:30:13: error: can only take negative of a signed number type
+tests/bad_checks.p8:31:9: error: identifiers cannot start with an underscore
+tests/bad_checks.p8:32:9: error: cannot assign to 'void'
+tests/bad_checks.p8:33:9: error: can't jump to a subroutine that takes parameters
+tests/bad_checks.p8:36:5: error: non-inline subroutine has result value(s) and thus must have at least one 'return' or external 'goto' in it (or the assembler equivalent in case of %asm)
+tests/bad_checks.p8:44:9: error: subroutine 'noreturn' has result value(s) but doesn't end with a return statement
+tests/bad_checks.p8:49:5: error: invalid directive %bogus
+tests/bad_checks.p8:60:5: error: builtin function cannot be redefined
+tests/bad_checks.p8:65:9: error: defer cannot contain jumps or returns
+tests/bad_checks.p8:74:9: error: call returns too many values: expected 1 got 2
+tests/bad_checks.p8:75:9: error: call returns too few values: expected 3 got 2
+tests/bad_checks.p8:76:9: error: cannot call that: plain
+tests/bad_checks.p8:77:13: error: indexing requires an iterable, address uword, or pointer variable
+tests/bad_checks.p8:78:12: error: left and right operands aren't the same type: str vs ubyte
+tests/bad_checks.p8:80:9: error: %asm with native assembly code can't be used on the llvm targets, use %ir instead
+tests/bad_checks.p8:86:1: error: specific block addresses are not available on the hosted llvm64 target
+tests/bad_checks.p8:91:5: error: struct instances cannot be declared as memory-mapped currently, use a pointer and memory allocation call or direct address assignment instead
+tests/bad_checks.p8:92:5: error: pointer arrays cannot be memory-mapped (codegen limitation)
+tests/bad_checks.p8:93:5: error: zeropage variables can't have alignment
+tests/bad_checks.p8:95:19: error: can only use R0-R15 as register param for normal subroutines
+tests/bad_checks.p8:101:13: error: subroutines can only be defined in the scope of a block or within another subroutine
+tests/bad_checks.p8:104:9: error: %asminclude with native code can't be used on the llvm targets, use %ir instead
+tests/bad_checks.p8:116:19: error: invalid number of arguments: expected 1 but got 2
+tests/bad_checks.p8:117:19: error: invalid number of arguments: expected 2 but got 1
+tests/bad_checks.p8:118:13: error: expected numeric argument
+tests/bad_checks.p8:119:13: error: invalid address type for memory access
+tests/bad_checks.p8:123:9: error: invalid number of arguments: expected 2 or 0 but got 3
+tests/bad_checks.p8:126:9: error: array size mismatch (expecting 3, got 4)
+tests/bad_checks.p8:127:9: error: array size mismatch (expecting 3, got 4)
+tests/bad_checks.p8:129:9: error: string var must be initialized with a string literal
+tests/bad_checks.p8:138:9: error: left and right operands aren't the same type: bool vs ubyte
+tests/bad_checks.p8:140:9: error: pointer arithmetic only supported for + and - operators, maybe cast to uword?
+tests/bad_checks.p8:143:12: error: invalid left operand type

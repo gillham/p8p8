@@ -1,0 +1,22 @@
+alloc aligns to 8: ok
+alloc is zeroed: ok
+alloc bigger than a chunk: ok
+grow in place keeps the address and data: ok
+grow by copy moves the data: ok
+grow counters: ok
+buffer grows and stays terminated: ok
+buffer contents: ok
+numbers: 0 -12345 2147483647 a5
+70000 byte buffer: ok
+same text interns to the same pointer: ok
+different text interns differently: ok
+interned copy is terminated: ok
+5002 interned after rehash: ok
+lookup after rehash: ok
+old entry survives rehash: ok
+load a file: ok
+file length and terminator: ok
+file text and index: ok
+missing file gives 0: ok
+file registry: ok
+failures: 0

@@ -1,0 +1,126 @@
+; module encodings from tests/encodings.p8
+MODULE
+  a: BLOCK main
+    a: SUB start
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR Hi\n\x41é€|\"\'\\\t\r bytes=48690a41e9a47c22275c090d : str
+        c: IDENT a
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR Hi\n^_{}|\\ Ab\r bytes=c8490d5ee4f3ebddcd20c1420d : str
+          a: IDENT petscii
+        c: IDENT b
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR Hi\nAb bytes=48098d4102 : str
+          a: IDENT sc
+        c: IDENT c
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR Жx bytes=b678 : str
+          a: IDENT iso5
+        c: IDENT d
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR zażółć bytes=7a61bff3b3e5 : str
+          a: IDENT iso16
+        c: IDENT e
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR ☺░é¶ bytes=01b08214 : str
+          a: IDENT cp437
+        c: IDENT f
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR ｱガが♥¥\\~ bytes=b1b6deb6dee35c5c7e : str
+          a: IDENT kata
+        c: IDENT g
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR missing: Ж bytes=6d697373696e673a203f : str
+          a: IDENT iso
+        c: IDENT h
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR x value=120 : ubyte
+        c: IDENT i
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR A value=193 : ubyte
+          a: IDENT petscii
+        c: IDENT j
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR \x7f value=127 : ubyte
+        c: IDENT k
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR a value=1 : ubyte
+          a: IDENT sc
+        c: IDENT l
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR é value=233 : ubyte
+        c: IDENT m
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 0 value=0 : ubyte
+        b: INDEX : ubyte
+          a: IDENT b : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 1 value=1 : ubyte
+        b: INDEX : ubyte
+          a: IDENT c : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 2 value=2 : ubyte
+        b: INDEX : ubyte
+          a: IDENT d : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 3 value=3 : ubyte
+        b: INDEX : ubyte
+          a: IDENT e : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 4 value=4 : ubyte
+        b: INDEX : ubyte
+          a: IDENT f : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 5 value=5 : ubyte
+        b: INDEX : ubyte
+          a: IDENT g : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 6 value=6 : ubyte
+        b: INDEX : ubyte
+          a: IDENT h : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: IDENT i : ubyte
+        b: IDENT j : ubyte
+      c: ASSIGN
+        a: IDENT k : ubyte
+        b: IDENT l : ubyte
+      c: ASSIGN
+        a: IDENT i : ubyte
+        b: IDENT k : ubyte
+      c: ASSIGN
+        a: IDENT m : ubyte
+        b: IDENT i : ubyte

@@ -1,0 +1,10 @@
+tests/bad_types.p8:4:19: error: value out of range for ubyte
+tests/bad_types.p8:5:19: error: value out of range for uword
+tests/bad_types.p8:6:18: error: value type uword doesn't match target type word
+tests/bad_types.p8:7:18: error: value type uword doesn't match target type bool
+tests/bad_types.p8:8:12: error: condition must be a boolean expression
+tests/bad_types.p8:10:9: error: wrong number of arguments: expected 1, got 2
+tests/bad_types.p8:11:13: error: value type uword doesn't match target type ubyte
+tests/bad_types.p8:12:13: error: value type void doesn't match target type ubyte
+tests/bad_types.p8:13:16: error: too many return values
+tests/bad_types.p8:15:21: error: value type ^^ubyte doesn't match target type ^^uword

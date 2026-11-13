@@ -1,0 +1,3 @@
+tests/bad_resolve.p8:5:13: error: undefined symbol: nothere
+tests/bad_resolve.p8:6:9: error: symbol is private: hidden
+tests/bad_resolve.p8:7:9: error: undefined symbol: txt.print

@@ -1,0 +1,32 @@
+; module encoding_option from tests/encoding_option.p8
+MODULE
+  a: BLOCK main
+    a: SUB start
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR Hello {x}\n bytes=48656c6c6f207b787d0d : str
+        c: IDENT a
+      c: VARDECL
+        a: TYPE op=str : str
+        b: STR Hello bytes=c8454c4c4f : str
+          a: IDENT petscii
+        c: IDENT b
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR a value=97 : ubyte
+        c: IDENT c
+      c: VARDECL
+        a: TYPE op=ubyte : ubyte
+        b: CHAR a value=1 : ubyte
+          a: IDENT sc
+        c: IDENT d
+      c: ASSIGN
+        a: INDEX : ubyte
+          a: IDENT a : str
+          b: INT 0 value=0 : ubyte
+        b: INDEX : ubyte
+          a: IDENT b : str
+          b: INT 0 value=0 : ubyte
+      c: ASSIGN
+        a: IDENT c : ubyte
+        b: IDENT d : ubyte

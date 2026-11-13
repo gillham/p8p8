@@ -1,0 +1,3 @@
+[submodule "lib"]
+	path = lib
+	url = ../p8p8-lib

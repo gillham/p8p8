@@ -1,0 +1,7 @@
+tests/bad_strings.p8:5:1: error: invalid encoding directive, expected one of default, petscii, sc, atascii, iso, iso5, iso16, cp437, kata, c64os
+tests/bad_strings.p8:9:17: error: invalid escape char in string: \q
+tests/bad_strings.p8:10:17: error: invalid \u escape sequence
+tests/bad_strings.p8:11:17: error: invalid encoding
+tests/bad_strings.p8:12:17: error: no petscii character for char #252
+tests/bad_strings.p8:13:19: error: character literal encodes into multiple bytes
+tests/bad_strings.p8:14:17: error: no atascii character for char #233
