@@ -113,6 +113,13 @@ For a 6502 machine the program is built with p8p8's own code generator and
 64tass.  `-codegen upstream` hands p8p8's IR to `prog8c-llvm` instead, and
 `-ir` only writes the IR.
 
+A command line written for `prog8c` mostly works as it is: options may be
+written with two dashes, `-emu` is `-run`, and the options of `prog8c` that
+only concern what it prints (`-plaintext`, `-quiet`, `-quietasm`,
+`-nosourcelines`, `-timings`, `-warnshadow`, `-warnimplicitcasts`,
+`-ircomments`) are accepted and ignored.  An option that would change the
+program and that p8p8 does not have is an error, not ignored.
+
 Options p8p8 has that the reference compiler does not:
 
 | Option | What it does |

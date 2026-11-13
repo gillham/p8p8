@@ -61,6 +61,12 @@ main {
         uword i = 1
         while i < argc {
             ^^ubyte arg = sys.argv(i)
+            ; (upstream takes its options with one dash or two: --target is -target)
+            if arg[0] == '-' and arg[1] == '-' and arg[2] != 0
+                arg = arg + 1
+            ; -emu is upstream's name for building the program and running it
+            if strings.compare(arg, "-emu") == 0
+                arg = "-run"
             if strings.compare(arg, "-check") == 0 or strings.compare(arg, "-ir") == 0 or strings.compare(arg, "-llvm") == 0
                     or strings.compare(arg, "-build") == 0 or strings.compare(arg, "-run") == 0 or strings.compare(arg, "-modules") == 0
                     or strings.compare(arg, "-symbols") == 0 or strings.compare(arg, "-types") == 0 or strings.compare(arg, "-tokens") == 0
@@ -129,6 +135,14 @@ main {
             else if strings.compare(arg, "-run") == 0 {
                 opt_build = true
                 opt_run = true
+            }
+            else if strings.compare(arg, "-plaintext") == 0 or strings.compare(arg, "-quiet") == 0
+                    or strings.compare(arg, "-quietasm") == 0 or strings.compare(arg, "-nosourcelines") == 0
+                    or strings.compare(arg, "-timings") == 0 or strings.compare(arg, "-warnshadow") == 0
+                    or strings.compare(arg, "-warnimplicitcasts") == 0 or strings.compare(arg, "-ircomments") == 0 {
+                ; options of upstream that only concern what it prints or notes in its
+                ; output, and that have nothing to switch here: taken and ignored, so that
+                ; a command line written for prog8c works as it is
             }
             else if strings.compare(arg, "-asmlist") == 0
                 opt_asmlist = true
@@ -424,6 +438,10 @@ main {
         out.puts("usage: p8c [options] file.p8 ...")
         out.nl()
         out.puts("  -version       print the version of the compiler and of the library it uses")
+        out.nl()
+        out.puts("  (options may be written with two dashes; -emu is -run; -plaintext, -quiet, -quietasm, -nosourcelines,")
+        out.nl()
+        out.puts("   -timings, -warnshadow, -warnimplicitcasts and -ircomments of prog8c are accepted and ignored)")
         out.nl()
         out.puts("  -srcdirs a:b   directories searched first for imported modules")
         out.nl()
