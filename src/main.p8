@@ -183,6 +183,8 @@ main {
             }
             else if strings.compare(arg, "-verbose") == 0
                 opt_verbose = true
+            else if strings.compare(arg, "-traceimports") == 0
+                importer.trace = true
             else if strings.compare(arg, "-warnunused") == 0
                 warn.unused = true
             else if strings.compare(arg, "-warnunreachable") == 0
@@ -502,6 +504,8 @@ main {
         out.puts("  -out dir       the directory for the output files (default: the current one)")
         out.nl()
         out.puts("  -o file        the program file: its directory is where the output goes, its name that of every output file")
+        out.nl()
+        out.puts("  -traceimports  print which file every imported module comes from")
         out.nl()
         out.puts("  -verbose       print the commands that are run, and let the assembler print its summary of the program")
         out.nl()

@@ -136,6 +136,14 @@ They look at the program's own modules only, and say nothing in a block or
 module with `%option ignore_unused`, about a `@shared` variable, or about
 the variables of a subroutine or block that has assembly in it.
 
+`-traceimports` prints, as it does for `prog8c`, which file every imported
+module comes from and what imported it.  With a library in parts it also says
+which file a module takes the place of:
+
+```
+[import-trace] Importing module 'syslib' from lib/targets/c128/syslib.p8 (the target's own) - imported by '~implicit~' - in place of lib/prog8lib/c128/syslib.p8
+```
+
 p8p8 prints errors and warnings and nothing else.  `-verbose` also prints
 the commands it runs and lets the assembler print its summary of the
 program's sections and sizes.

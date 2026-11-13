@@ -79,9 +79,9 @@ importer {
             return 0
         }
         ; names are compared as interned pointers, so intern these literals
-        void import_library(strtab.intern_cstr("syslib"), main)
-        void import_library(strtab.intern_cstr("prog8_math"), main)
-        void import_library(strtab.intern_cstr("prog8_lib"), main)
+        void import_library(strtab.intern_cstr("syslib"), 0)
+        void import_library(strtab.intern_cstr("prog8_math"), 0)
+        void import_library(strtab.intern_cstr("prog8_lib"), 0)
         process_imports(main)
         return main
     }
@@ -159,16 +159,27 @@ importer {
         ; program's own textio (say) is the one the library's diskio gets too, as upstream has it
         ubyte i = 0
         while i < srcdir_count and m == 0 {
+            trace_by = by.name
+            trace_kind = "source directory"
+            trace_hides = 0
             m = try_load(srcdirs[i], name, false)
             i++
         }
         ; 2. the directory of the importing file (not a library's: the shared directory
         ; must not shadow a target's own version of a module)
-        if m == 0 and not by.is_library
+        if m == 0 and not by.is_library {
+            trace_by = by.name
+            trace_kind = "beside the importing file"
+            trace_hides = 0
             m = try_load_dir_of(by.file.name, name, false)
+        }
         ; 3. the current directory
-        if m == 0
+        if m == 0 {
+            trace_by = by.name
+            trace_kind = "current directory"
+            trace_hides = 0
             m = try_load(".", name, false)
+        }
         ; 4. the library: target directory, then the shared files
         if m == 0
             m = import_library(name, by)
@@ -185,44 +196,108 @@ importer {
         return m
     }
 
+    ; The library, from what is most specific to what is most general: the target's own
+    ; directory (and in it, and in upstream's, the directory of an llvm target's
+    ; platform), upstream's directory for the target, the shared modules that are added,
+    ; upstream's shared modules.
+    ^^ubyte[6] layer_dir
+    ^^ubyte[6] layer_kind
+    ubyte layers = 0
+
+    sub add_layer(^^ubyte dir, ^^ubyte sub1, ^^ubyte sub2, str kind) {
+        buf.clear(path)
+        buf.add_str(path, dir)
+        if sub1 != 0 {
+            buf.add_byte(path, '/')
+            buf.add_str(path, sub1)
+        }
+        if sub2 != 0 {
+            buf.add_byte(path, '/')
+            buf.add_str(path, sub2)
+        }
+        layer_dir[layers] = strtab.intern(path.data, path.len as uword)
+        layer_kind[layers] = kind
+        layers++
+    }
+
     sub import_library(^^ubyte name, ^^Module by) -> ^^Module {
         ^^Module m = find_loaded(name)
         if m != 0
             return m
-        if triple_library != 0 and target_library != 0 {
-            buf.clear(path)
-            buf.add_str(path, target_library)
-            buf.add_byte(path, '/')
-            buf.add_str(path, triple_library)
-            m = try_load(strtab.intern(path.data, path.len as uword), name, true)
-            if m != 0
-                return m
-        }
-        if triple_library != 0 {
-            buf.clear(path)
-            buf.add_str(path, libdir)
-            buf.add_byte(path, '/')
-            buf.add_str(path, target)
-            buf.add_byte(path, '/')
-            buf.add_str(path, triple_library)
-            m = try_load(strtab.intern(path.data, path.len as uword), name, true)
-            if m != 0
-                return m
-        }
+        trace_by = "~implicit~"
+        if by != 0
+            trace_by = by.name
+        layers = 0
+        if triple_library != 0 and target_library != 0
+            add_layer(target_library, triple_library, 0, "the target's own, for the platform")
+        if triple_library != 0
+            add_layer(libdir, target, triple_library, "target-specific library, for the platform")
         if target_library != 0
-            m = try_load(target_library, name, true)
-        if m == 0 {
-            buf.clear(path)
-            buf.add_str(path, libdir)
-            buf.add_byte(path, '/')
-            buf.add_str(path, target)
-            m = try_load(strtab.intern(path.data, path.len as uword), name, true)
+            add_layer(target_library, 0, 0, "the target's own")
+        add_layer(libdir, target, 0, "target-specific library")
+        if common_library != 0
+            add_layer(common_library, 0, 0, "added general library")
+        add_layer(libdir, 0, 0, "general library")
+        ubyte k = 0
+        while k < layers {
+            trace_kind = layer_kind[k]
+            trace_hides = 0
+            if trace and module_file(layer_dir[k], name) {
+                ; which file further down does it take the place of?
+                ubyte below = k + 1
+                while below < layers {
+                    if module_file(layer_dir[below], name) {
+                        trace_hides = strtab.intern(path.data, path.len as uword)
+                        break
+                    }
+                    below++
+                }
+            }
+            ; (nothing here is looked at after a module was loaded: loading imports others)
+            m = try_load(layer_dir[k], name, true)
+            if m != 0
+                return m
+            k++
         }
-        if m == 0 and common_library != 0
-            m = try_load(common_library, name, true)
-        if m == 0
-            m = try_load(libdir, name, true)
-        return m
+        return 0
+    }
+
+    ; is there a file for the module in this directory?  (Its path is left in path.)
+    sub module_file(^^ubyte dir, ^^ubyte name) -> bool {
+        buf.clear(path)
+        buf.add_str(path, dir)
+        buf.add_byte(path, '/')
+        buf.add_str(path, name)
+        buf.add_str(path, ".p8")
+        return io_platform.file_size(path.data) >= 0
+    }
+
+    ; -traceimports: which file each module comes from, and through whom
+    bool trace = false
+    ^^ubyte trace_by = 0
+    ^^ubyte trace_kind = 0
+    ^^ubyte trace_hides = 0
+
+    sub trace_import(^^ubyte name, ^^ubyte file) {
+        out.puts("[import-trace] Importing module '")
+        out.puts(name)
+        out.puts("' from ")
+        out.puts(file)
+        if trace_kind != 0 {
+            out.puts(" (")
+            out.puts(trace_kind)
+            out.puts(")")
+        }
+        if trace_by != 0 {
+            out.puts(" - imported by '")
+            out.puts(trace_by)
+            out.puts("'")
+        }
+        if trace_hides != 0 {
+            out.puts(" - in place of ")
+            out.puts(trace_hides)
+        }
+        out.nl()
     }
 
     ; Where a file of the library is ("library:name" in %asminclude and %asmbinary):
@@ -278,7 +353,10 @@ importer {
         buf.add_str(path, ".p8")
         if io_platform.file_size(path.data) < 0
             return 0
-        ^^Module m = load_module(strtab.intern(path.data, path.len as uword), name, is_library)
+        ^^ubyte found = strtab.intern(path.data, path.len as uword)
+        if trace
+            trace_import(name, found)
+        ^^Module m = load_module(found, name, is_library)
         if m == 0
             return 0
         strip_module_directives(m)
