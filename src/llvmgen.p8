@@ -50,6 +50,8 @@ llvmgen {
     ^^ubyte host_layout = 0
     bool linux = false              ; readdir's struct dirent has its name at offset 19, not 21
     bool intel_mac = false          ; opendir and readdir are the $INODE64 variants there
+    bool console_keys = false       ; the program reads keys: characters and keys come from the console runtime
+    bool console_size = false       ; the program asks for the terminal's size
     bool windows = false            ; 64 bit file offsets are _fseeki64 and _ftelli64; the dirent name is at 0
     ubyte long_lt = L_I64           ; C's long: 32 bits on WebAssembly and the 6502
     ^^ubyte long_name = "i64"
@@ -122,6 +124,7 @@ llvmgen {
             size_name = "i32"
         }
         c64 = mos and importer.triple != 0 and strings.compare(importer.triple, "mos-c64") == 0
+        find_console_use(p)
         ; the hosted platform of llvm64: upstream's four profiles
         host_name = "arm64-apple-macosx"
         host_layout = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-n32:64-S128-Fn32"
@@ -2625,6 +2628,71 @@ llvmgen {
         return convert(v, at, t)
     }
 
+    ; a call of a C routine without arguments that returns an int
+    sub c_int_call(^^ubyte name) -> ^^ubyte {
+        if name[0] == 'g'
+            declare(name, int_declare("declare ", " @getchar()"))
+        else if name[6] == 'g' and name[9] == 'c'
+            declare(name, int_declare("declare ", " @prog8_getchar()"))
+        else if name[6] == 'g'
+            declare(name, int_declare("declare ", " @prog8_getkey()"))
+        else if name[6] == 'w'
+            declare(name, int_declare("declare ", " @prog8_waitkey()"))
+        else
+            declare(name, int_declare("declare ", " @prog8_termsize()"))
+        ^^ubyte v = result(int_lt)
+        add("call ")
+        addn(int_name)
+        add(" @")
+        addn(name)
+        add("()\n")
+        return v
+    }
+
+    ; Does the program read keys, or ask for the terminal's size?  Then it is
+    ; built with the console runtime (runtime/hosted-keys.c), on the hosted
+    ; platforms.  Subroutines that nothing calls are gone by now.
+    sub find_console_use(^^ir.Program p) {
+        console_keys = false
+        console_size = false
+        if wasm or mos
+            return
+        ^^ir.Block bl = p.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                ^^ir.Chunk c = s.chunks
+                while c != 0 {
+                    ^^ir.Instr i = c.first
+                    while i != 0 {
+                        if i.op == ir.OP_SYSCALL
+                            console_syscall(i.value as long)
+                        i = i.next
+                    }
+                    ; (the library's routines are inline IR, which is text here)
+                    if c.is_ir and c.text != 0 {
+                        long k = 0
+                        while k + 11 < c.textlen {
+                            if c.text[k] == 's' and buf.bytes_equal(c.text + k, "syscall 21", 10)
+                                console_syscall(210 + (c.text[k + 10] - '0'))
+                            k++
+                        }
+                    }
+                    c = c.next
+                }
+                s = s.next
+            }
+            bl = bl.next
+        }
+    }
+
+    sub console_syscall(long n) {
+        if n == 217 or n == 218
+            console_keys = true
+        else if n == 219
+            console_size = true
+    }
+
     sub sysresult(^^ir.Instr i, ^^ubyte v, ubyte t) {
         ^^ir.Arg r = i.results
         if r != 0 and r.reg != 0
@@ -2790,13 +2858,20 @@ llvmgen {
                 void emit_call(".memsetw", L_VOID, 0, 1, 2)
             }
             69, 217, 218 -> {
-                declare("getchar", int_declare("declare ", " @getchar()"))
+                ; a character, a key without waiting, a key: the console
+                ; runtime's routines when the program reads keys (raw mode,
+                ; cursor keys), plain getchar otherwise
+                ^^ubyte reader = "getchar"
+                if console_keys {
+                    reader = "prog8_getchar"
+                    if n == 217
+                        reader = "prog8_getkey"
+                    else if n == 218
+                        reader = "prog8_waitkey"
+                }
                 ^^ubyte smax = int_text("llvm.smax.", "")
                 declare(smax, int_text3("declare ", " @llvm.smax.", "(", ", ", ")"))
-                ^^ubyte ch = result(int_lt)
-                add("call ")
-                addn(int_name)
-                add(" @getchar()\n")
+                ^^ubyte ch = c_int_call(reader)
                 ^^ubyte pos = result(int_lt)
                 add("call ")
                 addn(int_name)
@@ -3046,6 +3121,15 @@ llvmgen {
                 sysresult(i, emit_call(".float.parse", L_DOUBLE, 0, 1, 2), L_DOUBLE)
             }
             216 -> sysresult(i, "0", L_I64)
+            ; the terminal's size, columns in the low byte and rows in the high
+            ; one; 0 is "not a terminal", and what there is without the console
+            ; runtime (WebAssembly, the 6502)
+            219 -> {
+                if console_size
+                    sysresult(i, convert(c_int_call("prog8_termsize"), int_lt, L_I16), L_I16)
+                else
+                    sysresult(i, "0", L_I16)
+            }
             31 -> {
                 declare("atan2", "declare double @atan2(double, double)")
                 declare("llvm.floor.f64", "declare double @llvm.floor.f64(double)")

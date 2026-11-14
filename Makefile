@@ -160,7 +160,7 @@ install: $(P8P8)
 	cp -R $(LIB)/prog8lib $(LIB)/common $(LIB)/targets $(PREFIX)/lib/p8p8/
 	cp $(LIB)/VERSION $(LIB)/LICENSE $(PREFIX)/lib/p8p8/
 	$(MD) $(PREFIX)/lib/p8p8/runtime
-	cp runtime/windows-console.c runtime/mos-c64-support.c $(PREFIX)/lib/p8p8/runtime/
+	cp runtime/windows-console.c runtime/hosted-keys.c runtime/mos-c64-support.c $(PREFIX)/lib/p8p8/runtime/
 	@echo "installed $(PREFIX)/bin/p8c and $(PREFIX)/lib/p8p8"
 
 # make dist: an archive of the compiler for this machine, to unpack anywhere and use:
@@ -217,6 +217,9 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -ir -out $(OUT) -target c64 tests/hello.p8 && mv $(OUT)/hello.p8ir $(OUT)/hello_before.p8ir
 	@$(P8P8) tests/hello.p8 -target c64 -out $(OUT) -ir -lib lib && cmp $(OUT)/hello_before.p8ir $(OUT)/hello.p8ir
 	@$(P8P8) tests/hello.p8 -target 2>&1 | diff -u tests/expected/option_value.txt -
+	@echo "test console runtime"
+	@$(P8P8) -lib lib -target llvm64 -llvm -out $(OUT) tests/console.p8
+	@grep -c '^declare i32 @prog8_getkey()\|^declare i32 @prog8_termsize()' $(OUT)/console.ll | diff -u tests/expected/console_two.txt -
 	@echo "test report"
 	@$(P8P8) -selfcrash tests/hello.p8 2>&1 | diff -u tests/expected/crash_message.txt -
 	@rm -rf $(OUT)/report $(OUT)/report2

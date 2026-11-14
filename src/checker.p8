@@ -1509,7 +1509,9 @@ checker {
         return b.type
     }
 
-    ; a plain array, string or address variable indexed by a signed variable
+    ; a plain array or string indexed by a signed variable.  An address
+    ; variable is not checked: upstream has made ptr[i] into @(ptr+i) before
+    ; its check, so a signed index there is allowed and counts backwards.
     sub signed_index(^^ast.Node e) {
         if e.a.kind != ast.N_IDENT or e.a.op == resolver.R_FIELDREF or e.b == 0 or e.b.kind != ast.N_IDENT or e.b.next != 0
             return
@@ -1517,7 +1519,7 @@ checker {
         ^^symtab.Sym index = e.b.extra
         if target == 0 or index == 0 or target.type == 0 or index.type == 0
             return
-        if target.kind != symtab.K_VAR or types.is_pointer(target.type)
+        if target.kind != symtab.K_VAR or not types.is_iterable(target.type)
             return
         if (index.kind != symtab.K_VAR and index.kind != symtab.K_PARAM) or e.b.op == resolver.R_FIELDREF
             return

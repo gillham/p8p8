@@ -86,6 +86,13 @@ for each change, with the commit.
 2. In the library repository: replace `prog8lib/` with upstream's, update
    `VERSION`, run `tools/check_overrides.py` and look again at every
    replaced file it names.  Commit, and move the submodule in p8p8.
+   The merge notes and the diff only cover `master`.  What the LLVM branch
+   added of its own is looked at apart: the library of the llvm targets
+   (`compiler/res/prog8lib/llvm16`, `llvm32`, `llvm64` against
+   `targets/llvm*` of the library), syscalls from 200 up
+   (`codeGenLlvm/.../InstrSyscall.kt` against `lower_syscall` in
+   `src/llvmgen.p8`), and the C sources it builds programs with
+   (`codeCore/res/prog8lib/llvm-triples/` against `runtime/`).
 3. `python3 setup.py`, for the new examples, tests and documentation.
 4. `make programs`, `roundtrip`, `corpus`: the grammar.  Then
    `make conformance`, `vmcmp`, `nativecmp`, and the emulator suites.

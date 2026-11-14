@@ -109,6 +109,12 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
   - on a target with addresses wider than a word, an array of `uword`
     initialized with addresses of subroutines.
 
+  An address variable indexed by a signed variable (`ptr[i]`, where an
+  array would be refused) is accepted by both and counts backwards for a
+  negative index.  For a signed *byte* on the 6502, upstream's code adds the
+  index as if it were unsigned; p8p8 extends its sign, as upstream's virtual
+  machine does.
+
   There will be others: the 195 cases were written here, they are not
   upstream's own test suite.
 - **Warnings and notes.**  Upstream prints warnings and information lines
@@ -138,7 +144,7 @@ Options are upstream's where both have them, with one dash or two.
   a report of a problem), and options that print the compiler's internal
   tables.
 - A 6502 machine is built by default; for an llvm target p8p8 only checks
-  the program unless `-build`, `-run` or `-emu` is given.
+  the program unless `-build`, `-run`, `-emu` or `-o <file>` is given.
 - The output directory of `-out` or `-o` has to exist.
 - One program for each run of the compiler: several source files on one
   command line are not reliable.

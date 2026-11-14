@@ -127,7 +127,8 @@ only concern what it prints (`-plaintext`, `-quiet`, `-quietasm`,
 `-nosourcelines`, `-timings`, `-warnimplicitcasts`, `-ircomments`) are
 accepted and ignored.  `-o file` names the program as it
 does there: its directory is where the output goes, and its name is that of
-every output file.  An option that would change the program and that p8p8
+every output file; the program is then built, also for an llvm target.
+An option that would change the program and that p8p8
 does not have is an error, not ignored.
 
 Warnings about things that are not wrong but may not be meant are asked
@@ -250,7 +251,7 @@ the library's `target.properties` files for the C64, C128, X16 and PET is
 taken from the Prog8 compiler's sources.
 
 The LLVM support files in `runtime/` (`mos-c64-support.c`,
-`windows-console.c` and the helper functions in the `.ll` files) come from
+`windows-console.c`, `hosted-keys.c` and the helper functions in the `.ll` files) come from
 the LLVM branch of Prog8 that p8p8 is built with, which is by the author of
 p8p8 and not part of Prog8 itself.
 

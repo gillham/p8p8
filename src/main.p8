@@ -234,7 +234,9 @@ main {
                 i++
             }
             else if (strings.compare(arg, "-o") == 0 or strings.compare(arg, "-output") == 0) and value != 0 {
+                ; (it names the program file, so the program is built)
                 output_file(value)
+                opt_build = true
                 i++
             }
             else if strings.compare(arg, "-verbose") == 0
@@ -421,7 +423,7 @@ main {
     }
 
     ; The directory of the support sources that some programs are built with
-    ; (windows-console.c, mos-c64-support.c): P8P8_RUNTIME, "runtime" where the compiler
+    ; (windows-console.c, hosted-keys.c, mos-c64-support.c): P8P8_RUNTIME, "runtime" where the compiler
     ; runs, or beside the compiler: ../lib/p8p8/runtime (installed), ../../runtime (its
     ; repository).
     sub runtime_dir() -> ^^ubyte {
@@ -1278,6 +1280,12 @@ main {
                 if cross {
                     buf.add_str(cmd, " --target=")
                     buf.add_str(cmd, importer.triple)
+                }
+                if llvmgen.console_keys or llvmgen.console_size {
+                    ; the console runtime: keys in raw mode, the terminal's size
+                    buf.add_str(cmd, " \"")
+                    buf.add_str(cmd, runtime_dir())
+                    buf.add_str(cmd, "/hosted-keys.c\"")
                 }
                 if windows {
                     ; the console support source: binary streams, usleep, the directory routines
