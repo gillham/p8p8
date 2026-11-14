@@ -97,7 +97,10 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
   - `p^^ = array[i]` where upstream asks for `&`;
   - `w * w` of a signed `word` passed where a `word` is wanted: upstream
     makes it a square, whose type is `uword`, and then reports a type
-    mismatch.
+    mismatch;
+  - a `str` assigned to a `long` on a 6502 target.  Upstream's
+    documentation says it is allowed on every target; its compiler takes it
+    for the virtual machine only.
 
   And the other way round, programs that upstream accepts and p8p8 does not:
   - an `if` expression whose first value begins with a sign and has no
