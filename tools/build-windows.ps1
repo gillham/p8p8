@@ -70,7 +70,7 @@ if ($Dist) {
     Copy-Item -Recurse "lib\prog8lib", "lib\common", "lib\targets" "$root\lib\p8p8\"
     Copy-Item "lib\VERSION", "lib\LICENSE" "$root\lib\p8p8\"
     Copy-Item "runtime\windows-console.c", "runtime\hosted-keys.c", "runtime\mos-c64-support.c" "$root\lib\p8p8\runtime\"
-    Copy-Item "README.md", "LICENSE" "$root\"
+    Copy-Item "README.md", "CHANGELOG.md", "LICENSE" "$root\"
     Copy-Item "docs\*.md" "$root\docs\"
     if (Test-Path "dist\$name.zip") { Remove-Item -Force "dist\$name.zip" }
     Compress-Archive -Path $root -DestinationPath "dist\$name.zip"

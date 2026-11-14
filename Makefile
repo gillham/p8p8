@@ -172,7 +172,7 @@ DISTNAME = p8p8-$(VERSION)-$(HOSTNAME)
 dist:	$(P8P8)
 	rm -rf dist/$(DISTNAME)
 	$(MAKE) install PREFIX=dist/$(DISTNAME) LIB=$(LIB)
-	cp README.md LICENSE dist/$(DISTNAME)/
+	cp README.md CHANGELOG.md LICENSE dist/$(DISTNAME)/
 	$(MD) dist/$(DISTNAME)/docs
 	cp docs/*.md dist/$(DISTNAME)/docs/
 	tar czf dist/$(DISTNAME).tar.gz -C dist $(DISTNAME)
