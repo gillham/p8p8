@@ -56,8 +56,7 @@ main {
     bool opt_keepunused = false
     ^^ubyte outdir = 0
 
-    const ubyte MAX_FILES = 32
-    ^^ubyte[MAX_FILES] files
+    ^^pointer files = 0             ; the source files of the command line, in order
     uword file_count = 0
 
     ; the options that are followed by a value
@@ -273,12 +272,8 @@ main {
             else {
                 ; a source file: compiled when the whole command line has been read, so
                 ; that an option counts wherever it stands, before the file or after it
-                if file_count == MAX_FILES {
-                    out.err()
-                    out.puts("too many source files")
-                    out.nl()
-                    out.exit(1)
-                }
+                if files == 0
+                    files = mem.alloc(argc as long * sizeof(pointer))
                 files[file_count] = arg
                 file_count++
             }
