@@ -39,6 +39,22 @@ compiler, so expect to find bugs.
 `prog8c`.  [docs/DESIGN.md](docs/DESIGN.md) says how the compiler is put
 together.
 
+## Installing a release
+
+The archives of a release hold `bin/p8c` and the library beside it.  Unpack
+one anywhere (`~/.local`, for example) and put its `bin` in your `PATH`.
+What else you need depends on what you build:
+
+| To build | You need |
+|---|---|
+| programs for 6502 machines | [64tass](https://sourceforge.net/projects/tass64/) |
+| programs for the host (`-target llvm64`) | clang.  On Windows clang links with Microsoft's tools: install LLVM, and the Visual Studio Build Tools with a Windows SDK |
+| and to run a 6502 program with `-emu` | [VICE](https://vice-emu.sourceforge.io/) or [x16emu](https://github.com/X16Community/x16-emulator) |
+
+The Linux archive is for x86-64 with glibc 2.39 or newer, the macOS one for
+Apple silicon, the Windows one for x86-64.  They have been tried on fresh
+installations of Debian 13 and Windows 11.
+
 ## Building
 
 p8p8 builds itself.  You need:
