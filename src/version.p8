@@ -4,5 +4,5 @@
 version {
     %option ignore_unused
 
-    str number = "0.1.0"
+    str number = "0.1.1-dev"
 }
