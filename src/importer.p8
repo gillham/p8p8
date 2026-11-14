@@ -51,13 +51,20 @@ importer {
         srcdir_count++
     }
 
-    ; Splits "a:b:c" into search directories.
+    ; Splits "a:b:c" or "a;b;c" into search directories.  The reference compiler
+    ; wants ':' on Unix and ';' on Windows; both are taken on both, so that one
+    ; build script does for either compiler.  On Windows the ':' after a drive
+    ; letter ("c:/src;d:\\lib") belongs to the path.
     sub set_srcdirs(^^ubyte spec) {
+        bool windows = io_platform.is_windows()
         long start = 0
         long i = 0
         repeat {
             ubyte c = spec[i]
-            if c == ':' or c == 0 {
+            bool split = c == ';' or c == ':' or c == 0
+            if c == ':' and windows and i == start + 1 and (spec[i + 1] == '/' or spec[i + 1] == '\\')
+                split = false
+            if split {
                 if i > start
                     add_srcdir(strtab.intern(spec + start, (i - start) as uword))
                 start = i + 1

@@ -145,6 +145,8 @@ Options are upstream's where both have them, with one dash or two.
   tables.
 - A 6502 machine is built by default; for an llvm target p8p8 only checks
   the program unless `-build`, `-run`, `-emu` or `-o <file>` is given.
+- `-srcdirs` takes `:` and `;` between directories on every system;
+  upstream takes `:` on Unix and `;` on Windows.
 - The output directory of `-out` or `-o` has to exist.
 - One program for each run of the compiler: several source files on one
   command line are not reliable.

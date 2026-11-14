@@ -109,6 +109,9 @@ p8c -target config/mine.properties -out build program.p8     # or a file of your
 p8c -target llvm64 -out build -run program.p8
 ```
 
+The directories of `-srcdirs` are separated by `:` or by `;`, on every
+system (the reference compiler wants `:` on Unix and `;` on Windows).
+
 `-lib` names the library directory.  Without it `p8c` uses `P8P8_LIB` from
 the environment, or the library installed with it (`../lib/p8p8` from the
 directory `p8c` is in; `lib/` of the repository for one in `build/`);

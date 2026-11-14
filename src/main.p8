@@ -555,7 +555,7 @@ main {
         out.nl()
         out.puts("   -timings, -warnimplicitcasts and -ircomments of prog8c are accepted and ignored)")
         out.nl()
-        out.puts("  -srcdirs a:b   directories searched first for imported modules")
+        out.puts("  -srcdirs a:b   directories searched first for imported modules (a;b as well)")
         out.nl()
         out.puts("  -lib dir       the library directory (default: P8P8_LIB, or lib/p8p8 beside the compiler's bin directory,")
         out.nl()

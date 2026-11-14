@@ -217,6 +217,9 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -ir -out $(OUT) -target c64 tests/hello.p8 && mv $(OUT)/hello.p8ir $(OUT)/hello_before.p8ir
 	@$(P8P8) tests/hello.p8 -target c64 -out $(OUT) -ir -lib lib && cmp $(OUT)/hello_before.p8ir $(OUT)/hello.p8ir
 	@$(P8P8) tests/hello.p8 -target 2>&1 | diff -u tests/expected/option_value.txt -
+	@echo "test srcdirs separators"
+	@$(P8P8) -lib lib -target llvm64 -srcdirs "nonexistent;src;src/llvm64" -check $(MAIN)
+	@$(P8P8) -lib lib -target llvm64 -srcdirs "nonexistent:src;src/llvm64" -check $(MAIN)
 	@echo "test console runtime"
 	@$(P8P8) -lib lib -target llvm64 -llvm -out $(OUT) tests/console.p8
 	@grep -c '^declare i32 @prog8_getkey()\|^declare i32 @prog8_termsize()' $(OUT)/console.ll | diff -u tests/expected/console_two.txt -
