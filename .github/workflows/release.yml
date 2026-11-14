@@ -32,7 +32,7 @@ jobs:
         os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           token: ${{ secrets.LIB_TOKEN || github.token }}
@@ -51,7 +51,7 @@ jobs:
     needs: release
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           token: ${{ secrets.LIB_TOKEN || github.token }}

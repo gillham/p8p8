@@ -27,7 +27,7 @@ jobs:
         os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           token: ${{ secrets.LIB_TOKEN || github.token }}
@@ -42,7 +42,7 @@ jobs:
         run: make bootstrap
       - name: Archive
         run: make dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: p8p8-${{ matrix.os }}
           path: dist/*.tar.gz
@@ -51,7 +51,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           token: ${{ secrets.LIB_TOKEN || github.token }}
@@ -61,7 +61,7 @@ jobs:
           clang --version
           ./tools/build-windows.ps1 -Dist
           build/llvm64/p8c.exe -version
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: p8p8-windows-latest
           path: dist/*.zip
