@@ -282,8 +282,13 @@ Homebrew's is taken where there is one), and writes
 `dist/p8p8-<version>-<triple>.tar.gz`.  `CROSS_FLAGS=-static` links the C
 library in, for a machine whose own is older than the sysroot's.
 
-The seed is for 64-bit hosts: a 32-bit compiler is built by a 64-bit one,
-or from its LLVM IR by the clang of the 32-bit machine.
+The seed is for 64-bit hosts.  The first compiler of a 32-bit machine is
+built by a 64-bit one (`make cross`), or from its LLVM IR by the clang of
+the 32-bit machine.  From then on the machine builds its own: there `make`
+takes the p8c that is installed in place of the seed (`BOOT=p8c`), the
+target is llvm32 and the host layer `src/llvm32`, and `make bootstrap`
+checks the result as everywhere.  As with the seed, the installed compiler
+must know everything the sources use.
 
 The platform of an llvm32 program is not built into the compiler: it is a
 triple profile, a properties file of the library (`src/triple.p8`,

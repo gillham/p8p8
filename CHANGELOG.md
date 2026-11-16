@@ -8,7 +8,9 @@
 - The compiler runs on 32-bit ARM and RISC-V Linux as well (cross-built, or
   built there from its LLVM IR); on a 32-bit machine programs are for that
   machine by default.  `-Xcompile` passes an argument to clang.
-- `make cross` builds and packs the compiler for a 32-bit machine.
+- `make cross` builds and packs the compiler for a 32-bit machine, and
+  `make BOOT=p8c` builds it with a p8c that is already installed, which is
+  what `make` does on a 32-bit machine.
 - `-target llvm32` takes its platform from a triple profile in the library
   (`-triple`): WebAssembly as before, and 32-bit ARM and RISC-V Linux.
 

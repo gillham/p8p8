@@ -16,7 +16,8 @@ tried and dropped.
 ## Setup check
 
 `make` builds the compiler from `seed/p8c.ll.gz`, its own earlier output,
-with clang alone.  The comparison tests and `make BOOT=prog8c` use
+with clang alone (or, with `make BOOT=p8c`, by an installed p8c: the way on
+a 32-bit machine, which the seed does not fit).  The comparison tests and `make BOOT=prog8c` use
 `prog8c-llvm` (the LLVM branch of Prog8).  Do not use plain `prog8c`: it has
 no llvm targets.
 

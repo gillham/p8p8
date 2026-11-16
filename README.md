@@ -116,9 +116,12 @@ with the same layout in `dist/`, to unpack anywhere: `bin/p8c` finds the
 library beside it.
 
 `make cross TRIPLE=<profile> SYSROOT=<dir>` makes such an archive for a
-32-bit ARM or RISC-V Linux machine, built here: the seed is for 64-bit
-machines, so p8c cannot be built from this repository on a 32-bit one
-([docs/DESIGN.md](docs/DESIGN.md), "A 32-bit host").
+32-bit ARM or RISC-V Linux machine, built here.  The seed is for 64-bit
+machines, so on a 32-bit one the first p8c comes from such an archive;
+with it in the `PATH`, `make` in this repository builds the next one there
+(`BOOT=p8c`, which is also there on a 64-bit machine: `make BOOT=p8c`,
+with `P8C=<file>` for another one than the `PATH`'s).  See
+[docs/DESIGN.md](docs/DESIGN.md), "A 32-bit host".
 
 ## Using it
 

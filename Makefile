@@ -9,7 +9,8 @@
 # Make targets:
 # all:
 #     builds the compiler, the executable p8c, for the llvm64 target (the default):
-#     from the seed in seed/ when there is one (BOOT=seed), else with prog8c-llvm
+#     from the seed in seed/ when there is one (BOOT=seed), with a p8c that is
+#     installed (BOOT=p8c, the way on a 32-bit machine), else with prog8c-llvm
 #     (BOOT=prog8c)
 # seed:
 #     writes the seed of the compiler that was just built
@@ -59,11 +60,18 @@ else
 endif
 
 PCC=prog8c-llvm
+# The compiler is a program for the machine it is built on: llvm64, or llvm32 on a
+# 32-bit machine, where the host layer is src/llvm32 over src/llvm64.
 TARGET=llvm64
-PCCARGS=-srcdirs src:src/$(TARGET) -plaintext -target $(TARGET)
+SRCDIRS=src:src/llvm64
+ifneq ($(filter armv6l armv7l armv8l riscv32 i686,$(shell uname -m 2> /dev/null)),)
+    TARGET=llvm32
+    SRCDIRS=src:src/llvm32:src/llvm64
+endif
+PCCARGS=-srcdirs $(SRCDIRS) -plaintext -target $(TARGET)
 
 MAIN	= src/main.p8
-SRCS	= $(wildcard src/*.p8) $(wildcard src/$(TARGET)/*.p8)
+SRCS	= $(wildcard src/*.p8) $(wildcard src/llvm64/*.p8) $(wildcard src/llvm32/*.p8)
 TESTS	= test_phase0
 OUT	= build/$(TARGET)
 P8P8	= $(OUT)/p8c$(EXE)
@@ -80,28 +88,43 @@ $(OUT):
 	$(MD) $(OUT)
 
 # How the compiler is built: from the seed (BOOT=seed), which is p8c's own earlier
-# output as LLVM IR, or by prog8c-llvm (BOOT=prog8c).  The seed is used when it is there.
+# output as LLVM IR, by a p8c that is already there (BOOT=p8c, the one in the PATH or
+# P8C=<file>), or by prog8c-llvm (BOOT=prog8c).  The seed is used when it is there; on a
+# 32-bit machine it cannot be (its pointers are 64 bits wide), and a p8c is used.
+# A p8c that is older than the seed may not know everything the sources use.
 #
 # From the seed: clang makes stage 0 of it, stage 0 compiles the sources, and clang
 # makes p8c of that.  (make bootstrap then checks that p8c reproduces itself.)
 # The seed has no target lines, so it is the same file for macOS and Linux.
 SEED	= seed/p8c.ll.gz
+ifeq ($(TARGET),llvm32)
+    BOOT ?= p8c
+endif
 BOOT	?= $(if $(wildcard $(SEED)),seed,prog8c)
-STAGE0	= build/stage0/p8c$(EXE)
-P8CARGS	= -target $(TARGET) -lib lib -srcdirs src:src/$(TARGET)
+P8C	?= p8c
+ifeq ($(BOOT),p8c)
+    STAGE0 = $(P8C)
+    STAGE0DEP =
+else
+    STAGE0 = build/stage0/p8c$(EXE)
+    STAGE0DEP = $(STAGE0)
+endif
+P8CARGS	= -target $(TARGET) -lib lib -srcdirs $(SRCDIRS)
 CLANG	?= clang
 CFLAGS	?= -O2
 # (the math library is a library of its own on Linux; naming it does no harm elsewhere)
 LDLIBS	?= -lm
 
-ifeq ($(BOOT),seed)
+ifneq ($(filter seed p8c,$(BOOT)),)
 
+ifeq ($(BOOT),seed)
 $(STAGE0): $(SEED)
 	$(MD) build/stage0
 	gzip -dc $(SEED) > build/stage0/p8c.ll
 	$(CLANG) $(CFLAGS) -Wno-override-module build/stage0/p8c.ll -o $@ $(LDLIBS)
+endif
 
-$(P8P8): $(SRCS) $(STAGE0) | $(OUT)
+$(P8P8): $(SRCS) $(STAGE0DEP) | $(OUT)
 	$(STAGE0) $(P8CARGS) -llvm -out $(OUT) $(MAIN)
 	mv $(OUT)/main.ll $(OUT)/p8c.ll
 	$(CLANG) $(CFLAGS) -Wno-override-module $(OUT)/p8c.ll -o $@ $(LDLIBS)
@@ -321,7 +344,7 @@ HOSTTESTS=$(filter-out %/ls.p8 %/find.p8 %/clib.p8 %/hexdump.p8 %/wordcount.p8,$
 hostcmp:	$(P8P8)
 	@tests/hostcmp.sh $(P8P8) $(TRIPLE) .prog8-reference $(HOSTTESTS)
 hostbootstrap:	$(P8P8)
-	@tests/hostbootstrap.sh $(P8P8) $(TRIPLE) .prog8-reference $(MAIN) src:src/$(TARGET)
+	@tests/hostbootstrap.sh $(P8P8) $(TRIPLE) .prog8-reference $(MAIN) $(SRCDIRS)
 
 # the compiler itself on a 32-bit host: p8c built for llvm32 (WebAssembly) and run with wasmtime must write
 # what the native p8c writes, for its own source and for the 6502 assembly of test programs and examples
@@ -373,7 +396,7 @@ emucmp64:	$(P8P8)
 
 # the self-hosting test: stage 2 is p8p8 compiled by itself, stage 3 must be identical to stage 2
 bootstrap:	$(P8P8)
-	@tests/bootstrap.sh $(P8P8) .prog8-reference $(MAIN) src:src/$(TARGET)
+	@BOOTSTRAP_TARGET=$(TARGET) tests/bootstrap.sh $(P8P8) .prog8-reference $(MAIN) $(SRCDIRS)
 
 stats:	$(P8P8)
 	@echo "source lines:"; wc -l $(SRCS) | sort -n
