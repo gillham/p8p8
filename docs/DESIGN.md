@@ -264,7 +264,9 @@ machine's triple profile.
 `make wasihost` builds the WebAssembly compiler and compares what it writes
 with the native compiler's: its own source for llvm32 (it reproduces itself)
 and for llvm64, and the 6502 assembly of the test programs and examples.
-`tests/hostbootstrap.sh` with `HOSTCMP_TARGET=llvm32` does the same on a
+`tests/hostcmp.sh` compares programs on another machine; with `P8P8_CROSS`
+they are built here for it and copied with rsync, for a machine without
+clang.  `tests/hostbootstrap.sh` with `HOSTCMP_TARGET=llvm32` checks the compiler on a
 32-bit machine reached by ssh; `P8P8_HOST_BINARY` gives it a compiler that
 was cross-built here, which needs that platform's sysroot:
 

@@ -12,6 +12,10 @@
 # the library's triples directory, and the output is still compared with the
 # 64-bit program's here.
 #
+# A machine without clang: P8P8_CROSS holds the options that make p8c build for
+# it here (-Xcompile --sysroot=<dir> and so on; P8P8_CLANG names the clang).  The
+# programs are then built here and copied there with rsync.
+#
 # Usage: P8P8_HOST=<ssh host> tests/hostcmp.sh <p8p8> <triple> <reference dir> <file.p8>...
 p8p8=$1
 triple=$2
@@ -38,6 +42,19 @@ for f in "$@"; do
         continue
     fi
     timeout 60 "$work/here/$name" < /dev/null > "$work/here/$name.out" 2>&1
+    if [ -n "$P8P8_CROSS" ]; then
+        # (built here: its LLVM IR is not sent)
+        if ! "$p8p8" -target "$target" -triple "$triple" -lib "$lib" $P8P8_CROSS -o "$work/there/$name" "$f" > "$work/err" 2>&1; then
+            echo "failed (does not build for $triple): $f"
+            head -3 "$work/err" | cut -c1-300
+            failed=$((failed + 1))
+            total=$((total + 1))
+            continue
+        fi
+        rm -f "$work/there/$name.ll"
+        names="$names $name"
+        continue
+    fi
     if ! "$p8p8" -target "$target" -triple "$triple" -lib "$lib" -llvm -out "$work/there" "$f" > "$work/err" 2>&1; then
         echo "failed (p8p8 rejects it for $triple): $f"
         head -3 "$work/err"
@@ -79,6 +96,17 @@ case "$triple" in
         echo "cannot reach the machine"
         exit 2
     fi
+    if [ -n "$P8P8_CROSS" ]; then
+        rsync -a "$work/there/" "$P8P8_HOST:$remote/"
+        {
+            echo "cd $remote"
+            for name in $names; do
+                echo "(./$name < /dev/null > $name.out 2>&1) 2> /dev/null"
+            done
+        } | ssh -o BatchMode=yes "$P8P8_HOST" sh -s
+        rsync -a --include='*.out' --exclude='*' "$P8P8_HOST:$remote/" "$work/back/"
+        echo "rm -rf $remote" | ssh -o BatchMode=yes "$P8P8_HOST" sh -s
+    else
     # (a program that reads keys or asks for the terminal's size needs the console runtime)
     cp "${P8P8_RUNTIME:-runtime}/hosted-keys.c" "$work/there/"
     (cd "$work/there" && COPYFILE_DISABLE=1 tar cf - *.ll hosted-keys.c) | ssh -o BatchMode=yes "$P8P8_HOST" "tar xf - -C $remote 2> /dev/null"
@@ -93,6 +121,7 @@ case "$triple" in
         echo "tar cf - *.out *.build"
     } | ssh -o BatchMode=yes "$P8P8_HOST" sh -s | tar xf - -C "$work/back"
     echo "rm -rf $remote" | ssh -o BatchMode=yes "$P8P8_HOST" sh -s
+    fi
     ;;
 esac
 for name in $names; do
