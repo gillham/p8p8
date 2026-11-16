@@ -220,6 +220,13 @@ test:	$(TESTBIN) $(P8P8)
 	@echo "test srcdirs separators"
 	@$(P8P8) -lib lib -target llvm64 -srcdirs "nonexistent;src;src/llvm64" -check $(MAIN)
 	@$(P8P8) -lib lib -target llvm64 -srcdirs "nonexistent:src;src/llvm64" -check $(MAIN)
+	@echo "test triple profiles"
+	@$(P8P8) -lib lib -target llvm32 -triple armv7-unknown-linux-gnueabihf -llvm -out $(OUT) tests/hello.p8
+	@sed -n '4,5p' $(OUT)/hello.ll | diff -u tests/expected/triple_arm.txt -
+	@$(P8P8) -lib lib -target llvm32 -llvm -out $(OUT) tests/hello.p8
+	@sed -n '4,5p' $(OUT)/hello.ll | diff -u tests/expected/triple_wasm.txt -
+	@$(P8P8) -lib lib -target llvm32 -triple nosuch -check tests/hello.p8 2>&1 | diff -u tests/expected/triple_nosuch.txt -
+	@$(P8P8) -lib lib -target llvm32 -triple tests/triple_unknown.properties -check tests/hello.p8 2>&1 | diff -u tests/expected/triple_unknown.txt -
 	@echo "test console runtime"
 	@$(P8P8) -lib lib -target llvm64 -llvm -out $(OUT) tests/console.p8
 	@grep -c '^declare i32 @prog8_getkey()\|^declare i32 @prog8_termsize()' $(OUT)/console.ll | diff -u tests/expected/console_two.txt -

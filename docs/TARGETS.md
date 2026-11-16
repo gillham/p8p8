@@ -112,3 +112,47 @@ Scalar variables go to the free zero page locations: those with `@zp` or
 goes to the temporary cells of the generated code.  The scratch cells and
 `%zpreserved` ranges are taken out, `%zpallowed` restricts the rest.  With
 `%zeropage dontuse` nothing is placed there.
+
+## Platforms of llvm32: triple profiles
+
+`-target llvm32` is for 32-bit platforms through LLVM, and which one is a
+*triple profile*: a properties file in the format of the LLVM branch of Prog8
+(its `llvm-triples` directory), in the library's `triples/` directory.
+
+```
+p8c -target llvm32 program.p8                                    # wasm32-wasip1
+p8c -target llvm32 -triple armv7-unknown-linux-gnueabihf program.p8
+p8c -target llvm32 -triple config/mine.properties program.p8     # a file of your own
+```
+
+| Profile | Platform |
+|---|---|
+| `wasm32-wasip1` | WebAssembly with WASI, run by wasmtime; the default |
+| `armv7-unknown-linux-gnueabihf` | 32-bit ARM Linux |
+| `riscv32-unknown-linux-gnu` | 32-bit RISC-V Linux |
+
+The keys p8p8 reads:
+
+| Key | Meaning |
+|---|---|
+| `triple`, `datalayout` | what the LLVM IR says it is for |
+| `c_long_size` | has to be 4 |
+| `dirent_name_offset`, `readdir_symbol` | where `readdir()` has a file's name, and its C name |
+| `clang_args` | arguments for clang; `${VAR:-default}` is the shell's |
+| `link_args` | arguments after the files (`-lm`) |
+| `getkey_source` | the console runtime to build along when the program reads keys or asks for the terminal's size |
+| `output_extension` | of the program file |
+| `run_command` | what `-run` runs, with `{file}` for the program; without it the program itself |
+| `strict_indirect_signatures` | calls through a pointer name the exact type (WebAssembly) |
+| `c_main_symbol` | the name the C library calls `main` by |
+
+A profile with any other key is refused, so that nothing it asks for is
+left out silently: the bare-metal, Z80 and 6809 profiles of the LLVM branch
+are not usable yet.  clang is `clang` in the `PATH`, or `P8P8_CLANG`; for
+WebAssembly it is Homebrew's (`P8P8_WASM_CLANG`), because Apple's clang has
+none.  Building for another machine than the one p8c runs on needs that
+platform's sysroot in `clang_args`; `-llvm` writes the LLVM IR to build
+there instead.
+
+llvm64 and llvm16 do not read profiles yet: `-triple` takes one of the names
+built into p8p8 for them.

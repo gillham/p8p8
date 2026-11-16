@@ -8,12 +8,17 @@
 # Windows, for a triple with "windows" in it), removed at the end.  Programs whose output depends on the machine (directory listings, the time)
 # are not for this test.
 #
+# HOSTCMP_TARGET=llvm32 does it for a 32-bit profile: the triple names a file in
+# the library's triples directory, and the output is still compared with the
+# 64-bit program's here.
+#
 # Usage: P8P8_HOST=<ssh host> tests/hostcmp.sh <p8p8> <triple> <reference dir> <file.p8>...
 p8p8=$1
 triple=$2
 ref=$3
 shift 3
 lib=${P8P8_LIB:-lib}
+target=${HOSTCMP_TARGET:-llvm64}
 if [ -z "$P8P8_HOST" ]; then
     echo "set P8P8_HOST to the ssh name of a machine for $triple"
     exit 2
@@ -33,7 +38,7 @@ for f in "$@"; do
         continue
     fi
     timeout 60 "$work/here/$name" < /dev/null > "$work/here/$name.out" 2>&1
-    if ! "$p8p8" -target llvm64 -triple "$triple" -lib "$lib" -llvm -out "$work/there" "$f" > "$work/err" 2>&1; then
+    if ! "$p8p8" -target "$target" -triple "$triple" -lib "$lib" -llvm -out "$work/there" "$f" > "$work/err" 2>&1; then
         echo "failed (p8p8 rejects it for $triple): $f"
         head -3 "$work/err"
         failed=$((failed + 1))
@@ -74,11 +79,15 @@ case "$triple" in
         echo "cannot reach the machine"
         exit 2
     fi
-    (cd "$work/there" && COPYFILE_DISABLE=1 tar cf - *.ll) | ssh -o BatchMode=yes "$P8P8_HOST" "tar xf - -C $remote 2> /dev/null"
+    # (a program that reads keys or asks for the terminal's size needs the console runtime)
+    cp "${P8P8_RUNTIME:-runtime}/hosted-keys.c" "$work/there/"
+    (cd "$work/there" && COPYFILE_DISABLE=1 tar cf - *.ll hosted-keys.c) | ssh -o BatchMode=yes "$P8P8_HOST" "tar xf - -C $remote 2> /dev/null"
     {
         echo "cd $remote"
         for name in $names; do
-            echo "if clang -O2 -Wno-override-module $name.ll -o $name $linkargs > $name.build 2>&1; then"
+            keys=
+            grep -q '^declare .* @prog8_\(getkey\|waitkey\|termsize\)' "$work/there/$name.ll" && keys=hosted-keys.c
+            echo "if clang -O2 -Wno-override-module $keys $name.ll -o $name $linkargs > $name.build 2>&1; then"
             echo "  (./$name < /dev/null > $name.out 2>&1) 2> /dev/null; else echo BUILD-FAILED > $name.out; fi"
         done
         echo "tar cf - *.out *.build"

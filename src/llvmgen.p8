@@ -25,6 +25,7 @@
 %import float_platform
 %import llvmrt
 %import importer
+%import triple
 
 llvmgen {
     %option ignore_unused
@@ -42,7 +43,7 @@ llvmgen {
     ubyte[] ltype_bits = [0, 1, 8, 16, 32, 64, 64, 64]
 
     ^^ir.Program prog = 0
-    bool wasm = false               ; the llvm32 target: WebAssembly
+    bool llvm32 = false             ; the llvm32 target: its platform is the triple profile (triple.p8)
     long pointer_bytes = 8
     bool mos = false                ; the llvm16 target: a 6502 with the llvm-mos SDK
     bool c64 = false                ; its mos-c64 profile: a Commodore 64 program, not the simulator
@@ -50,6 +51,7 @@ llvmgen {
     ^^ubyte host_layout = 0
     bool linux = false              ; readdir's struct dirent has its name at offset 19, not 21
     bool intel_mac = false          ; opendir and readdir are the $INODE64 variants there
+    bool strict = false             ; calls through a pointer name the exact type (WebAssembly)
     bool console_keys = false       ; the program reads keys: characters and keys come from the console runtime
     bool console_size = false       ; the program asks for the terminal's size
     bool windows = false            ; 64 bit file offsets are _fseeki64 and _ftelli64; the dirent name is at 0
@@ -111,18 +113,19 @@ llvmgen {
         errors = 0
         ; the platform: llvm32 is WebAssembly with WASI (upstream's default triple profile for
         ; it), anything else the 64-bit machine p8p8 itself runs on
-        wasm = strings.compare(p.target, "llvm32") == 0
+        llvm32 = strings.compare(p.target, "llvm32") == 0
         mos = strings.compare(p.target, "llvm16") == 0
         pointer_bytes = 8
         size_lt = L_I64
         size_name = "i64"
         int_lt = L_I32
         int_name = "i32"
-        if wasm {
+        if llvm32 {
             pointer_bytes = 4
             size_lt = L_I32
             size_name = "i32"
         }
+        strict = llvm32 and triple.strict_indirect_signatures
         c64 = mos and importer.triple != 0 and strings.compare(importer.triple, "mos-c64") == 0
         find_console_use(p)
         ; the hosted platform of llvm64: upstream's four profiles
@@ -131,7 +134,7 @@ llvmgen {
         linux = false
         intel_mac = false
         windows = false
-        if not wasm and not mos and importer.triple != 0 {
+        if not llvm32 and not mos and importer.triple != 0 {
             if strings.compare(importer.triple, "x86_64-apple-macosx") == 0 {
                 host_name = "x86_64-apple-macosx"
                 host_layout = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
@@ -155,7 +158,7 @@ llvmgen {
         }
         long_lt = L_I64
         long_name = "i64"
-        if wasm or mos {
+        if llvm32 or mos {
             long_lt = L_I32
             long_name = "i32"
         }
@@ -176,8 +179,13 @@ llvmgen {
         emit(p.target)
         emit(" target\nsource_filename = \"")
         emit(p.name)
-        if wasm
-            emit("\"\ntarget datalayout = \"e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-ni:1:10:20\"\ntarget triple = \"wasm32-unknown-wasip1\"\n\n")
+        if llvm32 {
+            emit("\"\ntarget datalayout = \"")
+            emit(triple.datalayout)
+            emit("\"\ntarget triple = \"")
+            emit(triple.name)
+            emit("\"\n\n")
+        }
         else if mos
             emit("\"\ntarget datalayout = \"e-m:e-p:16:8-p1:8:8-i16:8-i32:8-i64:8-f32:8-f64:8-a:8-Fi8-n8\"\ntarget triple = \"mos\"\n\n")
         else {
@@ -1035,7 +1043,7 @@ llvmgen {
     }
 
     sub symbol_address(^^ubyte sym, long offset) -> ^^ubyte {
-        if wasm and offset == 0 {
+        if strict and offset == 0 {
             ^^ir.Sub called = find_sub(sym)
             if called != 0 and not called.is_asm and called.params == 0 {
                 ubyte crt = return_ltype(called)
@@ -1603,7 +1611,7 @@ llvmgen {
                 ; (indirect_entry), which leaves the value in the slot.
                 ^^ubyte cp = pointer_value(i.r1, ir.T_POINTER)
                 ^^ubyte cslot = hardware_slot(10, false)
-                if wasm {
+                if strict {
                     store_to(cslot, int_const(0, L_I64), L_I64)
                     line("call void ")
                     addn(cp)
@@ -2397,11 +2405,11 @@ llvmgen {
             for k in 0 to llvmrt.FILE16_CHUNKS - 1
                 buf.add_str(decls, llvmrt.file16_text[k])
         }
-        else if wasm {
+        else if llvm32 {
             for k in 0 to llvmrt.FILE32_DECLARES - 1
-                declare(llvmrt.file32_declare_names[k], llvmrt.file32_declares[k])
+                declare(llvmrt.file32_declare_names[k], profile_text(llvmrt.file32_declares[k]))
             for k in 0 to llvmrt.FILE32_CHUNKS - 1
-                buf.add_str(decls, llvmrt.file32_text[k])
+                buf.add_str(decls, profile_text(llvmrt.file32_text[k]))
         }
         else {
             for k in 0 to llvmrt.FILE_DECLARES - 1
@@ -2461,6 +2469,35 @@ llvmgen {
     ; differ on the other hosts: where readdir()'s struct dirent has its name (the
     ; "i32 21" of the one getelementptr on %dirent), and on Intel macOS the names of
     ; opendir and readdir.  Gives the text for the host, the same text when nothing changes.
+    ; The helper text of llvm32 was taken from a program for WebAssembly.  The
+    ; triple profile says where the dirent has its name there (the "i32 9"), and
+    ; which C routine readdir is.
+    sub profile_text(^^ubyte text) -> ^^ubyte {
+        bool other_readdir = strings.compare(triple.readdir_symbol, "readdir") != 0
+        if triple.dirent_name_offset == 9 and not other_readdir
+            return text
+        ^^buf.Buf hb = buf.new(300)
+        long i = 0
+        while text[i] != 0 {
+            if buf.bytes_equal(text + i, "ptr %dirent, i32 9", 18) {
+                buf.add_str(hb, "ptr %dirent, i32 ")
+                buf.add_long(hb, triple.dirent_name_offset)
+                i += 18
+            }
+            else if other_readdir and buf.bytes_equal(text + i, "@readdir(", 9) {
+                buf.add_byte(hb, '@')
+                buf.add_str(hb, triple.readdir_symbol)
+                buf.add_byte(hb, '(')
+                i += 9
+            }
+            else {
+                buf.add_byte(hb, text[i])
+                i++
+            }
+        }
+        return strtab.intern(hb.data, hb.len as uword)
+    }
+
     sub host_text(^^ubyte text) -> ^^ubyte {
         if not linux and not intel_mac and not windows
             return text
@@ -2655,7 +2692,7 @@ llvmgen {
     sub find_console_use(^^ir.Program p) {
         console_keys = false
         console_size = false
-        if wasm or mos
+        if mos or (llvm32 and triple.getkey_source == 0)
             return
         ^^ir.Block bl = p.blocks
         while bl != 0 {
@@ -3847,8 +3884,11 @@ llvmgen {
             emit("define i16 @main() {\nentry:\n")
         }
         else {
-            if wasm
-                emit("define i32 @__main_argc_argv(i32 %argc, ptr %argv) {\n")
+            if llvm32 {
+                emit("define i32 @")
+                emit(triple.c_main_symbol)
+                emit("(i32 %argc, ptr %argv) {\n")
+            }
             else
                 emit("define i32 @main(i32 %argc, ptr %argv) {\n")
             emit("entry:\n  store i32 %argc, ptr @.sys.argc\n  store ptr %argv, ptr @.sys.argv\n")

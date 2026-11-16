@@ -60,7 +60,7 @@ Things that have bitten here:
 | `src/irgen.p8`, `irprune.p8`, `ir.p8` | the IR, in upstream's `.p8ir` format |
 | `src/gen6502.p8`, `peep6502.p8` | the 6502/65C02 code generator and its peephole passes |
 | `src/llvmgen.p8` | LLVM IR for the host |
-| `src/target.p8`, `importer.p8`, `main.p8` | target files, module lookup, the driver |
+| `src/target.p8`, `triple.p8`, `importer.p8`, `main.p8` | target files, triple profiles of llvm32, module lookup, the driver |
 | `lib/` | the library programs are built with (a submodule; see its README) |
 | `runtime/` | support sources some programs are built with |
 | `tests/` | test programs, scripts, expected output |

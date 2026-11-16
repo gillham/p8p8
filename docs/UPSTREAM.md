@@ -92,7 +92,9 @@ for each change, with the commit.
    `targets/llvm*` of the library), syscalls from 200 up
    (`codeGenLlvm/.../InstrSyscall.kt` against `lower_syscall` in
    `src/llvmgen.p8`), and the C sources it builds programs with
-   (`codeCore/res/prog8lib/llvm-triples/` against `runtime/`).
+   (`codeCore/res/prog8lib/llvm-triples/` against `runtime/`, and its
+   profiles against the library's `triples/`: a key that is new there has
+   to be known to `src/triple.p8` before a profile that uses it works).
 3. `python3 setup.py`, for the new examples, tests and documentation.
 4. `make programs`, `roundtrip`, `corpus`: the grammar.  Then
    `make conformance`, `vmcmp`, `nativecmp`, and the emulator suites.

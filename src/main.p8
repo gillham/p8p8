@@ -30,6 +30,7 @@
 %import version
 %import crumb
 %import warn
+%import triple
 %zeropage basicsafe
 
 main {
@@ -711,7 +712,24 @@ main {
         ; the platform profile of an llvm target: its own library files come first
         bool hosted = strings.compare(importer.target, "llvm64") == 0
         cross = false
-        if importer.triple != 0 {
+        if strings.compare(importer.target, "llvm32") == 0 {
+            ; llvm32: the platform is a triple profile, a file of the library
+            if not triple.load(importer.triple, lib_root) {
+                out.err()
+                out.puts("error: -triple ")
+                if importer.triple != 0
+                    out.puts(importer.triple)
+                out.puts(": ")
+                out.puts(triple.error_text)
+                if triple.bad_key != 0 {
+                    out.puts(": ")
+                    out.puts(triple.bad_key)
+                }
+                out.nl()
+                out.exit(1)
+            }
+        }
+        else if importer.triple != 0 {
             if strings.compare(importer.triple, "mos-c64") == 0 and strings.compare(importer.target, "llvm16") == 0
                 importer.triple_library = "c64"
             else if hosted and (strings.compare(importer.triple, "arm64-apple-macosx") == 0
@@ -1190,10 +1208,10 @@ main {
         if cmd == 0
             cmd = buf.new(512)
         buf.clear(cmd)
-        bool wasm = strings.compare(importer.target, "llvm32") == 0
+        bool llvm32 = strings.compare(importer.target, "llvm32") == 0
         bool mos = strings.compare(importer.target, "llvm16") == 0
         bool mos_c64 = mos and importer.triple_library != 0
-        bool windows = is_llvm and not wasm and not mos and importer.triple != 0 and strings.compare(importer.triple, "x86_64-pc-windows-msvc") == 0
+        bool windows = is_llvm and not llvm32 and not mos and importer.triple != 0 and strings.compare(importer.triple, "x86_64-pc-windows-msvc") == 0
         ^^ubyte extension = ""
         if not is_llvm and opt_own {
             ; the assembly that p8p8 wrote: 64tass makes the program
@@ -1261,9 +1279,23 @@ main {
             extension = ".prg"
         }
         else {
-            if wasm {
-                buf.add_str(cmd, "\"${P8P8_WASM_CLANG:-/opt/homebrew/opt/llvm/bin/clang}\" --target=wasm32-wasip1 \"--sysroot=${WASI_SYSROOT:-/opt/homebrew/opt/wasi-libc/share/wasi-sysroot}\" -Wl,--fatal-warnings -O2")
-                extension = ".wasm"
+            if llvm32 {
+                ; the triple profile's clang arguments.  Apple's clang has no WebAssembly:
+                ; there it is Homebrew's unless P8P8_WASM_CLANG names another.
+                if buf.bytes_equal(triple.name, "wasm", 4)
+                    buf.add_str(cmd, "\"${P8P8_WASM_CLANG:-/opt/homebrew/opt/llvm/bin/clang}\" ")
+                else
+                    buf.add_str(cmd, "\"${P8P8_CLANG:-clang}\" ")
+                buf.add_str(cmd, triple.clang_args)
+                buf.add_str(cmd, " -O2")
+                if triple.getkey_source != 0 and (llvmgen.console_keys or llvmgen.console_size) {
+                    buf.add_str(cmd, " \"")
+                    buf.add_str(cmd, runtime_dir())
+                    buf.add_byte(cmd, '/')
+                    buf.add_str(cmd, triple.getkey_source)
+                    buf.add_byte(cmd, '"')
+                }
+                extension = triple.output_extension
             }
             else if mos_c64 {
                 buf.add_str(cmd, "\"${LLVM_MOS:-$HOME/.local/llvm-mos}/bin/mos-c64-clang\" -Os \"")
@@ -1301,7 +1333,11 @@ main {
             buf.add_str(cmd, " -o ")
             add_output(name, extension)
             ; (the math library is apart on Linux)
-            if not wasm and not mos and importer.triple != 0 and buf.cstr_len(importer.triple) > 10 and buf.bytes_equal(importer.triple + buf.cstr_len(importer.triple) - 9, "linux-gnu", 9)
+            if llvm32 and triple.link_args != 0 {
+                buf.add_byte(cmd, ' ')
+                buf.add_str(cmd, triple.link_args)
+            }
+            if not llvm32 and not mos and importer.triple != 0 and buf.cstr_len(importer.triple) > 10 and buf.bytes_equal(importer.triple + buf.cstr_len(importer.triple) - 9, "linux-gnu", 9)
                 buf.add_str(cmd, " -lm")
         }
         run_cmd("building the program")
@@ -1309,9 +1345,30 @@ main {
         if not opt_run
             return
         buf.clear(cmd)
-        if wasm
-            buf.add_str(cmd, "wasmtime --dir=. ")
-        else if mos_c64 or strings.compare(importer.target, "c64") == 0
+        if llvm32 {
+            ; the profile's run command with the program for {file}, or the program itself
+            if triple.run_command == 0 {
+                if outdir == 0
+                    buf.add_str(cmd, "./")
+                add_output(name, extension)
+            }
+            else {
+                long rk = 0
+                while triple.run_command[rk] != 0 {
+                    if buf.bytes_equal(triple.run_command + rk, "{file}", 6) {
+                        add_output(name, extension)
+                        rk += 6
+                    }
+                    else {
+                        buf.add_byte(cmd, triple.run_command[rk])
+                        rk++
+                    }
+                }
+            }
+            run_cmd("running the program")
+            return
+        }
+        if mos_c64 or strings.compare(importer.target, "c64") == 0
             buf.add_str(cmd, "x64sc -autostart ")
         else if mos
             buf.add_str(cmd, "\"${LLVM_MOS:-$HOME/.local/llvm-mos}/bin/mos-sim\" ")
@@ -1342,7 +1399,7 @@ main {
             run_cmd("running the program")
             return
         }
-        if is_llvm and not wasm and not mos and outdir == 0
+        if is_llvm and not mos and outdir == 0
             buf.add_str(cmd, "./")
         add_output(name, extension)
         run_cmd("running the program")

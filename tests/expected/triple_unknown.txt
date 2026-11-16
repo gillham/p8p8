@@ -1,0 +1,1 @@
+error: -triple tests/triple_unknown.properties: p8p8 does not know this key of a triple profile yet: link_command

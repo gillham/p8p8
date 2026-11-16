@@ -5,6 +5,8 @@
 - The compiler itself builds for llvm32 (WebAssembly with WASI) and runs
   under wasmtime, where it checks programs and writes assembly, IR and
   LLVM IR; `make wasihost` compares its output with the native compiler's.
+- `-target llvm32` takes its platform from a triple profile in the library
+  (`-triple`): WebAssembly as before, and 32-bit ARM and RISC-V Linux.
 
 ## 0.1.0
 

@@ -147,6 +147,9 @@ Options are upstream's where both have them, with one dash or two.
   the program unless `-build`, `-run`, `-emu` or `-o <file>` is given.
 - `-srcdirs` takes `:` and `;` between directories on every system;
   upstream takes `:` on Unix and `;` on Windows.
+- `-triple` for llvm32 reads the LLVM branch's profile files, but only the
+  keys of the hosted 32-bit platforms ([TARGETS.md](TARGETS.md)); for llvm64
+  and llvm16 it takes a few names that are built in.
 - The output directory of `-out` or `-o` has to exist.
 - One program for each run of the compiler: several source files on one
   command line are not reliable.

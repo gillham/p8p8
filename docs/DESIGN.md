@@ -258,6 +258,13 @@ native compiler's: its own source for llvm32 (it reproduces itself) and
 for llvm64, and the 6502 assembly of the test programs and examples.
 The seed is for 64-bit hosts: a 32-bit compiler is built by a 64-bit one.
 
+The platform of an llvm32 program is not built into the compiler: it is a
+triple profile, a properties file of the library (`src/triple.p8`,
+[TARGETS.md](TARGETS.md)).  The generator takes the data layout, the name
+of `main`, the layout of a directory entry and whether indirect calls are
+typed from it, the driver the clang command.  The platforms of llvm64 and
+llvm16 are still in `main.p8` and `llvmgen.p8`.
+
 ## Not done yet
 
 - `make` and the test suites on Windows: there is the build script, and the
