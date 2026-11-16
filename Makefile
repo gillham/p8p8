@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	qemucmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -358,6 +358,14 @@ hostbootstrap:	$(P8P8)
 WASITESTS=$(wildcard tests/programs/*.p8) $(CONFTESTS) $(wildcard .prog8-reference/examples/*.p8 .prog8-reference/examples/c64/*.p8 .prog8-reference/examples/cx16/*.p8)
 wasihost:	$(P8P8)
 	@tests/wasihost.sh $(P8P8) $(MAIN) $(WASITESTS)
+
+# the 68000: programs built for qemu68k by prog8c-llvm and by p8p8's own code generator, run in QEMU
+# (needs vasmm68k_mot, vlink and qemu-system-m68k; not localzero.p8: a @dirty local is in the
+#  frame upstream and static here, and not callpointer.p8: it keeps addresses in words)
+QEMUTESTS=tests/hello.p8 $(filter-out %/localzero.p8 %/callpointer.p8,$(wildcard tests/programs/*.p8)) $(CONFTESTS) \
+	$(addprefix .prog8-reference/examples/,fibonacci.p8 primes.p8)
+qemucmp:	$(P8P8)
+	@tests/qemucmp.sh $(P8P8) $(QEMUTESTS)
 
 # and for llvm16: a 6502 program built with the llvm-mos SDK, run in its simulator mos-sim
 # (LLVM_MOS names the SDK, default ~/.local/llvm-mos; programs with floats are skipped: upstream has none on llvm16)

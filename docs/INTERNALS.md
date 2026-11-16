@@ -25,6 +25,7 @@ About 31,700 lines of Prog8 in 36 source files.  The larger ones:
 | `irgen.p8` | 6113 | syntax tree to IR |
 | `gen6502.p8` | 4026 | IR to 6502 assembly |
 | `llvmgen.p8` | 3779 | IR to LLVM IR |
+| `gen68k.p8` | 1994 | IR to 68000 assembly (new: qemu68k, no floats) |
 | `peep6502.p8` | 2920 | the passes over the 6502 assembly |
 | `checker.p8` | 1860 | the errors |
 | `typer.p8` | 1789 | types and constant folding |

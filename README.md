@@ -19,6 +19,9 @@ The command is `p8c`.
   Commodore 128, the Commander X16 and the PET come with it; any other 6502
   machine is described by a properties file in the format of the reference
   compiler's custom targets (see [docs/TARGETS.md](docs/TARGETS.md)).
+- For the 68000 there is a first code generator, for the `qemu68k` target
+  only (a bare 68020 in QEMU): it writes vasm assembly and links with vlink.
+  It has no floating point yet and does nothing for the Amiga targets.
 - For the host it writes LLVM IR and builds a native executable with clang.
   That is how p8p8 compiles itself.
 
@@ -147,6 +150,11 @@ For a 6502 machine the program is built with p8p8's own code generator and
 64tass.  `-codegen upstream` hands p8p8's IR to `prog8c-llvm` instead, and
 `-ir` only writes the IR.
 
+`-target qemu68k -build` (or `-o`, or `-run` to start it in QEMU) builds a
+68000 program with p8p8's 68000 code generator; that needs `vasmm68k_mot`,
+`vlink` and, to run it, `qemu-system-m68k`.  Without one of those options a
+qemu68k or Amiga program is only checked.
+
 A command line written for `prog8c` mostly works as it is: options may
 stand before the source file or after it, and may be
 written with two dashes, `-emu` is `-run`, and the options of `prog8c` that
@@ -251,6 +259,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make wasihost` | p8c built as WebAssembly (llvm32) and run with wasmtime writes what the native p8c writes: its own source, and the 6502 assembly of the test programs |
 | `make buildall` | every C64 and X16 example builds |
 | `make emucmp`, `make emucmp64` | programs built by both compilers print the same in x16emu and in VICE |
+| `make qemucmp` | programs built for qemu68k by both compilers print the same in QEMU |
 | `make gfxcmp` | programs built by both compilers draw the same in x16emu |
 | `make programs`, `make roundtrip`, `make corpus` | the front end over the whole reference material |
 | `make upstreamcheck` | not a test: what changed in Prog8 since the commit p8p8 follows, sorted by what it means here ([docs/UPSTREAM.md](docs/UPSTREAM.md)) |

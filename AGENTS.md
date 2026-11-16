@@ -60,6 +60,7 @@ Things that have bitten here:
 | `src/lexer.p8`, `parser.p8`, `symtab.p8`, `resolver.p8`, `typer.p8`, `checker.p8` | the front end |
 | `src/irgen.p8`, `irprune.p8`, `ir.p8` | the IR, in upstream's `.p8ir` format |
 | `src/gen6502.p8`, `peep6502.p8` | the 6502/65C02 code generator and its peephole passes |
+| `src/gen68k.p8` | the 68000 code generator (qemu68k; new) |
 | `src/llvmgen.p8` | LLVM IR for the host |
 | `src/target.p8`, `triple.p8`, `importer.p8`, `main.p8` | target files, triple profiles of llvm32, module lookup, the driver |
 | `lib/` | the library programs are built with (a submodule; see its README) |
@@ -83,6 +84,7 @@ Which suite after which change (see the Makefile for all of them):
 | front end | `make programs`, `make roundtrip` |
 | IR generation | `make conformance` (quick), `make vmcmp`, `make nativecmp` |
 | 6502 code generator or peephole | `BUILDALL_CODEGEN=own make buildall`, `EMUCMP_CODEGEN=own make emucmp`, `EMUCMP_CODEGEN=own make emucmp64` |
+| 68000 code generator | `make qemucmp` (needs vasmm68k_mot, vlink, qemu-system-m68k) |
 | what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |
 
 The comparison suites build each program with the reference compiler and

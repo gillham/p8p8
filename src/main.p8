@@ -18,6 +18,7 @@
 %import irgen
 %import llvmgen
 %import gen6502
+%import gen68k
 %import irprune
 %import target
 %import peep6502
@@ -51,6 +52,7 @@ main {
     ^^buf.Buf xcompile = 0          ; -Xcompile: more arguments for clang
     ^^ubyte opt_target = 0          ; -target: a name, or a .properties file
     bool opt_own = false            ; p8p8's 6502 code generator, not prog8c-llvm's back end
+    bool is_m68k = false            ; the target is a 68000 machine
     ubyte opt_codegen = 0           ; -codegen: 0 not given, 1 own, 2 upstream
     ubyte opt_encoding = encoding.E_INVALID     ; -encoding: the default encoding, in place of the target's
     bool opt_asmlist = false        ; -asmlist: the assembler writes a listing
@@ -618,6 +620,8 @@ main {
         out.nl()
         out.puts("  -codegen own|upstream   for a 6502 machine: p8p8's own code generator and 64tass (the default), or prog8c-llvm's back end")
         out.nl()
+        out.puts("                          (qemu68k: p8p8's own 68000 code generator with vasm and vlink; there is no other)")
+        out.nl()
         out.puts("  -asmlist       the assembler writes a listing (name.list)")
         out.nl()
         out.puts("  -keepunused    keep subroutines and variables that nothing refers to")
@@ -677,6 +681,11 @@ main {
             if target.loaded and not explicit_mode
                 opt_build = true
             opt_own = opt_codegen == 1 or (opt_codegen == 0 and target.loaded and opt_build)
+            ; a 68000 machine: p8p8's own code generator when a program is asked for
+            ; (there is no other way to build one from here yet)
+            is_m68k = strings.compare(tname, "qemu68k") == 0 or buf.bytes_equal(tname, "amiga", 5)
+            if is_m68k
+                opt_own = opt_codegen == 1 or (opt_codegen == 0 and opt_build)
             if not target.loaded and (opt_ir or opt_build or not explicit_mode) and not buf.bytes_equal(tname, "llvm", 4)
                     and strings.compare(tname, "virtual") != 0 and not buf.bytes_equal(tname, "amiga", 5)
                     and strings.compare(tname, "qemu68k") != 0 {
@@ -862,7 +871,7 @@ main {
         if diag.errors > 0
             return
         bool is_llvm = buf.bytes_equal(importer.target, "llvm", 4)
-        irprune.asmsubs_kept = not opt_own or is_llvm
+        irprune.asmsubs_kept = not opt_own or is_llvm or is_m68k
         crumb.at("removing unused code")
         if not opt_keepunused
             irprune.run(p)
@@ -886,7 +895,16 @@ main {
                 out.exit(1)
             write_output(oname, ".ll", b)
         }
-        if opt_own and not is_llvm {
+        if opt_own and is_m68k {
+            ; p8p8's own 68000 code generator: assembly for vasm
+            buf.clear(b)
+            crumb.at("generating 68000 code")
+            gen68k.generate(p, b)
+            if gen68k.errors > 0
+                out.exit(1)
+            write_output(oname, ".asm", b)
+        }
+        else if opt_own and not is_llvm {
             ; p8p8's own 6502 code generator: assembly for 64tass
             buf.clear(b)
             crumb.at("generating 6502 code")
@@ -1231,6 +1249,33 @@ main {
         bool mos_c64 = mos and importer.triple_library != 0
         bool windows = is_llvm and not llvm32 and not mos and importer.triple != 0 and strings.compare(importer.triple, "x86_64-pc-windows-msvc") == 0
         ^^ubyte extension = ""
+        if is_m68k and opt_own {
+            ; the assembly that p8p8 wrote: vasm makes an object file, vlink the program,
+            ; laid out by the target's link.ld in the library
+            buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Felf -opt-speed -ldots -spaces -quiet -o ")
+            add_output(name, ".o")
+            buf.add_byte(cmd, ' ')
+            add_output(name, ".asm")
+            run_cmd("assembling the program")
+            buf.clear(cmd)
+            buf.add_str(cmd, "vlink -b elf32m68k -n -T \"")
+            buf.add_str(cmd, lib_root)
+            buf.add_str(cmd, "/prog8lib/")
+            buf.add_str(cmd, importer.target)
+            buf.add_str(cmd, "/link.ld\" -o ")
+            add_output(name, ".elf")
+            buf.add_byte(cmd, ' ')
+            add_output(name, ".o")
+            run_cmd("linking the program")
+            built_ext = ".elf"
+            if not opt_run
+                return
+            buf.clear(cmd)
+            buf.add_str(cmd, "qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic -kernel ")
+            add_output(name, ".elf")
+            run_cmd("running the program")
+            return
+        }
         if not is_llvm and opt_own {
             ; the assembly that p8p8 wrote: 64tass makes the program
             ; (the options upstream gives 64tass for each output type)

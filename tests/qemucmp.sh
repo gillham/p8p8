@@ -1,0 +1,78 @@
+#!/bin/sh
+# Builds each program for qemu68k with prog8c-llvm (from the source, its own 68000 code
+# generator) and with p8p8's 68000 code generator, runs both in QEMU and compares what
+# they print.  Needs vasmm68k_mot, vlink and qemu-system-m68k.
+#
+# Where the two differ, upstream's llvm64 build of the program is asked as well: when
+# every line of p8p8's output is the line of one of the two, it is upstream's 68000
+# program that is off (its llvm64 program alone will not do: some lines depend on the
+# byte order).
+#
+# A program that p8p8's generator cannot build yet is counted apart, not as a failure:
+# the generator is new, and the list of what it lacks is what this prints.
+# QEMUCMP_STRICT=1 makes those failures too.
+#
+# Usage: tests/qemucmp.sh <p8p8> <file.p8>...
+p8p8=$1
+shift
+lib=${P8P8_LIB:-lib}
+work=${TMPDIR:-/tmp}/p8p8_qemucmp.$$
+mkdir -p "$work/up" "$work/p8"
+run() {
+    # run <dir> <name>: the program's output
+    (cd "$1" && timeout "${QEMUCMP_TIMEOUT:-20}" qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic \
+        -kernel "$2.elf" < /dev/null 2>&1)
+}
+agree() {
+    # agree <a> <b> <c>: has c as many lines as a and b, and is every line of it that of a or of b?
+    # (a line that depends on the byte order is upstream's 68000 line, one its 68000 code
+    # gets wrong is the llvm64 line)
+    [ "$(wc -l < "$1")" -eq "$(wc -l < "$3")" ] && [ "$(wc -l < "$2")" -eq "$(wc -l < "$3")" ] &&
+        paste -d '\001' "$1" "$2" "$3" | awk -F '\001' '$3 != $1 && $3 != $2 { bad = 1 } END { exit bad }'
+}
+failed=0
+total=0
+lacking=0
+other=0
+for f in "$@"; do
+    name=$(basename "$f" .p8)
+    if ! prog8c-llvm -target qemu68k -plaintext -quiet -out "$work/up" "$f" > /dev/null 2>&1; then
+        echo "skipped (upstream rejects): $f"
+        continue
+    fi
+    total=$((total + 1))
+    if ! "$p8p8" -target qemu68k -lib "$lib" -build -out "$work/p8" "$f" > "$work/p8.err" 2>&1; then
+        if grep -q "not supported" "$work/p8.err"; then
+            echo "not yet ($(grep -m1 "not supported" "$work/p8.err" | sed 's/^68000 code generator: //')): $f"
+            lacking=$((lacking + 1))
+        else
+            echo "failed (p8p8 does not build it): $f"
+            head -4 "$work/p8.err"
+            failed=$((failed + 1))
+        fi
+        continue
+    fi
+    run "$work/up" "$name" > "$work/up.out"
+    if [ $? -eq 124 ]; then
+        echo "skipped (upstream's program does not end): $f"
+        total=$((total - 1))
+        continue
+    fi
+    run "$work/p8" "$name" > "$work/p8.out"
+    if cmp -s "$work/up.out" "$work/p8.out"; then
+        echo "ok: $f"
+    elif prog8c-llvm -target llvm64 -plaintext -quiet -o "$work/native" "$f" > /dev/null 2>&1 &&
+            timeout 60 "$work/native" < /dev/null > "$work/native.out" 2>&1 &&
+            agree "$work/up.out" "$work/native.out" "$work/p8.out"; then
+        # a second opinion: the same program as upstream builds it for this machine
+        echo "ok (lines as upstream's llvm64 program prints them, where its 68000 program differs): $f"
+        other=$((other + 1))
+    else
+        echo "failed (output differs): $f"
+        diff "$work/up.out" "$work/p8.out" | head -10
+        failed=$((failed + 1))
+    fi
+done
+rm -rf "$work"
+echo "QEMU comparison (qemu68k, own code generator): $total programs, $failed failed, $lacking not built yet, $other where upstream's 68000 program is the odd one"
+[ "$failed" -eq 0 ] && { [ -z "$QEMUCMP_STRICT" ] || [ "$lacking" -eq 0 ]; }

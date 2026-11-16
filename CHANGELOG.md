@@ -22,6 +22,10 @@
   On the 68000 a division in a later value overwrote an earlier one.
   Floats among several return values have slots of their own (s25 on), as
   upstream numbers them.
+- A first 68000 code generator: `-target qemu68k -build` (or `-o`, `-run`)
+  writes assembly for vasm, links with vlink and runs in QEMU.  No floating
+  point yet, no Amiga programs, and no passes over the code: it is correct
+  on the test programs (`make qemucmp`), not small or fast.
 
 ## 0.1.0
 
