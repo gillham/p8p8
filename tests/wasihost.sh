@@ -14,10 +14,10 @@ rm -rf "$work"
 mkdir -p "$work/n" "$work/w"
 wasm="wasmtime --dir . $work/p8c.wasm"
 echo "p8c builds itself for llvm32"
-"$p8c" -lib "$lib" -target llvm32 -srcdirs src:src/wasi32:src/llvm64 -o "$work/p8c" "$main" || exit 1
+"$p8c" -lib "$lib" -target llvm32 -srcdirs src:src/wasi32:src/llvm32:src/llvm64 -o "$work/p8c" "$main" || exit 1
 failed=0
 echo "the WebAssembly p8c compiles itself"
-$wasm -lib "$lib" -target llvm32 -srcdirs src:src/wasi32:src/llvm64 -ir -llvm -out "$work/w" "$main" || exit 1
+$wasm -lib "$lib" -target llvm32 -srcdirs src:src/wasi32:src/llvm32:src/llvm64 -ir -llvm -out "$work/w" "$main" || exit 1
 if cmp -s "$work/p8c.ll" "$work/w/main.ll"; then
     echo "its LLVM IR for llvm32 is the one it was built from ($(wc -c < "$work/p8c.ll") bytes)"
 else

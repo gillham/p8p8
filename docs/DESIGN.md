@@ -247,16 +247,36 @@ then used in the compiler's own sources.
 
 ## A 32-bit host
 
-The compiler builds for llvm32 too: WebAssembly with WASI, run by wasmtime.
-`src/wasi32/` holds `mem_platform.p8` and `io_platform.p8` for it (sizes of
-the C library are 32 bits; there is nothing to run a command or catch a
-signal with), and the source directories are `src:src/wasi32:src/llvm64`,
-so every other module is the one of llvm64.  Such a compiler checks
-programs and writes assembly, IR and LLVM IR; it cannot start 64tass or
-clang.  `make wasihost` builds it and compares what it writes with the
-native compiler's: its own source for llvm32 (it reproduces itself) and
-for llvm64, and the 6502 assembly of the test programs and examples.
-The seed is for 64-bit hosts: a 32-bit compiler is built by a 64-bit one.
+The compiler builds for llvm32 too, and runs there.  Two host layers lie
+over llvm64's, each with only the modules that differ:
+
+- `src/llvm32/`: a 32-bit hosted platform (Linux on ARM).  The C library's
+  sizes are 32 bits wide; everything else is as on a 64-bit host.  Source
+  directories `src:src/llvm32:src/llvm64`.
+- `src/wasi32/`: WebAssembly with WASI, run by wasmtime.  There is nothing
+  to run a command or catch a signal with, so this compiler checks programs
+  and writes assembly, IR and LLVM IR, and cannot start 64tass or clang.
+  Source directories `src:src/wasi32:src/llvm32:src/llvm64`.
+
+On a 32-bit host a program is for that machine by default: llvm32, with the
+machine's triple profile.
+
+`make wasihost` builds the WebAssembly compiler and compares what it writes
+with the native compiler's: its own source for llvm32 (it reproduces itself)
+and for llvm64, and the 6502 assembly of the test programs and examples.
+`tests/hostbootstrap.sh` with `HOSTCMP_TARGET=llvm32` does the same on a
+32-bit machine reached by ssh; `P8P8_HOST_BINARY` gives it a compiler that
+was cross-built here, which needs that platform's sysroot:
+
+```
+P8P8_CLANG=<a clang with the platform and lld> p8c -target llvm32 \
+    -triple armv7-unknown-linux-gnueabihf \
+    -Xcompile --sysroot=<dir> -Xcompile -fuse-ld=lld \
+    -srcdirs src:src/llvm32:src/llvm64 -o build/arm32/p8c src/main.p8
+```
+
+The seed is for 64-bit hosts: a 32-bit compiler is built by a 64-bit one,
+or from its LLVM IR by the clang of the 32-bit machine.
 
 The platform of an llvm32 program is not built into the compiler: it is a
 triple profile, a properties file of the library (`src/triple.p8`,

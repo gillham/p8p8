@@ -2,8 +2,8 @@
 ; the standard streams through the C library.  WASI has no processes and no
 ; signals, so the compiler cannot run an assembler or clang from here: it
 ; checks programs and writes their assembly, IR or LLVM IR.  The other modules
-; of the host layer are those of llvm64 (the source directories are
-; src:src/wasi32:src/llvm64).
+; of the host layer are those of llvm32 and llvm64 (the source directories are
+; src:src/wasi32:src/llvm32:src/llvm64).
 
 %import fileio
 

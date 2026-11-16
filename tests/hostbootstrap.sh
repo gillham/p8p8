@@ -16,6 +16,11 @@ ref=$3
 main=$4
 srcdirs=$5
 lib=${P8P8_LIB:-lib}
+# HOSTCMP_TARGET=llvm32 for a 32-bit machine (the triple is then a profile of the
+# library, and the source directories those of a 32-bit host).  P8P8_HOST_BINARY
+# names a p8c already built for the machine, by cross compiling: it is sent and
+# used in place of building the LLVM IR there, which takes a small machine long.
+target=${HOSTCMP_TARGET:-llvm64}
 if [ -z "$P8P8_HOST" ]; then
     echo "set P8P8_HOST to the ssh name of a machine for $triple"
     exit 2
@@ -23,7 +28,9 @@ fi
 name=$(basename "$main" .p8)
 work=${TMPDIR:-/tmp}/p8p8_hostbootstrap.$$
 mkdir -p "$work/send"
-"$p8p8" -target llvm64 -triple "$triple" -lib "$lib" -srcdirs "$srcdirs" -llvm -out "$work/send" "$main" || exit 1
+"$p8p8" -target "$target" -triple "$triple" -lib "$lib" -srcdirs "$srcdirs" -llvm -out "$work/send" "$main" || exit 1
+triples=
+[ -d "$lib/triples" ] && triples="$lib/triples"
 linkargs=
 case "$triple" in *linux*) linkargs=-lm ;; esac
 case "$triple" in
@@ -70,13 +77,18 @@ case "$triple" in
     {
         tar cf - -C "$work/send" "$name.ll"
     } | ssh -o BatchMode=yes "$P8P8_HOST" "tar xf - -C $remote 2> /dev/null"
-    tar cf - src tests/hello.p8 runtime "$lib/prog8lib" "$lib/common" "$lib/targets" -C "$ref" examples/llvm/ls.p8 \
+    COPYFILE_DISABLE=1 tar cf - src tests/hello.p8 runtime "$lib/prog8lib" "$lib/common" "$lib/targets" $triples -C "$ref" examples/llvm/ls.p8 \
         | ssh -o BatchMode=yes "$P8P8_HOST" "tar xf - -C $remote 2> /dev/null"
+    if [ -n "$P8P8_HOST_BINARY" ]; then
+        ssh -o BatchMode=yes "$P8P8_HOST" "cat > $remote/p8c && chmod +x $remote/p8c" < "$P8P8_HOST_BINARY"
+    fi
     {
         echo "cd $remote || exit 1"
-        echo "clang -O2 -Wno-override-module $name.ll -o p8c $linkargs || { echo BUILD-FAILED; exit 1; }"
+        if [ -z "$P8P8_HOST_BINARY" ]; then
+            echo "clang -O2 -Wno-override-module $name.ll -o p8c $linkargs || { echo BUILD-FAILED; exit 1; }"
+        fi
         echo "mkdir out hello lsdir"
-        echo "./p8c -target llvm64 -lib lib -srcdirs $srcdirs -llvm -out out $main || echo SELF-COMPILE-FAILED"
+        echo "./p8c -target $target -triple $triple -lib lib -srcdirs $srcdirs -llvm -out out $main || echo SELF-COMPILE-FAILED"
         echo "if cmp -s $name.ll out/$name.ll; then echo IDENTICAL; else echo DIFFERENT; fi"
         echo "echo hello: \$(./p8c -lib lib -out hello -run tests/hello.p8 2>&1)"
         echo "touch lsdir/alpha.txt lsdir/beta.txt; mkdir lsdir/gamma"

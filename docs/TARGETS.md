@@ -120,7 +120,7 @@ goes to the temporary cells of the generated code.  The scratch cells and
 (its `llvm-triples` directory), in the library's `triples/` directory.
 
 ```
-p8c -target llvm32 program.p8                                    # wasm32-wasip1
+p8c -target llvm32 program.p8                                    # wasm32-wasip1 (on a 32-bit machine: that machine)
 p8c -target llvm32 -triple armv7-unknown-linux-gnueabihf program.p8
 p8c -target llvm32 -triple config/mine.properties program.p8     # a file of your own
 ```
@@ -148,7 +148,8 @@ The keys p8p8 reads:
 
 A profile with any other key is refused, so that nothing it asks for is
 left out silently: the bare-metal, Z80 and 6809 profiles of the LLVM branch
-are not usable yet.  clang is `clang` in the `PATH`, or `P8P8_CLANG`; for
+are not usable yet.  `-Xcompile <argument>` gives clang one more argument
+(a sysroot), and can be repeated.  clang is `clang` in the `PATH`, or `P8P8_CLANG`; for
 WebAssembly it is Homebrew's (`P8P8_WASM_CLANG`), because Apple's clang has
 none.  Building for another machine than the one p8c runs on needs that
 platform's sysroot in `clang_args`; `-llvm` writes the LLVM IR to build

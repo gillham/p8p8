@@ -168,8 +168,8 @@ host happens to have.  The file, memory and process functions are in
 C library's functions.
 
 That this holds is tested: `make wasihost` builds the compiler for llvm32 as
-WebAssembly (`src/wasi32/` has the two host modules whose C declarations
-are 32 bits wide there, and no processes or signals) and runs it with
+WebAssembly (`src/llvm32/` and `src/wasi32/` have the host modules whose C
+declarations are 32 bits wide, and for WASI no processes or signals) and runs it with
 wasmtime.  It writes what the native compiler writes, byte for byte, for
 its own source and for the 6502 assembly of the test programs.
 

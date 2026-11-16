@@ -48,6 +48,7 @@ main {
     bool opt_build = false          ; -build: go on to the executable or program file
     bool opt_run = false            ; -run: and start it
     bool cross = false              ; -triple names the platform of an llvm64 program
+    ^^buf.Buf xcompile = 0          ; -Xcompile: more arguments for clang
     ^^ubyte opt_target = 0          ; -target: a name, or a .properties file
     bool opt_own = false            ; p8p8's 6502 code generator, not prog8c-llvm's back end
     ubyte opt_codegen = 0           ; -codegen: 0 not given, 1 own, 2 upstream
@@ -64,7 +65,7 @@ main {
     sub takes_value(^^ubyte arg) -> bool {
         return strings.compare(arg, "-srcdirs") == 0 or strings.compare(arg, "-lib") == 0
             or strings.compare(arg, "-target") == 0 or strings.compare(arg, "-codegen") == 0
-            or strings.compare(arg, "-triple") == 0 or strings.compare(arg, "-encoding") == 0
+            or strings.compare(arg, "-triple") == 0 or strings.compare(arg, "-Xcompile") == 0 or strings.compare(arg, "-encoding") == 0
             or strings.compare(arg, "-varshigh") == 0 or strings.compare(arg, "-varsaddress") == 0
             or strings.compare(arg, "-out") == 0 or strings.compare(arg, "-o") == 0
             or strings.compare(arg, "-output") == 0 or strings.compare(arg, "-report") == 0
@@ -168,6 +169,15 @@ main {
                     opt_codegen = 2
                 else
                     usage()
+                i++
+            }
+            else if strings.compare(arg, "-Xcompile") == 0 and value != 0 {
+                ; one more argument for clang (a sysroot, for another machine)
+                if xcompile == 0
+                    xcompile = buf.new(256)
+                buf.add_str(xcompile, " \"")
+                buf.add_str(xcompile, value)
+                buf.add_byte(xcompile, '"')
                 i++
             }
             else if strings.compare(arg, "-triple") == 0 and value != 0 {
@@ -556,6 +566,8 @@ main {
         out.nl()
         out.puts("   -timings, -warnimplicitcasts and -ircomments of prog8c are accepted and ignored)")
         out.nl()
+        out.puts("  -Xcompile arg  one more argument for clang (llvm32); can be repeated")
+        out.nl()
         out.puts("  -srcdirs a:b   directories searched first for imported modules (a;b as well)")
         out.nl()
         out.puts("  -lib dir       the library directory (default: P8P8_LIB, or lib/p8p8 beside the compiler's bin directory,")
@@ -644,6 +656,9 @@ main {
         }
         prepare_library()
         ; the target: a machine with a configuration file (see target.p8), or one p8p8 knows by itself
+        ; (without -target the program is for the machine p8c runs on)
+        if opt_target == 0 and sizeof(pointer) == 4
+            importer.target = "llvm32"
         if opt_target != 0 {
             ^^ubyte tname = target.resolve(opt_target, lib_root)
             if tname == 0 {
@@ -713,7 +728,10 @@ main {
         bool hosted = strings.compare(importer.target, "llvm64") == 0
         cross = false
         if strings.compare(importer.target, "llvm32") == 0 {
-            ; llvm32: the platform is a triple profile, a file of the library
+            ; llvm32: the platform is a triple profile, a file of the library; on a
+            ; 32-bit machine, that machine's when nothing else is asked for
+            if importer.triple == 0 and sizeof(pointer) == 4
+                importer.triple = io_platform.host_triple()
             if not triple.load(importer.triple, lib_root) {
                 out.err()
                 out.puts("error: -triple ")
@@ -1288,6 +1306,8 @@ main {
                     buf.add_str(cmd, "\"${P8P8_CLANG:-clang}\" ")
                 buf.add_str(cmd, triple.clang_args)
                 buf.add_str(cmd, " -O2")
+                if xcompile != 0
+                    buf.add_bytes(cmd, xcompile.data, xcompile.len)
                 if triple.getkey_source != 0 and (llvmgen.console_keys or llvmgen.console_size) {
                     buf.add_str(cmd, " \"")
                     buf.add_str(cmd, runtime_dir())
