@@ -72,7 +72,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -152,12 +152,16 @@ seedcheck:
 # (the directory with prog8lib/, common/ and targets/ in it).
 PREFIX	?= $(HOME)/.local
 LIB	?= lib
+# (the compiler that is installed: this machine's, unless make cross gives another)
+BIN	?= $(P8P8)
+BINEXE	?= $(EXE)
 install: $(P8P8)
 	@test -f $(LIB)/prog8lib/prog8_lib.p8 || { echo "no library in '$(LIB)': give its directory with LIB=..."; exit 1; }
 	$(MD) $(PREFIX)/bin $(PREFIX)/lib/p8p8
-	cp $(P8P8) $(PREFIX)/bin/p8c$(EXE)
-	rm -rf $(PREFIX)/lib/p8p8/prog8lib $(PREFIX)/lib/p8p8/common $(PREFIX)/lib/p8p8/targets
+	cp $(BIN) $(PREFIX)/bin/p8c$(BINEXE)
+	rm -rf $(PREFIX)/lib/p8p8/prog8lib $(PREFIX)/lib/p8p8/common $(PREFIX)/lib/p8p8/targets $(PREFIX)/lib/p8p8/triples
 	cp -R $(LIB)/prog8lib $(LIB)/common $(LIB)/targets $(PREFIX)/lib/p8p8/
+	@if [ -d $(LIB)/triples ]; then cp -R $(LIB)/triples $(PREFIX)/lib/p8p8/; fi
 	cp $(LIB)/VERSION $(LIB)/LICENSE $(PREFIX)/lib/p8p8/
 	$(MD) $(PREFIX)/lib/p8p8/runtime
 	cp runtime/windows-console.c runtime/hosted-keys.c runtime/mos-c64-support.c $(PREFIX)/lib/p8p8/runtime/
@@ -178,6 +182,34 @@ dist:	$(P8P8)
 	tar czf dist/$(DISTNAME).tar.gz -C dist $(DISTNAME)
 	rm -rf dist/$(DISTNAME)
 	@ls -l dist/$(DISTNAME).tar.gz | awk '{print "wrote", $$9 ":", $$5, "bytes"}'
+
+# make cross TRIPLE=<profile> SYSROOT=<dir>: the compiler for a 32-bit machine of another
+# kind, built here, as an archive like make dist's: dist/p8p8-<version>-<triple>.tar.gz.
+# TRIPLE is a profile of the library's triples/ (armv7-unknown-linux-gnueabihf,
+# riscv32-unknown-linux-gnu), SYSROOT that platform's C library and startup files; a
+# gcc directory in it is used too.  CROSS_CLANG is a clang that knows the platform and
+# links with lld (Homebrew's where there is one, else clang); CROSS_FLAGS are more
+# arguments for it (-static, when the machine's C library is older than the sysroot's).
+CROSS_CLANG ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang) clang)
+CROSS_FLAGS ?=
+CROSSDIR = build/cross/$(TRIPLE)
+CROSSNAME = p8p8-$(VERSION)-$(TRIPLE)
+cross:	$(P8P8)
+	@test -n "$(TRIPLE)" || { echo "which machine?  make cross TRIPLE=<profile> SYSROOT=<dir>"; exit 1; }
+	@test -d "$(SYSROOT)" || { echo "no sysroot '$(SYSROOT)': give the directory with SYSROOT=..."; exit 1; }
+	$(MD) $(CROSSDIR)
+	P8P8_CLANG=$(CROSS_CLANG) $(P8P8) -lib $(LIB) -target llvm32 -triple $(TRIPLE) \
+	    -Xcompile --sysroot=$(SYSROOT) $(if $(wildcard $(SYSROOT)/gcc),-Xcompile --gcc-install-dir=$(SYSROOT)/gcc) \
+	    -Xcompile -fuse-ld=lld $(foreach flag,$(CROSS_FLAGS),-Xcompile $(flag)) \
+	    -srcdirs src:src/llvm32:src/llvm64 -o $(CROSSDIR)/p8c $(MAIN)
+	rm -rf dist/$(CROSSNAME)
+	$(MAKE) install BIN=$(CROSSDIR)/p8c BINEXE= PREFIX=dist/$(CROSSNAME) LIB=$(LIB)
+	cp README.md CHANGELOG.md LICENSE dist/$(CROSSNAME)/
+	$(MD) dist/$(CROSSNAME)/docs
+	cp docs/*.md dist/$(CROSSNAME)/docs/
+	COPYFILE_DISABLE=1 tar --no-xattrs -czf dist/$(CROSSNAME).tar.gz -C dist $(CROSSNAME)
+	rm -rf dist/$(CROSSNAME)
+	@ls -l dist/$(CROSSNAME).tar.gz | awk '{print "wrote", $$9 ":", $$5, "bytes"}'
 
 clean:
 	$(CLEAN)

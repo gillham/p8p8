@@ -115,6 +115,11 @@ That puts `p8c` in `PREFIX/bin` and the library in `PREFIX/lib/p8p8`, where
 with the same layout in `dist/`, to unpack anywhere: `bin/p8c` finds the
 library beside it.
 
+`make cross TRIPLE=<profile> SYSROOT=<dir>` makes such an archive for a
+32-bit ARM or RISC-V Linux machine, built here: the seed is for 64-bit
+machines, so p8c cannot be built from this repository on a 32-bit one
+([docs/DESIGN.md](docs/DESIGN.md), "A 32-bit host").
+
 ## Using it
 
 ```

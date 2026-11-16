@@ -268,14 +268,19 @@ and for llvm64, and the 6502 assembly of the test programs and examples.
 they are built here for it and copied with rsync, for a machine without
 clang.  `tests/hostbootstrap.sh` with `HOSTCMP_TARGET=llvm32` checks the compiler on a
 32-bit machine reached by ssh; `P8P8_HOST_BINARY` gives it a compiler that
-was cross-built here, which needs that platform's sysroot:
+was cross-built here.
+
+`make cross` builds the compiler for such a machine and packs it like
+`make dist` does, with the library and the documents:
 
 ```
-P8P8_CLANG=<a clang with the platform and lld> p8c -target llvm32 \
-    -triple armv7-unknown-linux-gnueabihf \
-    -Xcompile --sysroot=<dir> -Xcompile -fuse-ld=lld \
-    -srcdirs src:src/llvm32:src/llvm64 -o build/arm32/p8c src/main.p8
+make cross TRIPLE=armv7-unknown-linux-gnueabihf SYSROOT=<the platform's sysroot>
 ```
+
+It needs a clang that knows the platform and links with lld (`CROSS_CLANG`;
+Homebrew's is taken where there is one), and writes
+`dist/p8p8-<version>-<triple>.tar.gz`.  `CROSS_FLAGS=-static` links the C
+library in, for a machine whose own is older than the sysroot's.
 
 The seed is for 64-bit hosts: a 32-bit compiler is built by a 64-bit one,
 or from its LLVM IR by the clang of the 32-bit machine.

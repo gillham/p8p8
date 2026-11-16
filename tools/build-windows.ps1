@@ -67,7 +67,7 @@ if ($Dist) {
         New-Item -ItemType Directory -Force $dir | Out-Null
     }
     Copy-Item "build\llvm64\p8c.exe" "$root\bin\"
-    Copy-Item -Recurse "lib\prog8lib", "lib\common", "lib\targets" "$root\lib\p8p8\"
+    Copy-Item -Recurse "lib\prog8lib", "lib\common", "lib\targets", "lib\triples" "$root\lib\p8p8\"
     Copy-Item "lib\VERSION", "lib\LICENSE" "$root\lib\p8p8\"
     Copy-Item "runtime\windows-console.c", "runtime\hosted-keys.c", "runtime\mos-c64-support.c" "$root\lib\p8p8\runtime\"
     Copy-Item "README.md", "CHANGELOG.md", "LICENSE" "$root\"
