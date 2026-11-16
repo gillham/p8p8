@@ -1939,12 +1939,26 @@ irgen {
             bool aok
             quad acv
             aok, acv = typer.const_eval(n.c)
-            if aok and split_words {
+            if aok and (split_words or (prefixing and types.POINTER_SIZE == 4)) {
                 ^^buf.Buf eb = buf.new(64)
                 buf.add_str(eb, sym_name(ss))
                 buf.add_str(eb, " = ")
-                ^^ubyte atext = number_text(acv)
-                buf.add_str(eb, atext)
+                if acv < 0
+                    buf.add_long(eb, acv as long)       ; an offset into a 68000 library's jump table
+                else {
+                    ^^ubyte atext = number_text(acv)
+                    buf.add_str(eb, atext)
+                }
+                if not split_words and n.d != 0 {
+                    ; (upstream notes a constant bank; the 68000 code generator reads it)
+                    bool bok
+                    quad bcv
+                    bok, bcv = typer.const_eval(n.d)
+                    if bok {
+                        buf.add_str(eb, " ; @bank ")
+                        buf.add_long(eb, bcv as long)
+                    }
+                }
                 ^^ir.Chunk ec = ir.add_block_chunk(block, 0)
                 ec.kind = ir.C_ASM
                 ec.text = strtab.intern(eb.data, eb.len as uword)
@@ -2412,13 +2426,14 @@ irgen {
             }
             return
         }
-        ubyte slot = 10
-        while target != 0 and rt != 0 {
+        void return_slots(rt)
+        ubyte slot = 0
+        while target != 0 and rt != 0 and slot < len(return_slot) {
             uword rtype = typer.return_type(rt)
             ubyte t = irt(rtype)
             if target.kind != ast.N_VOID {
                 uword r = ir.new_reg(t)
-                void ir.emit_rs(chunk, ir.OP_LOADHR, t, r, slot)
+                void ir.emit_rs(chunk, ir.OP_LOADHR, t, r, return_slot[slot])
                 store(target, r, t, types.is_signed(rtype))
             }
             slot++
@@ -4145,77 +4160,83 @@ irgen {
             return_several(n, rt)
             return
         }
-        ; several values: through the hardware slots s10, s11, ...
-        ubyte slot = 10
+        ; several values: through the hardware slots, s10 on for integers and
+        ; s25 on for floats (the 68000's D0.. and FP0.., as upstream numbers them)
+        ubyte count = return_slots(rt)
+        ubyte k
         if v.next == 0 and v.kind == ast.N_CALL {
             ; "return f()" passing on the values of a multi-value call: the
             ; callee left them in the slots; copy them through registers as
-            ; upstream does, so the slot types are declared
+            ; upstream does, so the slot types are declared.  All are loaded
+            ; before any is stored: a register may share a slot's place.
             void call_sub(v, false)
-            if defer_count != 0 {
-                ; the values wait in registers while the defers run
-                ubyte pn = 0
-                while rt != 0 and pn < len(return_regs) {
-                    t = irt(typer.return_type(rt))
-                    return_regs[pn] = ir.new_reg(t)
-                    return_types[pn] = t
-                    void ir.emit_rs(chunk, ir.OP_LOADHR, t, return_regs[pn], slot + pn)
-                    pn++
-                    rt = rt.next
-                }
-                deferred_return(pn)
-                return
-            }
-            while rt != 0 {
+            k = 0
+            while rt != 0 and k < count {
                 t = irt(typer.return_type(rt))
-                uword r3 = ir.new_reg(t)
-                void ir.emit_rs(chunk, ir.OP_LOADHR, t, r3, slot)
-                void ir.emit_rs(chunk, ir.OP_STOREHR, t, r3, slot)
-                slot++
+                return_regs[k] = ir.new_reg(t)
+                return_types[k] = t
+                void ir.emit_rs(chunk, ir.OP_LOADHR, t, return_regs[k], return_slot[k])
+                k++
                 rt = rt.next
             }
-            void ir.emit(chunk, ir.OP_RETURN, ir.T_NONE, ir.M_NONE)
+            store_returns(count)
             return
         }
-        if defer_count != 0 {
-            ubyte vn = 0
-            while v != 0 and rt != 0 and vn < len(return_regs) {
-                t = irt(typer.return_type(rt))
-                uword r4
-                ubyte vt4
-                r4, vt4 = expression(v)
-                return_regs[vn] = convert(r4, vt4, t, types.is_signed(v.type))
-                return_types[vn] = t
-                vn++
-                v = v.next
-                rt = rt.next
-            }
-            deferred_return(vn)
-            return
-        }
-        while v != 0 and rt != 0 {
-            rtype = typer.return_type(rt)
-            t = irt(rtype)
+        ; All values are computed, in the order they are written, before any is
+        ; stored: a call or a division in one could use the place of another.
+        k = 0
+        while v != 0 and rt != 0 and k < count {
+            t = irt(typer.return_type(rt))
             uword r2
             ubyte vt2
             r2, vt2 = expression(v)
-            r2 = convert(r2, vt2, t, types.is_signed(v.type))
-            void ir.emit_rs(chunk, ir.OP_STOREHR, t, r2, slot)
-            slot++
+            return_regs[k] = convert(r2, vt2, t, types.is_signed(v.type))
+            return_types[k] = t
+            k++
             v = v.next
             rt = rt.next
         }
-        void ir.emit(chunk, ir.OP_RETURN, ir.T_NONE, ir.M_NONE)
+        store_returns(count)
     }
 
-    ; the end of a multi-value return in a subroutine with defers: the values are in
-    ; return_regs; run the defers, then put the values in their slots
-    sub deferred_return(ubyte count) {
+    ubyte[16] return_slot           ; the hardware slot of each value of a multi-value return
+
+    ; Numbers the slots of a list of return types; returns how many there are.
+    sub return_slots(^^ast.Node rt) -> ubyte {
+        ubyte count = 0
+        ubyte data = 10
+        ubyte fslot = 25
+        while rt != 0 and count < len(return_slot) {
+            if irt(typer.return_type(rt)) == ir.T_FLOAT {
+                return_slot[count] = fslot
+                fslot++
+            }
+            else {
+                return_slot[count] = data
+                data++
+            }
+            count++
+            rt = rt.next
+        }
+        return count
+    }
+
+    ; The end of a multi-value return: the values are in return_regs.  The defers
+    ; run, then the values go to their slots: the first one last, and a float for
+    ; s25 after all others (on the 68000 the other float stores pass through it).
+    sub store_returns(ubyte count) {
         defer_exit()
-        ubyte i = 0
-        while i < count {
-            void ir.emit_rs(chunk, ir.OP_STOREHR, return_types[i], return_regs[i], 10 + i)
-            i++
+        ubyte pass
+        for pass in 0 to 1 {
+            ubyte i = 1
+            while i <= count {
+                ubyte j = i
+                if i == count
+                    j = 0
+                if (return_slot[j] == 25) == (pass == 1)
+                    void ir.emit_rs(chunk, ir.OP_STOREHR, return_types[j], return_regs[j], return_slot[j])
+                i++
+            }
         }
         void ir.emit(chunk, ir.OP_RETURN, ir.T_NONE, ir.M_NONE)
     }
@@ -5267,7 +5288,7 @@ irgen {
     }
 
     ; Where a register name puts a value: a calling convention slot (A=0,
-    ; X, Y, AX, AY, XY, FAC1, FAC2), a status flag (ir.SLOT_FLAGS + Pc, Pz,
+    ; X, Y, AX, AY, XY, FAC1, FAC2; from 10 the 68000's), a status flag (ir.SLOT_FLAGS + Pc, Pz,
     ; Pv, Pn), or 255 for the virtual registers R0..R15 and their pairs.
     sub register_slot(^^ubyte r) -> ubyte {
         if r == 0
@@ -5288,6 +5309,15 @@ irgen {
             return 6
         if strings.compare(r, "FAC2") == 0
             return 7
+        ; the 68000: D0-D7 are 10-17, A0-A6 are 18-24, FP0-FP7 are 25-32
+        if r[1] >= '0' and r[1] <= '7' and r[2] == 0 {
+            if r[0] == 'D'
+                return 10 + (r[1] - '0')
+            if r[0] == 'A' and r[1] != '7'
+                return 18 + (r[1] - '0')
+        }
+        if r[0] == 'F' and r[1] == 'P' and r[2] >= '0' and r[2] <= '7' and r[3] == 0
+            return 25 + (r[2] - '0')
         if strings.compare(r, "Pc") == 0
             return ir.SLOT_FLAGS
         if strings.compare(r, "Pz") == 0
@@ -5387,7 +5417,15 @@ irgen {
                 unsupported(e, "extsub at a non-constant address")
                 return 0
             }
-            ^^ubyte address = number_text(cv)
+            ^^ubyte address
+            if cv < 0 {
+                ; an offset into a 68000 library's jump table: in decimal, as upstream writes it
+                buf.clear(nb)
+                buf.add_long(nb, cv as long)
+                address = intern_nb()
+            }
+            else
+                address = number_text(cv)
             if d.d != 0 {
                 quad bank
                 ok, bank = typer.const_eval(d.d)

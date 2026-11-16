@@ -48,7 +48,7 @@ compiler with LLVM targets added.
 |---|---|---|
 | 6502 and 65C02 machines | built in: c64, c128, cx16, pet32; others as custom targets | every machine is a target file, the four built-in ones included; a code generator of p8p8's own |
 | 65816, 45GS02 | no | no (planned) |
-| 68000 (Amiga and others) | yes | no code generator; such programs can be checked, not built |
+| 68000 (Amiga and others) | yes | no code generator; such programs can be checked and written as IR, not built |
 | the virtual machine | yes, with the machine itself | p8p8 writes the IR for it and has no virtual machine: upstream's runs it |
 | the host, through LLVM | in the fork's LLVM branch | yes; it is how p8p8 compiles itself |
 
@@ -114,6 +114,11 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
   negative index.  For a signed *byte* on the 6502, upstream's code adds the
   index as if it were unsigned; p8p8 extends its sign, as upstream's virtual
   machine does.
+
+  The values of a multi-value return are computed in the order they are
+  written, on every target.  Upstream's 6502 code computes the first one
+  last, which shows when the values are calls with side effects; its other
+  targets use the written order.
 
   There will be others: the 195 cases were written here, they are not
   upstream's own test suite.

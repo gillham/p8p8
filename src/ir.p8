@@ -1320,8 +1320,16 @@ ir {
             add_name(p.options)
             add("outputDir=.\n</OPTIONS>\n\n<ASMSYMBOLS>\n</ASMSYMBOLS>\n")
         }
-        else
-            add("\noutput=PRG\nlauncher=NONE\nzeropage=DONTUSE\nzpAllowed=0,255\nloadAddress=0\nmemtop=$ffff\noptimize=false\nromable=false\nnoSysInit=false\noutputDir=.\n</OPTIONS>\n\n<ASMSYMBOLS>\n</ASMSYMBOLS>\n")
+        else {
+            ; no target file: the 68000 machines get what upstream's targets have built in
+            if strings.compare(p.target, "qemu68k") == 0
+                add("\noutput=ELF\nlauncher=NONE\nzeropage=DONTUSE\nzpAllowed=0,255\nloadAddress=$00010000\nmemtop=$00100000")
+            else if strings.compare(p.target, "amiga500") == 0 or strings.compare(p.target, "amiga1200") == 0
+                add("\noutput=AMIGAHUNK\nlauncher=NONE\nzeropage=DONTUSE\nzpAllowed=0,255\nloadAddress=0\nmemtop=$fffffffe")
+            else
+                add("\noutput=PRG\nlauncher=NONE\nzeropage=DONTUSE\nzpAllowed=0,255\nloadAddress=0\nmemtop=$ffff")
+            add("\noptimize=false\nromable=false\nnoSysInit=false\noutputDir=.\n</OPTIONS>\n\n<ASMSYMBOLS>\n</ASMSYMBOLS>\n")
+        }
         write_vars(p)
         add("<INITGLOBALS>\n")
         write_chunk(p.initglobals)

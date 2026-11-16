@@ -282,6 +282,13 @@ test:	$(TESTBIN) $(P8P8)
 	@sed -n '4,5p' $(OUT)/hello.ll | diff -u tests/expected/triple_wasm.txt -
 	@$(P8P8) -lib lib -target llvm32 -triple nosuch -check tests/hello.p8 2>&1 | diff -u tests/expected/triple_nosuch.txt -
 	@$(P8P8) -lib lib -target llvm32 -triple tests/triple_unknown.properties -check tests/hello.p8 2>&1 | diff -u tests/expected/triple_unknown.txt -
+	@echo "test 68000 IR"
+	@$(P8P8) -lib lib -target qemu68k -ir -out $(OUT) tests/m68kir.p8
+	@tools/m68kir.sh $(OUT)/m68kir.p8ir | diff -u tests/expected/m68kir_qemu.txt -
+	@$(P8P8) -lib lib -target amiga500 -ir -out $(OUT) tests/m68kir.p8
+	@grep -q '^output=AMIGAHUNK$$' $(OUT)/m68kir.p8ir
+	@grep -q '^exec.OpenLibrary = -552 ; @bank 1$$' $(OUT)/m68kir.p8ir
+	@grep -q '^callfar #1,-552,exec.OpenLibrary(r[0-9]*\.p@s19,r[0-9]*\.l@s10):r[0-9]*\.p@s10$$' $(OUT)/m68kir.p8ir
 	@echo "test console runtime"
 	@$(P8P8) -lib lib -target llvm64 -llvm -out $(OUT) tests/console.p8
 	@grep -c '^declare i32 @prog8_getkey()\|^declare i32 @prog8_termsize()' $(OUT)/console.ll | diff -u tests/expected/console_two.txt -

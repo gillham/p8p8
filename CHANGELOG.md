@@ -13,6 +13,15 @@
   what `make` does on a 32-bit machine.
 - `-target llvm32` takes its platform from a triple profile in the library
   (`-triple`): WebAssembly as before, and 32-bit ARM and RISC-V Linux.
+- For the 68000 targets (qemu68k, amiga500, amiga1200) the IR has what the
+  LLVM branch's 68000 back end needs to build it: the target's options,
+  register slots for D0-D7, A0-A6 and FP0-FP7, library offsets in decimal
+  and the equates of extsubs.  Building such a program still needs that
+  back end; p8p8 has no 68000 code generator.
+- Several return values are all computed before any is put in its place.
+  On the 68000 a division in a later value overwrote an earlier one.
+  Floats among several return values have slots of their own (s25 on), as
+  upstream numbers them.
 
 ## 0.1.0
 
