@@ -28,6 +28,15 @@
   `%option amiga_chipram` blocks in chip memory.  No passes over the code:
   it is correct on the test programs (`make qemucmp`, `make amigacmp`,
   `make amigacmp500`), not small or fast.
+- Fixed, on every target: an element of an array that is a field of a
+  struct (`p.values[i]`) was read through the field's first bytes as if they
+  were a pointer; `^^Thing t = []` at block level made an empty array where
+  an instance belongs; and a `str` parameter compared with a string compared
+  the two addresses, not the text.  On the 6502 a struct instance without
+  values was not defined at all.
+- `make coppercmp` compares the screens of upstream's Amiga examples in the
+  Copperline emulator, `make amigacmpfloat` the float program on an Amiga
+  1200 with an FPU.
 
 ## 0.1.0
 

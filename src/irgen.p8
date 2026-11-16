@@ -697,6 +697,7 @@ irgen {
         uword r
         ubyte vt
         ubyte tt = irt(s.type)
+        untyped_struct_init(s.type, init)       ; (^^Thing t = [] at block level: an instance, not an array)
         r, vt = expression(init)
         r = convert(r, vt, tt, types.is_signed(init.type))
         void ir.emit_rm(chunk, ir.OP_STOREM, tt, r, sym_name(s), 0)
@@ -1429,7 +1430,10 @@ irgen {
             if k % 16 == 0 {
                 if k != 0
                     buf.add_byte(tb, '\n')
-                buf.add_str(tb, "    .byte  ")
+                if types.POINTER_SIZE == 4
+                    buf.add_str(tb, "    dc.b  ")        ; vasm, for the 68000 machines
+                else
+                    buf.add_str(tb, "    .byte  ")
             }
             else
                 buf.add_byte(tb, ',')
@@ -1437,6 +1441,8 @@ irgen {
             k++
         }
         buf.add_byte(tb, '\n')
+        if types.POINTER_SIZE == 4
+            buf.add_str(tb, "    even\n")
         ^^ir.Chunk bc = ir.add_block_chunk(block, 0)
         bc.kind = ir.C_ASM
         bc.text = tb.data
@@ -1474,7 +1480,11 @@ irgen {
                         aok, av = typer.const_eval(s.a)
                         if aok and av > 1 {
                             ^^buf.Buf alb = buf.new(32)
-                            buf.add_str(alb, "    .align  ")
+                            ; (64tass, or vasm for the 68000 machines)
+                            if types.POINTER_SIZE == 4
+                                buf.add_str(alb, "    cnop  0,")
+                            else
+                                buf.add_str(alb, "    .align  ")
                             buf.add_long(alb, av as long)
                             buf.add_byte(alb, '\n')
                             ^^ir.Chunk ac = ir.add_block_chunk(block, 0)
@@ -2602,13 +2612,20 @@ irgen {
     sub indexed_address(^^ast.Node base, ^^ast.Node index, long elemsize) -> uword, long {
         uword pr
         ubyte pt
-        pr, pt = expression(base)
-        pr = convert(pr, pt, ir.T_POINTER, false)
+        long first = 0
+        if base.kind == ast.N_IDENT and base.op == resolver.R_FIELDREF and types.is_array(base.type) {
+            ; a field that is an array: its elements are in the struct, from the field's place on
+            pr, first = field_address(base)
+        }
+        else {
+            pr, pt = expression(base)
+            pr = convert(pr, pt, ir.T_POINTER, false)
+        }
         bool ok
         quad ci
         ok, ci = typer.const_eval(index)
         if ok
-            return pr, (ci as long) * elemsize
+            return pr, first + (ci as long) * elemsize
         uword ixr
         ubyte ixt
         ixr, ixt = expression(index)
@@ -2618,7 +2635,7 @@ irgen {
         uword sum = ir.new_reg(ir.T_POINTER)
         void ir.emit_rr(chunk, ir.OP_LOADR, ir.T_POINTER, sum, pr)
         void ir.emit_rr(chunk, ir.OP_ADDR, ir.T_POINTER, sum, ixr)
-        return sum, 0
+        return sum, first
     }
 
     ; The pointer register and field displacement of a dotted field reference
@@ -3054,6 +3071,19 @@ irgen {
         return b, signed
     }
 
+    ; Is the operand a string: a str variable or literal, or a parameter that was
+    ; declared str (which is kept as a pointer to its bytes)?
+    sub is_string(^^ast.Node e) -> bool {
+        if e.type == types.T_STR
+            return true
+        if e.kind == ast.N_IDENT and e.op != resolver.R_FIELDREF and e.extra != 0 {
+            ^^symtab.Sym s = e.extra
+            if s.kind == symtab.K_PARAM and s.decl != 0 and s.decl.a != 0 and s.decl.a.kind == ast.N_TYPE
+                return typer.from_type(s.decl.a) == types.T_STR
+        }
+        return false
+    }
+
     ; emits the branch(es) for a comparison
     sub compare_branch(^^ast.Node e, ^^ubyte on_true, ^^ubyte on_false) {
         ubyte ct
@@ -3072,7 +3102,7 @@ irgen {
             op = invert_op(op)
             target = on_false
         }
-        if e.a.type == types.T_STR and e.b.type == types.T_STR {
+        if is_string(e.a) and is_string(e.b) {
             ; strings compare by content: the virtual machine's compare syscall gives -1, 0 or 1
             uword sr
             ubyte srt

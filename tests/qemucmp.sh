@@ -5,6 +5,8 @@
 #
 # QEMUCMP_TARGET=amiga1200 or amiga500: Amiga programs, run in vamos (P8P8_VAMOS names it when it
 # is not in the PATH), which runs programs that only use the console.
+# With QEMUCMP_COPPERLINE=1 they run in the Copperline emulator instead, which is slower
+# to start and has an FPU: the way to compare programs with floats.
 #
 # Where the two differ, upstream's llvm64 build of the program is asked as well: when
 # every line of p8p8's output is the line of one of the two, it is upstream's 68000
@@ -25,11 +27,21 @@ target=${QEMUCMP_TARGET:-qemu68k}
 vamos=${P8P8_VAMOS:-vamos}
 cpu=68020
 [ "$target" = amiga500 ] && cpu=68000
+machine="--model A1200 --cpu 68020 --fpu"
+[ "$target" = amiga500 ] && machine="--model A500 --cpu 68000 --slow 512K"
 run() {
     # run <dir> <name>: the program's output
     if [ "$target" = qemu68k ]; then
         (cd "$1" && timeout "${QEMUCMP_TIMEOUT:-20}" qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic \
             -kernel "$2.elf" < /dev/null 2>&1)
+    elif [ -n "$QEMUCMP_COPPERLINE" ]; then
+        # an Amiga program in the Copperline emulator: a whole machine (an FPU on the 1200),
+        # its bundled AROS unless COPPERCMP_ROM names a Kickstart; the CLI sends what the
+        # program prints to a file in its directory
+        : > "$1/out.log"
+        (cd "$1" && timeout 300 copperline --factory $machine ${COPPERCMP_ROM:+"$COPPERCMP_ROM"} --run "$2" \
+            --run-args ">out.log" --exit-on-return > copperline.log 2>&1 < /dev/null)
+        cat "$1/out.log"
     else
         # an Amiga program that only uses the console: vamos (its own messages go to stderr)
         (cd "$1" && timeout "${QEMUCMP_TIMEOUT:-20}" "$vamos" -C $cpu "$2" < /dev/null 2> /dev/null)

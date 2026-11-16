@@ -3845,40 +3845,28 @@ gen6502 {
             raw("    .send BSS_SLABS")
             raw("")
         }
-        ; instances without values: cleared at startup
+        ; Struct instances, with values and without: one block, so that every one is
+        ; prog8_struct_instances.name.  One without values is all zeros (in the program
+        ; file: it is not cleared at startup, as a variable in the BSS section would be).
         any = false
         v = prog.vars
         while v != 0 {
-            if v.kind == ir.V_INSTANCE and v.init == 0 {
-                if not any {
-                    raw("    .section BSS")
-                    raw("prog8_struct_instances_bss  .block")
-                    any = true
-                }
-                put(unscoped(v.name))
-                put("  .fill  ")
-                putn(v.size)
-                nl()
-            }
-            v = v.next
-        }
-        if any {
-            raw("    .bend")
-            raw("    .send BSS")
-            raw("")
-        }
-        any = false
-        v = prog.vars
-        while v != 0 {
-            if v.kind == ir.V_INSTANCE and v.init != 0 {
+            if v.kind == ir.V_INSTANCE {
                 if not any {
                     raw("    .section STRUCTINSTANCES")
                     raw("prog8_struct_instances  .block")
                     any = true
                 }
                 put(unscoped(v.name))
-                raw(":")
-                instance_values(v.init)
+                if v.init != 0 {
+                    raw(":")
+                    instance_values(v.init)
+                }
+                else {
+                    put("  .fill  ")
+                    putn(v.size)
+                    raw(", 0")
+                }
             }
             v = v.next
         }

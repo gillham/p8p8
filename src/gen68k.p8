@@ -754,7 +754,10 @@ gen68k {
     ; The Amiga's libraries by the numbers upstream gives them (an extsub's bank): the
     ; base of each is in a variable of the sys block, that of exec at address 4.
     str[] library_names = ["", "Sys", "DOS", "Gfx", "Intuition", "GadTools", "Layers", "Asl", "ConsoleDevice", "Utility",
-                           "Expansion", "Icon", "Workbench", "Diskfont", "IFFParse"]
+                           "Expansion", "Icon", "Workbench", "Diskfont", "IFFParse", "Input", "Keymap", "Locale", "Timer",
+                           "LowLevel", "Math", "MathIeeeSingBas", "MathIeeeSingTrans", "MathIeeeDoubBas", "MathIeeeDoubTrans",
+                           "MathTrans", "NV", "RealTime", "Translator", "RexxSys", "Cx", "DataTypes", "Disk", "AmigaGuide",
+                           "ARexx", "BattClock", "BattMem"]
 
     ; a6 = the base of the library that the call target "#number,offset,name" names
     sub library_base(^^ubyte target) {
@@ -762,9 +765,29 @@ gen68k {
         long k = 0
         if target[0] == '#'
             k = 1
-        while target[k] >= '0' and target[k] <= '9' {
-            number = number * 10 + (target[k] - '0')
-            k++
+        if target[k] == '$' {
+            ; (the IR writes a number above nine in hexadecimal)
+            buf.clear(nb)
+            while target[k] != 0 and target[k] != ',' {
+                buf.add_byte(nb, target[k])
+                k++
+            }
+            buf.add_byte(nb, 0)
+            number = hex_number(nb.data)
+        }
+        else {
+            while target[k] >= '0' and target[k] <= '9' {
+                number = number * 10 + (target[k] - '0')
+                k++
+            }
+        }
+        if number == 100 {
+            ins("movea.l  sys.AsyncIOBase,a6")
+            return
+        }
+        if number == 101 {
+            ins("movea.l  sys.AHIBase,a6")
+            return
         }
         if number == 1 {
             ins("movea.l  4.w,a6")

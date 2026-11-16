@@ -120,6 +120,10 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
   last, which shows when the values are calls with side effects; its other
   targets use the written order.
 
+  `len()` of an array that is a field of a struct is accepted by p8p8 and
+  refused by upstream.  The address of an element of such a field
+  (`&p.values[2]`) crashes upstream's compiler; p8p8 compiles it.
+
   There will be others: the 195 cases were written here, they are not
   upstream's own test suite.
 - **Warnings and notes.**  Upstream prints warnings and information lines

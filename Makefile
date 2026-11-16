@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	qemucmp amigacmp amigacmp500 cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	qemucmp amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -375,6 +375,20 @@ qemucmp:	$(P8P8)
 AMIGATESTS=$(QEMUTESTS) $(wildcard tests/programs/amiga/*.p8)
 amigacmp:	$(P8P8)
 	@QEMUCMP_TARGET=amiga1200 tests/qemucmp.sh $(P8P8) $(AMIGATESTS)
+
+# an Amiga 1200 with an FPU in the Copperline emulator: the programs with floats, which vamos cannot run
+amigacmpfloat:	$(P8P8)
+	@QEMUCMP_TARGET=amiga1200 QEMUCMP_COPPERLINE=1 tests/qemucmp.sh $(P8P8) tests/hello.p8 tests/conformance/floating.p8
+
+# upstream's Amiga examples, the ones that open screens and windows too: both compilers'
+# programs in Copperline, the screen after 90 emulated seconds compared (the picture is
+# finished by then; p8p8's code is slower).  Not the ones that keep moving (3d, rasters,
+# star-blit, window3d, agabobs, penrose-triangle-os) or print how long something took
+# (lowlevel-timer).
+# COPPERCMP_TARGET=amiga1200 for that machine; COPPERCMP_ROM names a Kickstart file.
+COPPERTESTS=$(filter-out %/3d.p8 %/rasters.p8 %/star-blit.p8 %/window3d.p8 %/agabobs.p8 %/penrose-triangle-os.p8 %/lowlevel-timer.p8,$(wildcard .prog8-reference/examples/amiga/*.p8))
+coppercmp:	$(P8P8)
+	@COPPERCMP_SECONDS=$${COPPERCMP_SECONDS:-90} tests/coppercmp.sh $(P8P8) $(COPPERTESTS)
 
 # and for the Amiga 500: a 68000, long multiplication and division by the library's routines
 amigacmp500:	$(P8P8)

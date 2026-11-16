@@ -263,6 +263,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make buildall` | every C64 and X16 example builds |
 | `make emucmp`, `make emucmp64` | programs built by both compilers print the same in x16emu and in VICE |
 | `make qemucmp`, `make amigacmp`, `make amigacmp500` | programs built for qemu68k, the Amiga 1200 and the Amiga 500 by both compilers print the same in QEMU and in vamos |
+| `make coppercmp`, `make amigacmpfloat` | upstream's Amiga examples show the same screen from both compilers in the Copperline emulator; the float program prints the same on an Amiga 1200 with an FPU |
 | `make gfxcmp` | programs built by both compilers draw the same in x16emu |
 | `make programs`, `make roundtrip`, `make corpus` | the front end over the whole reference material |
 | `make upstreamcheck` | not a test: what changed in Prog8 since the commit p8p8 follows, sorted by what it means here ([docs/UPSTREAM.md](docs/UPSTREAM.md)) |

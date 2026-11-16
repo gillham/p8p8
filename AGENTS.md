@@ -84,7 +84,7 @@ Which suite after which change (see the Makefile for all of them):
 | front end | `make programs`, `make roundtrip` |
 | IR generation | `make conformance` (quick), `make vmcmp`, `make nativecmp` |
 | 6502 code generator or peephole | `BUILDALL_CODEGEN=own make buildall`, `EMUCMP_CODEGEN=own make emucmp`, `EMUCMP_CODEGEN=own make emucmp64` |
-| 68000 code generator | `make qemucmp` (needs vasmm68k_mot, vlink, qemu-system-m68k), `make amigacmp`, `make amigacmp500` (vamos) |
+| 68000 code generator | `make qemucmp` (needs vasmm68k_mot, vlink, qemu-system-m68k), `make amigacmp`, `make amigacmp500` (vamos), `make coppercmp`, `make amigacmpfloat` (Copperline) |
 | what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |
 
 The comparison suites build each program with the reference compiler and
