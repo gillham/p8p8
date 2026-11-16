@@ -240,6 +240,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make conformance` | the programs of `tests/conformance`, one for each area of the language, built by both compilers: same output in the VM and natively |
 | `make vmcmp` | test programs run in the reference compiler's VM from p8p8's IR and from the reference compiler's: same output |
 | `make nativecmp` | the same for native executables |
+| `make wasihost` | p8c built as WebAssembly (llvm32) and run with wasmtime writes what the native p8c writes: its own source, and the 6502 assembly of the test programs |
 | `make buildall` | every C64 and X16 example builds |
 | `make emucmp`, `make emucmp64` | programs built by both compilers print the same in x16emu and in VICE |
 | `make gfxcmp` | programs built by both compilers draw the same in x16emu |

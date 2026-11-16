@@ -72,7 +72,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -283,6 +283,12 @@ hostcmp:	$(P8P8)
 	@tests/hostcmp.sh $(P8P8) $(TRIPLE) .prog8-reference $(HOSTTESTS)
 hostbootstrap:	$(P8P8)
 	@tests/hostbootstrap.sh $(P8P8) $(TRIPLE) .prog8-reference $(MAIN) src:src/$(TARGET)
+
+# the compiler itself on a 32-bit host: p8c built for llvm32 (WebAssembly) and run with wasmtime must write
+# what the native p8c writes, for its own source and for the 6502 assembly of test programs and examples
+WASITESTS=$(wildcard tests/programs/*.p8) $(CONFTESTS) $(wildcard .prog8-reference/examples/*.p8 .prog8-reference/examples/c64/*.p8 .prog8-reference/examples/cx16/*.p8)
+wasihost:	$(P8P8)
+	@tests/wasihost.sh $(P8P8) $(MAIN) $(WASITESTS)
 
 # and for llvm16: a 6502 program built with the llvm-mos SDK, run in its simulator mos-sim
 # (LLVM_MOS names the SDK, default ~/.local/llvm-mos; programs with floats are skipped: upstream has none on llvm16)

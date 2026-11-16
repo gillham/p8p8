@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-Nothing yet.
+- The compiler itself builds for llvm32 (WebAssembly with WASI) and runs
+  under wasmtime, where it checks programs and writes assembly, IR and
+  LLVM IR; `make wasihost` compares its output with the native compiler's.
 
 ## 0.1.0
 

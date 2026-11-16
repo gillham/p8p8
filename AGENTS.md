@@ -55,7 +55,7 @@ Things that have bitten here:
 
 | Path | What |
 |---|---|
-| `src/` | the compiler; `src/llvm64/*_platform.p8` is the host layer |
+| `src/` | the compiler; `src/llvm64/*_platform.p8` is the host layer, `src/wasi32/` what differs on a 32-bit WebAssembly host (`make wasihost`) |
 | `src/lexer.p8`, `parser.p8`, `symtab.p8`, `resolver.p8`, `typer.p8`, `checker.p8` | the front end |
 | `src/irgen.p8`, `irprune.p8`, `ir.p8` | the IR, in upstream's `.p8ir` format |
 | `src/gen6502.p8`, `peep6502.p8` | the 6502/65C02 code generator and its peephole passes |

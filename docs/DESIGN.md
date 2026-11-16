@@ -245,6 +245,19 @@ releases.  Because the sources must always be compilable by the seed, a new
 language feature is first implemented, then the seed refreshed, and only
 then used in the compiler's own sources.
 
+## A 32-bit host
+
+The compiler builds for llvm32 too: WebAssembly with WASI, run by wasmtime.
+`src/wasi32/` holds `mem_platform.p8` and `io_platform.p8` for it (sizes of
+the C library are 32 bits; there is nothing to run a command or catch a
+signal with), and the source directories are `src:src/wasi32:src/llvm64`,
+so every other module is the one of llvm64.  Such a compiler checks
+programs and writes assembly, IR and LLVM IR; it cannot start 64tass or
+clang.  `make wasihost` builds it and compares what it writes with the
+native compiler's: its own source for llvm32 (it reproduces itself) and
+for llvm64, and the 6502 assembly of the test programs and examples.
+The seed is for 64-bit hosts: a 32-bit compiler is built by a 64-bit one.
+
 ## Not done yet
 
 - `make` and the test suites on Windows: there is the build script, and the
