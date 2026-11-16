@@ -23,9 +23,10 @@
   Floats among several return values have slots of their own (s25 on), as
   upstream numbers them.
 - A first 68000 code generator: `-target qemu68k -build` (or `-o`, `-run`)
-  writes assembly for vasm, links with vlink and runs in QEMU.  No Amiga
-  programs yet, and no passes over the code: it is correct
-  on the test programs (`make qemucmp`), not small or fast.
+  writes assembly for vasm, links with vlink and runs in QEMU;
+  `-target amiga1200` writes an AmigaOS program.  No Amiga 500 yet, no
+  chip memory sections, and no passes over the code: it is correct on the
+  test programs (`make qemucmp`, `make amigacmp`), not small or fast.
 
 ## 0.1.0
 

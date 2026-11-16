@@ -3,6 +3,9 @@
 # generator) and with p8p8's 68000 code generator, runs both in QEMU and compares what
 # they print.  Needs vasmm68k_mot, vlink and qemu-system-m68k.
 #
+# QEMUCMP_TARGET=amiga1200: Amiga programs, run in vamos (P8P8_VAMOS names it when it
+# is not in the PATH), which runs programs that only use the console.
+#
 # Where the two differ, upstream's llvm64 build of the program is asked as well: when
 # every line of p8p8's output is the line of one of the two, it is upstream's 68000
 # program that is off (its llvm64 program alone will not do: some lines depend on the
@@ -18,10 +21,17 @@ shift
 lib=${P8P8_LIB:-lib}
 work=${TMPDIR:-/tmp}/p8p8_qemucmp.$$
 mkdir -p "$work/up" "$work/p8"
+target=${QEMUCMP_TARGET:-qemu68k}
+vamos=${P8P8_VAMOS:-vamos}
 run() {
     # run <dir> <name>: the program's output
-    (cd "$1" && timeout "${QEMUCMP_TIMEOUT:-20}" qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic \
-        -kernel "$2.elf" < /dev/null 2>&1)
+    if [ "$target" = qemu68k ]; then
+        (cd "$1" && timeout "${QEMUCMP_TIMEOUT:-20}" qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic \
+            -kernel "$2.elf" < /dev/null 2>&1)
+    else
+        # an Amiga program that only uses the console: vamos (its own messages go to stderr)
+        (cd "$1" && timeout "${QEMUCMP_TIMEOUT:-20}" "$vamos" -C 68020 "$2" < /dev/null 2> /dev/null)
+    fi
 }
 agree() {
     # agree <a> <b> <c>: has c as many lines as a and b, and is every line of it that of a or of b?
@@ -36,12 +46,12 @@ lacking=0
 other=0
 for f in "$@"; do
     name=$(basename "$f" .p8)
-    if ! prog8c-llvm -target qemu68k -plaintext -quiet -out "$work/up" "$f" > /dev/null 2>&1; then
+    if ! prog8c-llvm -target $target -plaintext -quiet -out "$work/up" "$f" > /dev/null 2>&1; then
         echo "skipped (upstream rejects): $f"
         continue
     fi
     total=$((total + 1))
-    if ! "$p8p8" -target qemu68k -lib "$lib" -build -out "$work/p8" "$f" > "$work/p8.err" 2>&1; then
+    if ! "$p8p8" -target $target -lib "$lib" -build -out "$work/p8" "$f" > "$work/p8.err" 2>&1; then
         if grep -q "not supported" "$work/p8.err"; then
             echo "not yet ($(grep -m1 "not supported" "$work/p8.err" | sed 's/^68000 code generator: //')): $f"
             lacking=$((lacking + 1))
@@ -55,6 +65,11 @@ for f in "$@"; do
     run "$work/up" "$name" > "$work/up.out"
     if [ $? -eq 124 ]; then
         echo "skipped (upstream's program does not end): $f"
+        total=$((total - 1))
+        continue
+    fi
+    if [ ! -s "$work/up.out" ]; then
+        echo "skipped (upstream's program prints nothing here): $f"
         total=$((total - 1))
         continue
     fi
@@ -74,5 +89,5 @@ for f in "$@"; do
     fi
 done
 rm -rf "$work"
-echo "QEMU comparison (qemu68k, own code generator): $total programs, $failed failed, $lacking not built yet, $other where upstream's 68000 program is the odd one"
+echo "68000 comparison ($target, own code generator): $total programs, $failed failed, $lacking not built yet, $other where upstream's 68000 program is the odd one"
 [ "$failed" -eq 0 ] && { [ -z "$QEMUCMP_STRICT" ] || [ "$lacking" -eq 0 ]; }

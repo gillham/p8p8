@@ -47,6 +47,7 @@ gen68k {
     long static_size = 0            ; the static area so far
     long label_seq = 0
     bool cpu68000 = false           ; no 68020 instructions (not used yet: the Amiga 500)
+    bool amiga = false              ; AmigaOS: library calls, a hunk file, the system's stack
     long memtop = $00100000
 
     sub error(str message, ^^ubyte detail) {
@@ -733,10 +734,46 @@ gen68k {
             ins("unlk  a5")
     }
 
-    sub call_instr(^^ir.Instr i) {
-        if i.op != ir.OP_CALL {
-            error("calls of library routines by offset are not supported yet", i.sym)
+    ; The Amiga's libraries by the numbers upstream gives them (an extsub's bank): the
+    ; base of each is in a variable of the sys block, that of exec at address 4.
+    str[] library_names = ["", "Sys", "DOS", "Gfx", "Intuition", "GadTools", "Layers", "Asl", "ConsoleDevice", "Utility",
+                           "Expansion", "Icon", "Workbench", "Diskfont", "IFFParse"]
+
+    ; a6 = the base of the library that the call target "#number,offset,name" names
+    sub library_base(^^ubyte target) {
+        long number = 0
+        long k = 0
+        if target[0] == '#'
+            k = 1
+        while target[k] >= '0' and target[k] <= '9' {
+            number = number * 10 + (target[k] - '0')
+            k++
+        }
+        if number == 1 {
+            ins("movea.l  4.w,a6")
             return
+        }
+        if number < 1 or number >= len(library_names) {
+            error("a library that is not known", target)
+            return
+        }
+        put("    movea.l  sys.")
+        put(library_names[number as ubyte])
+        raw("Base,a6")
+    }
+
+    sub call_instr(^^ir.Instr i) {
+        bool library_call = i.op == ir.OP_CALLFAR
+        if i.op == ir.OP_CALLFARVB {
+            error("a library call with the library in a variable is not supported", i.sym)
+            return
+        }
+        if library_call {
+            if not amiga {
+                error("a banked call on a machine without libraries", i.sym)
+                return
+            }
+            library_base(i.sym)
         }
         ; the parameter variables first, then the CPU registers (nothing else touches those)
         ^^ir.Arg a = i.args
@@ -786,8 +823,25 @@ gen68k {
                 to_slot(a.slot, a.reg, a.value, a.type)
             a = a.next
         }
-        ^^ir.Sub callee = find_sub(i.sym)
-        if callee != 0 and callee.is_asm and callee.is_inline and callee.asmtext != 0 and not callee.asm_is_ir
+        ^^ir.Sub callee = 0
+        if not library_call
+            callee = find_sub(i.sym)
+        if library_call {
+            ; "#library,offset,name": through the library's jump table
+            long k = 0
+            while i.sym[k] != 0 and i.sym[k] != ','
+                k++
+            put("    jsr  ")
+            if i.sym[k] == ',' {
+                k++
+                while i.sym[k] != 0 and i.sym[k] != ',' {
+                    putc(i.sym[k])
+                    k++
+                }
+            }
+            raw("(a6)")
+        }
+        else if callee != 0 and callee.is_asm and callee.is_inline and callee.asmtext != 0 and not callee.asm_is_ir
             asm_text(callee.asmtext, callee.asmlen)
         else
             branch("jsr", i.sym)
@@ -2050,9 +2104,11 @@ gen68k {
 
     sub code() {
         raw("prog8_program_start:")
-        put("    move.l  #")
-        puthex(memtop)
-        raw(",sp")
+        if not amiga {
+            put("    move.l  #")
+            puthex(memtop)
+            raw(",sp")
+        }
         ins("jsr  p8_sys_startup.init_system")
         ins("jsr  p8_sys_startup.init_system_phase2")
         ins("jsr  p8b_main.p8s_start")
@@ -2250,6 +2306,56 @@ gen68k {
         }
     }
 
+    ; The size of a struct and the offsets of its fields, for assembly text:
+    ; name_size and name.p8v_field, as upstream writes them.
+    sub struct_equates() {
+        raw("; struct types")
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_STRUCT and v.typestr != 0 {
+                put(v.name)
+                put("_size equ ")
+                putn(v.size)
+                nl()
+                long offset = 0
+                long p = 0
+                ^^ubyte f = v.typestr
+                while f[p] != 0 {
+                    ; "type name;"
+                    long space = p
+                    while f[space] != 0 and f[space] != ' ' and f[space] != ';'
+                        space++
+                    if f[space] != ' '
+                        break
+                    buf.clear(nb)
+                    buf.add_bytes(nb, f + p, space - p)
+                    buf.add_byte(nb, 0)
+                    long count = array_length(nb.data)
+                    if count == 0
+                        count = 1
+                    long size = element_size(nb.data) * count
+                    long stop = space + 1
+                    while f[stop] != 0 and f[stop] != ';'
+                        stop++
+                    put(v.name)
+                    putc('.')
+                    if not buf.bytes_equal(f + space + 1, "p8v_", 4)
+                        put("p8v_")
+                    buf.add_bytes(o, f + space + 1, stop - space - 1)
+                    put(" equ ")
+                    putn(offset)
+                    nl()
+                    offset += size
+                    p = stop
+                    if f[p] == ';'
+                        p++
+                }
+            }
+            v = v.next
+        }
+        nl()
+    }
+
     sub constants() {
         raw("; constants and memory-mapped variables")
         ^^ir.Var v = prog.vars
@@ -2333,8 +2439,9 @@ gen68k {
         grow_cells()
         mark_frame_variables()
         cpu68000 = strings.compare(p.target, "amiga500") == 0
-        if strings.compare(p.target, "qemu68k") != 0
-            error("this code generator only writes programs for qemu68k yet, not for", p.target)
+        amiga = buf.bytes_equal(p.target, "amiga", 5)
+        if cpu68000
+            error("this code generator uses instructions of the 68020, which this machine does not have", p.target)
         put("; Program: ")
         put(p.name)
         nl()
@@ -2342,6 +2449,7 @@ gen68k {
         nl()
         raw("    section  .text,code")
         constants()
+        struct_equates()
         code()
         data()
         bss()

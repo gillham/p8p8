@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	qemucmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	qemucmp amigacmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -366,6 +366,10 @@ QEMUTESTS=tests/hello.p8 $(filter-out %/localzero.p8 %/callpointer.p8,$(wildcard
 	$(addprefix .prog8-reference/examples/,fibonacci.p8 primes.p8)
 qemucmp:	$(P8P8)
 	@tests/qemucmp.sh $(P8P8) $(QEMUTESTS)
+
+# the same for the Amiga 1200, run in vamos (P8P8_VAMOS names it when it is not in the PATH)
+amigacmp:	$(P8P8)
+	@QEMUCMP_TARGET=amiga1200 tests/qemucmp.sh $(P8P8) $(QEMUTESTS)
 
 # and for llvm16: a 6502 program built with the llvm-mos SDK, run in its simulator mos-sim
 # (LLVM_MOS names the SDK, default ~/.local/llvm-mos; programs with floats are skipped: upstream has none on llvm16)

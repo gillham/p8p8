@@ -1252,6 +1252,23 @@ main {
         if is_m68k and opt_own {
             ; the assembly that p8p8 wrote: vasm makes an object file, vlink the program,
             ; laid out by the target's link.ld in the library
+            if buf.bytes_equal(importer.target, "amiga", 5) {
+                ; AmigaOS: vasm writes the program file itself, a hunk file without an extension
+                buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Fhunkexe -opt-speed -ldots -spaces -nosym -quiet -o ")
+                add_output(name, "")
+                buf.add_byte(cmd, ' ')
+                add_output(name, ".asm")
+                run_cmd("assembling the program")
+                built_ext = ""
+                if not opt_run
+                    return
+                ; (vamos runs programs that only use the console; P8P8_VAMOS names it)
+                buf.clear(cmd)
+                buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68020 ")
+                add_output(name, "")
+                run_cmd("running the program")
+                return
+            }
             buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Felf -opt-speed -ldots -spaces -quiet -o ")
             add_output(name, ".o")
             buf.add_byte(cmd, ' ')

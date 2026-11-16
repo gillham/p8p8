@@ -184,9 +184,10 @@ library's routines, the same ones the reference compiler calls.
 ## The 68000 code generator
 
 `src/gen68k.p8` writes assembly for vasm from the same IR.  It is new and
-plain: one IR instruction at a time, no passes over the result yet, and only
-for qemu68k (a bare 68020 in QEMU), which is where it can be tested without
-an operating system.  The Amiga's library calls are not there.
+plain: one IR instruction at a time, no passes over the result yet.  It
+writes programs for qemu68k (a bare 68020 in QEMU, where it can be tested
+without an operating system) and for the Amiga 1200, not for the Amiga 500:
+the code uses the 68020's 32 bit multiplication and division.
 
 - A virtual register is a cell of four bytes with the value at its low end,
   so that a value read narrower than it was written is its low part on a
@@ -207,6 +208,11 @@ an operating system.  The Amiga's library calls are not there.
 - Arguments of assembly routines go into the registers their declarations
   name, results come from them; a subroutine's own value comes back in d0,
   several values in d0, d1 and so on.
+- On the Amiga a routine of a library is called through the library's jump
+  table: its base in a6 (exec's from address 4, the others from the
+  variables the library's startup code fills), then `jsr offset(a6)`.  The
+  sizes and field offsets of structs are written as equates, which the
+  library's assembly text uses.  vasm writes the hunk file itself.
 - vasm assembles with names in full (`-ldots`), without scopes; vlink lays
   the program out with the target's `link.ld` from the library.
 
@@ -332,8 +338,8 @@ llvm16 are still in `main.p8` and `llvmgen.p8`.
   compiler built on Windows is checked from another host (`make
   hostbootstrap`).
 - The 65816 and the 45GS02; a Z80 code generator.
-- In the 68000 code generator: the Amiga targets, the
-  68000 without the 68020's instructions, and any passes over its output.
+- In the 68000 code generator: the 68000 without the 68020's instructions
+  (the Amiga 500), chip memory sections, and any passes over its output.
 - The reference compiler's optimizer has no counterpart in p8p8's front
   end; the 6502 passes and LLVM do that work on their side.
 - A compiler that runs on an 8-bit machine.

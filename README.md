@@ -20,8 +20,8 @@ The command is `p8c`.
   machine is described by a properties file in the format of the reference
   compiler's custom targets (see [docs/TARGETS.md](docs/TARGETS.md)).
 - For the 68000 there is a first code generator, for the `qemu68k` target
-  only (a bare 68020 in QEMU): it writes vasm assembly and links with vlink.
-  It does nothing for the Amiga targets yet.
+  (a bare 68020 in QEMU) and the Amiga 1200: it writes vasm assembly.  The
+  Amiga 500 is not there yet: the code uses instructions of the 68020.
 - For the host it writes LLVM IR and builds a native executable with clang.
   That is how p8p8 compiles itself.
 
@@ -152,8 +152,11 @@ For a 6502 machine the program is built with p8p8's own code generator and
 
 `-target qemu68k -build` (or `-o`, or `-run` to start it in QEMU) builds a
 68000 program with p8p8's 68000 code generator; that needs `vasmm68k_mot`,
-`vlink` and, to run it, `qemu-system-m68k`.  Without one of those options a
-qemu68k or Amiga program is only checked.
+`vlink` and, to run it, `qemu-system-m68k`.  `-target amiga1200 -build`
+writes an AmigaOS program file (vasm alone); `-run` starts it in vamos,
+which only runs programs that use the console (`P8P8_VAMOS` names it when it
+is not in the PATH).  Without one of those options a qemu68k or Amiga
+program is only checked.
 
 A command line written for `prog8c` mostly works as it is: options may
 stand before the source file or after it, and may be
@@ -259,7 +262,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make wasihost` | p8c built as WebAssembly (llvm32) and run with wasmtime writes what the native p8c writes: its own source, and the 6502 assembly of the test programs |
 | `make buildall` | every C64 and X16 example builds |
 | `make emucmp`, `make emucmp64` | programs built by both compilers print the same in x16emu and in VICE |
-| `make qemucmp` | programs built for qemu68k by both compilers print the same in QEMU |
+| `make qemucmp`, `make amigacmp` | programs built for qemu68k and for the Amiga 1200 by both compilers print the same in QEMU and in vamos |
 | `make gfxcmp` | programs built by both compilers draw the same in x16emu |
 | `make programs`, `make roundtrip`, `make corpus` | the front end over the whole reference material |
 | `make upstreamcheck` | not a test: what changed in Prog8 since the commit p8p8 follows, sorted by what it means here ([docs/UPSTREAM.md](docs/UPSTREAM.md)) |
