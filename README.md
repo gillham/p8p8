@@ -21,7 +21,7 @@ The command is `p8c`.
   compiler's custom targets (see [docs/TARGETS.md](docs/TARGETS.md)).
 - For the 68000 there is a first code generator, for the `qemu68k` target
   only (a bare 68020 in QEMU): it writes vasm assembly and links with vlink.
-  It has no floating point yet and does nothing for the Amiga targets.
+  It does nothing for the Amiga targets yet.
 - For the host it writes LLVM IR and builds a native executable with clang.
   That is how p8p8 compiles itself.
 

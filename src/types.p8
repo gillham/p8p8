@@ -56,10 +56,15 @@ types {
             FLOAT_SIZE = 8
             ADDRESS_TYPE = T_UQUAD
         }
-        else if strings.compare(name, "llvm32") == 0 or strings.compare(name, "virtual") == 0
-            or strings.compare(name, "amiga500") == 0 or strings.compare(name, "amiga1200") == 0 or strings.compare(name, "qemu68k") == 0 {
+        else if strings.compare(name, "llvm32") == 0 or strings.compare(name, "virtual") == 0 {
             POINTER_SIZE = 4
             FLOAT_SIZE = 8
+            ADDRESS_TYPE = T_LONG
+        }
+        else if strings.compare(name, "amiga500") == 0 or strings.compare(name, "amiga1200") == 0 or strings.compare(name, "qemu68k") == 0 {
+            ; the 68000 machines: a float in memory is a 32 bit IEEE one, as upstream has it
+            POINTER_SIZE = 4
+            FLOAT_SIZE = 4
             ADDRESS_TYPE = T_LONG
         }
         else {

@@ -186,8 +186,7 @@ library's routines, the same ones the reference compiler calls.
 `src/gen68k.p8` writes assembly for vasm from the same IR.  It is new and
 plain: one IR instruction at a time, no passes over the result yet, and only
 for qemu68k (a bare 68020 in QEMU), which is where it can be tested without
-an operating system.  Floating point, and the Amiga's library calls, are not
-there.
+an operating system.  The Amiga's library calls are not there.
 
 - A virtual register is a cell of four bytes with the value at its low end,
   so that a value read narrower than it was written is its low part on a
@@ -199,6 +198,10 @@ there.
   subroutine that calls itself needs, and what the reference compiler does
   on this CPU.  The caller still writes an argument to the static parameter;
   the subroutine copies it into its frame when it is entered.
+- Floating point is the FPU's.  A float in memory is four bytes, as the
+  reference compiler and its library have it; a float register's cell is
+  twelve and holds what the FPU had, so a value is only rounded to four
+  bytes where the program stores it.
 - A subroutine with assembly text in it has no frame, because the text may
   return on its own; its cells are in a static area.
 - Arguments of assembly routines go into the registers their declarations
@@ -329,7 +332,7 @@ llvm16 are still in `main.p8` and `llvmgen.p8`.
   compiler built on Windows is checked from another host (`make
   hostbootstrap`).
 - The 65816 and the 45GS02; a Z80 code generator.
-- In the 68000 code generator: floating point, the Amiga targets, the
+- In the 68000 code generator: the Amiga targets, the
   68000 without the 68020's instructions, and any passes over its output.
 - The reference compiler's optimizer has no counterpart in p8p8's front
   end; the 6502 passes and LLVM do that work on their side.

@@ -1,9 +1,11 @@
 ; The 68000 code generator: IR to assembly for vasm (Motorola syntax).
 ;
 ; A first, plain translation, one IR instruction at a time:
-; - every virtual register is a cell of four bytes (eight for a float), the
-;   value at its low end (a byte in the last of the four), so that a value
-;   read narrower than it was written is its low part;
+;- every virtual register is a cell of four bytes, the value at its low end
+;   (a byte in the last of the four), so that a value read narrower than it
+;   was written is its low part; a float register is a cell of twelve
+;   bytes that holds what the FPU had (fmove.x), while a float variable is
+;   four bytes (fmove.s), as upstream and its library have it;
 ; - a subroutine's cells are in a stack frame under a5 (link/unlk), so
 ;   they survive a call of the subroutine by itself; a subroutine with
 ;   assembly text in it has no frame (the text may return on its own) and
@@ -167,7 +169,7 @@ gen68k {
         cell_stamp[r] = stamp
         long size = 4
         if ir.reg_type(r) == ir.T_FLOAT
-            size = 8
+            size = 12
         if framed {
             frame_size += size
             cell_of[r] = frame_size         ; below a5
@@ -742,8 +744,18 @@ gen68k {
             if a.slot == 255 {
                 if a.name == 0
                     error("an argument without a place", i.sym)
-                else if a.type == ir.T_FLOAT
-                    error("floating point is not supported yet", i.sym)
+                else if a.type == ir.T_FLOAT {
+                    if a.reg == 0
+                        error("a floating point number as an argument is not supported yet", i.sym)
+                    else {
+                        fload(a.reg)
+                        put("    fmove.s  fp0,")
+                        put(i.sym)
+                        putc('.')
+                        put(a.name)
+                        nl()
+                    }
+                }
                 else {
                     op("move", a.type)
                     if a.reg != 0
@@ -763,7 +775,14 @@ gen68k {
         }
         a = i.args
         while a != 0 {
-            if a.slot < ir.SLOT_FLAGS
+            if a.slot >= 25 and a.slot <= 32 {
+                put("    fmove.x  ")
+                frg(a.reg)
+                put(",fp")
+                putn(a.slot - 25)
+                nl()
+            }
+            else if a.slot < ir.SLOT_FLAGS
                 to_slot(a.slot, a.reg, a.value, a.type)
             a = a.next
         }
@@ -775,8 +794,16 @@ gen68k {
         ^^ir.Arg r = i.results
         while r != 0 {
             if r.reg != 0 {
-                if r.type == ir.T_FLOAT
-                    error("floating point is not supported yet", i.sym)
+                if r.type == ir.T_FLOAT {
+                    put("    fmove.x  fp")
+                    if r.slot >= 25 and r.slot <= 32
+                        putn(r.slot - 25)
+                    else
+                        putc('0')
+                    comma()
+                    frg(r.reg)
+                    nl()
+                }
                 else if r.slot == 255
                     from_slot(10, r.reg, r.type)
                 else if r.slot < ir.SLOT_FLAGS
@@ -935,11 +962,337 @@ gen68k {
             store_d0(res.reg, res.type)
     }
 
+    ; ---- floating point ----
+    ;
+    ; Arithmetic is the FPU's (a 68881 or what the CPU has built in), in fp0.
+
+    ; a float register's cell
+    sub frg(uword r) {
+        if r >= cell_cap or cell_stamp[r] != stamp {
+            error("a register without a cell", 0)
+            return
+        }
+        if framed {
+            putn(0 - cell_of[r])
+            put("(a5)")
+        }
+        else {
+            put("p8_regfile+")
+            putn(cell_of[r])
+        }
+    }
+
+    sub fload(uword r) {
+        put("    fmove.x  ")
+        frg(r)
+        raw(",fp0")
+    }
+
+    sub fstore(uword r) {
+        put("    fmove.x  fp0,")
+        frg(r)
+        nl()
+    }
+
+    ; "    mnemonic.s  #number,fp0"
+    sub fimm(str mnemonic, float value) {
+        put("    ")
+        put(mnemonic)
+        put(".s  #")
+        ir.text = o
+        ir.add_float(value)
+        raw(",fp0")
+    }
+
+    ; "    mnemonic.s  memory,fp0"
+    sub fmem(str mnemonic, ^^ir.Instr i) {
+        put("    ")
+        put(mnemonic)
+        put(".s  ")
+        memop(i)
+        raw(",fp0")
+    }
+
+    sub fmem_store(^^ir.Instr i) {
+        put("    fmove.s  fp0,")
+        memop(i)
+        nl()
+    }
+
+    ; "    mnemonic.x  cell,fp0"
+    sub fcell(str mnemonic, uword r) {
+        put("    ")
+        put(mnemonic)
+        put(".x  ")
+        frg(r)
+        raw(",fp0")
+    }
+
+    sub pointer_a0(uword r) {
+        put("    movea.l  ")
+        rg(r, ir.T_LONG)
+        raw(",a0")
+    }
+
+    ; the FPU's name for add, sub, mul, div in their three forms; 0 for another instruction
+    sub float_operation(ubyte opcode) -> ^^ubyte {
+        when opcode {
+            ir.OP_ADDR, ir.OP_ADD, ir.OP_ADDM -> return "fadd"
+            ir.OP_SUBR, ir.OP_SUB, ir.OP_SUBM -> return "fsub"
+            ir.OP_MULR, ir.OP_MUL, ir.OP_MULM, ir.OP_MULSR, ir.OP_MULS, ir.OP_MULSM -> return "fmul"
+            ir.OP_DIVR, ir.OP_DIV, ir.OP_DIVM, ir.OP_DIVSR, ir.OP_DIVS, ir.OP_DIVSM -> return "fdiv"
+        }
+        return 0
+    }
+
+    sub float_instruction(^^ir.Instr i) {
+        ^^ubyte fop = float_operation(i.op)
+        long l1
+        long l2
+        when i.op {
+            ir.OP_LOAD -> {
+                fimm("fmove", i.fvalue)
+                fstore(i.r1)
+            }
+            ir.OP_LOADM -> {
+                fmem("fmove", i)
+                fstore(i.r1)
+            }
+            ir.OP_LOADX -> {
+                index_setup(i)
+                fmem("fmove", i)
+                fstore(i.r1)
+            }
+            ir.OP_LOADI -> {
+                pointer_a0(i.r2)
+                put("    fmove.s  ")
+                putn(i.offset)
+                raw("(a0),fp0")
+                fstore(i.r1)
+            }
+            ir.OP_LOADR -> {
+                fload(i.r2)
+                fstore(i.r1)
+            }
+            ir.OP_STOREM -> {
+                fload(i.r1)
+                fmem_store(i)
+            }
+            ir.OP_STOREX -> {
+                index_setup(i)
+                fload(i.r1)
+                fmem_store(i)
+            }
+            ir.OP_STOREI -> {
+                pointer_a0(i.r2)
+                fload(i.r1)
+                put("    fmove.s  fp0,")
+                putn(i.offset)
+                raw("(a0)")
+            }
+            ir.OP_STOREZM -> {
+                put("    clr.l  ")
+                memop(i)
+                nl()
+            }
+            ir.OP_STOREZX -> {
+                index_setup(i)
+                put("    clr.l  ")
+                memop(i)
+                nl()
+            }
+            ir.OP_STOREZI -> {
+                pointer_a0(i.r2)
+                put("    clr.l  ")
+                putn(i.offset)
+                raw("(a0)")
+            }
+            ir.OP_STOREIM -> {
+                fimm("fmove", i.fvalue)
+                fmem_store(i)
+            }
+            ir.OP_ADDR, ir.OP_SUBR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_DIVSR -> {
+                fload(i.r1)
+                fcell(fop, i.r2)
+                fstore(i.r1)
+            }
+            ir.OP_ADD, ir.OP_SUB, ir.OP_MUL, ir.OP_MULS, ir.OP_DIV, ir.OP_DIVS -> {
+                fload(i.r1)
+                fimm(fop, i.fvalue)
+                fstore(i.r1)
+            }
+            ir.OP_ADDM, ir.OP_SUBM, ir.OP_MULM, ir.OP_MULSM, ir.OP_DIVM, ir.OP_DIVSM -> {
+                fmem("fmove", i)
+                fcell(fop, i.r1)
+                fmem_store(i)
+            }
+            ir.OP_NEG -> {
+                fload(i.r1)
+                ins("fneg  fp0")
+                fstore(i.r1)
+            }
+            ir.OP_NEGM -> {
+                fmem("fmove", i)
+                ins("fneg  fp0")
+                fmem_store(i)
+            }
+            ir.OP_INC, ir.OP_DEC -> {
+                fload(i.r1)
+                if i.op == ir.OP_INC
+                    ins("fadd.s  #1.0,fp0")
+                else
+                    ins("fsub.s  #1.0,fp0")
+                fstore(i.r1)
+            }
+            ir.OP_INCM, ir.OP_DECM -> {
+                fmem("fmove", i)
+                if i.op == ir.OP_INCM
+                    ins("fadd.s  #1.0,fp0")
+                else
+                    ins("fsub.s  #1.0,fp0")
+                fmem_store(i)
+            }
+            ir.OP_SQRT, ir.OP_FABS, ir.OP_FSIN, ir.OP_FCOS, ir.OP_FTAN, ir.OP_FATAN, ir.OP_FLN, ir.OP_FLOG -> {
+                ; r1 = function of r2
+                fload(i.r2)
+                when i.op {
+                    ir.OP_SQRT -> ins("fsqrt  fp0")
+                    ir.OP_FABS -> ins("fabs  fp0")
+                    ir.OP_FSIN -> ins("fsin  fp0")
+                    ir.OP_FCOS -> ins("fcos  fp0")
+                    ir.OP_FTAN -> ins("ftan  fp0")
+                    ir.OP_FATAN -> ins("fatan  fp0")
+                    ir.OP_FLN -> ins("flogn  fp0")
+                    else -> ins("flog2  fp0")
+                }
+                fstore(i.r1)
+            }
+            ir.OP_SGN -> {
+                ; r1 (a byte) = the sign of r2
+                l1 = new_label()
+                fload(i.r2)
+                ins("moveq  #0,d0")
+                ins("ftst  fp0")
+                put("    fbeq  ")
+                put_gen(l1)
+                nl()
+                ins("moveq  #1,d0")
+                put("    fbgt  ")
+                put_gen(l1)
+                nl()
+                ins("moveq  #-1,d0")
+                gen_label(l1)
+                store_d0(i.r1, ir.T_BYTE)
+            }
+            ir.OP_FFROMUB -> {
+                load_zx(i.r2, ir.T_BYTE, "d0")
+                ins("fmove.l  d0,fp0")
+                fstore(i.r1)
+            }
+            ir.OP_FFROMSB -> {
+                load_sx(i.r2, ir.T_BYTE, "d0")
+                ins("fmove.l  d0,fp0")
+                fstore(i.r1)
+            }
+            ir.OP_FFROMUW -> {
+                load_zx(i.r2, ir.T_WORD, "d0")
+                ins("fmove.l  d0,fp0")
+                fstore(i.r1)
+            }
+            ir.OP_FFROMSW -> {
+                load_sx(i.r2, ir.T_WORD, "d0")
+                ins("fmove.l  d0,fp0")
+                fstore(i.r1)
+            }
+            ir.OP_FFROMSL -> {
+                put("    fmove.l  ")
+                rg(i.r2, ir.T_LONG)
+                raw(",fp0")
+                fstore(i.r1)
+            }
+            ir.OP_FTOUB, ir.OP_FTOSB -> {
+                fload(i.r2)
+                ins("moveq  #0,d0")
+                ins("fmove.b  fp0,d0")
+                store_d0(i.r1, ir.T_BYTE)
+            }
+            ir.OP_FTOUW, ir.OP_FTOSW -> {
+                fload(i.r2)
+                ins("fmove.w  fp0,d0")
+                store_d0(i.r1, ir.T_WORD)
+            }
+            ir.OP_FTOSL -> {
+                fload(i.r2)
+                ins("fmove.l  fp0,d0")
+                store_d0(i.r1, ir.T_LONG)
+            }
+            ir.OP_FCOMP -> {
+                ; r1 (a byte) = -1, 0 or 1: r2 against r3
+                l1 = new_label()
+                l2 = new_label()
+                fload(i.r2)
+                fcell("fcmp", i.r3)
+                ins("moveq  #0,d0")
+                put("    fbeq  ")
+                put_gen(l1)
+                nl()
+                ins("moveq  #1,d0")
+                put("    fbgt  ")
+                put_gen(l1)
+                nl()
+                ins("moveq  #-1,d0")
+                gen_label(l1)
+                store_d0(i.r1, ir.T_BYTE)
+            }
+            ir.OP_RETURNR -> {
+                fload(i.r1)
+                leave()
+                ins("rts")
+            }
+            ir.OP_RETURNI -> {
+                fimm("fmove", i.fvalue)
+                leave()
+                ins("rts")
+            }
+            ir.OP_PUSH -> {
+                fload(i.r1)
+                ins("fmove.x  fp0,-(sp)")
+            }
+            ir.OP_POP -> {
+                ins("fmove.x  (sp)+,fp0")
+                fstore(i.r1)
+            }
+            ir.OP_LOADHR -> {
+                if i.slot < 25 or i.slot > 32
+                    error("a float in this hardware register is not supported", 0)
+                else {
+                    put("    fmove.x  fp")
+                    putn(i.slot - 25)
+                    comma()
+                    frg(i.r1)
+                    nl()
+                }
+            }
+            ir.OP_STOREHR -> {
+                if i.slot < 25 or i.slot > 32
+                    error("a float in this hardware register is not supported", 0)
+                else {
+                    put("    fmove.x  ")
+                    frg(i.r1)
+                    put(",fp")
+                    putn(i.slot - 25)
+                    nl()
+                }
+            }
+            else -> error("floating point instruction not supported yet", ir.opcode_names[i.op])
+        }
+    }
+
     sub instruction(^^ir.Instr i) {
         ubyte t = i.type
         indexed = false
         if t == ir.T_FLOAT or i.t1 == ir.T_FLOAT or (i.op >= ir.OP_FFROMUB and i.op <= ir.OP_FCOMP) or (i.op >= ir.OP_FPOW and i.op <= ir.OP_FTOUQ) {
-            error("floating point is not supported yet", ir.opcode_names[i.op])
+            float_instruction(i)
             return
         }
         if t == ir.T_QUAD {
@@ -1768,7 +2121,7 @@ gen68k {
         if starts_with(t, "long") or starts_with(t, "pointer") or t[0] == '^'
             return 4
         if starts_with(t, "float")
-            return 8
+            return 4
         long i = 0
         while t[i] != 0 and t[i] != '['
             i++
@@ -1794,7 +2147,7 @@ gen68k {
 
     sub directive(long size, bool isfloat) {
         if isfloat {
-            put("    dc.d  ")
+            put("    dc.s  ")
             return
         }
         when size {
@@ -1901,7 +2254,9 @@ gen68k {
         raw("; constants and memory-mapped variables")
         ^^ir.Var v = prog.vars
         while v != 0 {
-            if (v.kind == ir.V_CONST or v.kind == ir.V_MEMVAR) and v.init != 0 {
+            ; (not a float constant: the assembler has no such names, and the IR has the
+            ; number wherever the program uses one)
+            if (v.kind == ir.V_CONST or v.kind == ir.V_MEMVAR) and v.init != 0 and not (v.kind == ir.V_CONST and is_float(v.typestr)) {
                 put(v.name)
                 put(" = ")
                 put(v.init)
