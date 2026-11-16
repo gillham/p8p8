@@ -331,6 +331,7 @@ ir {
         ^^ubyte address     ; text or 0
         bool library
         bool force_output
+        bool chipram        ; %option amiga_chipram: its code and variables go in the Amiga's chip memory
         bool no_prefixing
         bool ignore_unused
     }
@@ -1287,6 +1288,8 @@ ir {
             add(" NOPREFIXING=\"true\"")
         if b.ignore_unused
             add(" IGNOREUNUSED=\"true\"")
+        if b.chipram
+            add(" AMIGACHIPRAM=\"true\"")
         if b.library
             add(" LIBRARY=\"true\"")
         else

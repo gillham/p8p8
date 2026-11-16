@@ -186,8 +186,7 @@ library's routines, the same ones the reference compiler calls.
 `src/gen68k.p8` writes assembly for vasm from the same IR.  It is new and
 plain: one IR instruction at a time, no passes over the result yet.  It
 writes programs for qemu68k (a bare 68020 in QEMU, where it can be tested
-without an operating system) and for the Amiga 1200, not for the Amiga 500:
-the code uses the 68020's 32 bit multiplication and division.
+without an operating system), the Amiga 1200 and the Amiga 500.
 
 - A virtual register is a cell of four bytes with the value at its low end,
   so that a value read narrower than it was written is its low part on a
@@ -213,6 +212,14 @@ the code uses the 68020's 32 bit multiplication and division.
   variables the library's startup code fills), then `jsr offset(a6)`.  The
   sizes and field offsets of structs are written as equates, which the
   library's assembly text uses.  vasm writes the hunk file itself.
+- The Amiga 500 has a 68000, which multiplies and divides words only: for
+  longs the code calls the routines of the library's `m68k_prog8_longmath`
+  (they use utility.library where there is one).  A program with floats is
+  assembled for a 68020 with an FPU there too, as the reference compiler
+  does it: the floats library needs both.
+- A block with `%option amiga_chipram` goes into sections of its own
+  (`code_c`, `data_c`, `bss_c`), which AmigaOS loads into chip memory.  A
+  call is always `jsr` with an absolute address, so it can cross sections.
 - vasm assembles with names in full (`-ldots`), without scopes; vlink lays
   the program out with the target's `link.ld` from the library.
 
@@ -338,8 +345,8 @@ llvm16 are still in `main.p8` and `llvmgen.p8`.
   compiler built on Windows is checked from another host (`make
   hostbootstrap`).
 - The 65816 and the 45GS02; a Z80 code generator.
-- In the 68000 code generator: the 68000 without the 68020's instructions
-  (the Amiga 500), chip memory sections, and any passes over its output.
+- In the 68000 code generator: any passes over its output, and structs
+  whose fields are at odd addresses on a 68000.
 - The reference compiler's optimizer has no counterpart in p8p8's front
   end; the 6502 passes and LLVM do that work on their side.
 - A compiler that runs on an 8-bit machine.

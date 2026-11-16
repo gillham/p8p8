@@ -46,7 +46,8 @@ gen68k {
     bool framed = false
     long static_size = 0            ; the static area so far
     long label_seq = 0
-    bool cpu68000 = false           ; no 68020 instructions (not used yet: the Amiga 500)
+    bool cpu68000 = false           ; no 68020 instructions: the Amiga 500
+    bool uses_fpu = false           ; the program has floating point: the assembler is told that there is an FPU
     bool amiga = false              ; AmigaOS: library calls, a hunk file, the system's stack
     long memtop = $00100000
 
@@ -455,6 +456,22 @@ gen68k {
 
     sub arith_d0_d1(ubyte what, ubyte t, bool signed) {
         bool wide = t == ir.T_LONG or t == ir.T_POINTER
+        if wide and cpu68000 {
+            ; the 68000 multiplies and divides words only: the library's routines
+            ; (d0 and d1 in; the product or the quotient in d0, the remainder in d1)
+            when what {
+                A_MUL -> ins("jsr  p8_umult32")
+                else -> {
+                    if signed
+                        ins("jsr  p8_sdivmod32")
+                    else
+                        ins("jsr  p8_udivmod32")
+                    if what == A_MOD
+                        ins("move.l  d1,d0")
+                }
+            }
+            return
+        }
         when what {
             A_MUL -> {
                 if wide
@@ -1100,6 +1117,7 @@ gen68k {
     }
 
     sub float_instruction(^^ir.Instr i) {
+        uses_fpu = true
         ^^ubyte fop = float_operation(i.op)
         long l1
         long l2
@@ -1616,7 +1634,9 @@ gen68k {
                 ; r1 = the quotient, r2 = the remainder
                 load_zx(i.r1, t, "d0")
                 load_zx(i.r2, t, "d1")
-                if t == ir.T_LONG or t == ir.T_POINTER {
+                if (t == ir.T_LONG or t == ir.T_POINTER) and cpu68000
+                    ins("jsr  p8_udivmod32")
+                else if t == ir.T_LONG or t == ir.T_POINTER {
                     ins("move.l  d2,-(sp)")
                     ins("divul.l  d1,d2:d0")
                     ins("move.l  d2,d1")
@@ -2125,6 +2145,8 @@ gen68k {
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
             nl()
+            if bl.chipram and amiga
+                raw("    section  code_c,code,chip")
             put("; Block: ")
             put(bl.name)
             nl()
@@ -2144,6 +2166,8 @@ gen68k {
                 subroutine(s)
                 s = s.next
             }
+            if bl.chipram and amiga
+                raw("    section  .text,code")
             bl = bl.next
         }
     }
@@ -2373,11 +2397,42 @@ gen68k {
         nl()
     }
 
+    ; is the variable one of a block with %option amiga_chipram (its name starts with the block's)
+    sub in_chip(^^ubyte name) -> bool {
+        if not amiga
+            return false
+        long dot = 0
+        while name[dot] != 0 and name[dot] != '.'
+            dot++
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if bl.chipram and buf.cstr_len(bl.name) == dot and buf.bytes_equal(bl.name, name, dot)
+                return true
+            bl = bl.next
+        }
+        return false
+    }
+
     sub data() {
+        data_of(false)
+        if any_chip
+            data_of(true)
+    }
+
+    bool any_chip = false
+
+    sub data_of(bool chip) {
         nl()
-        raw("    section  .data,data")
+        if chip
+            raw("    section  data_c,data,chip")
+        else
+            raw("    section  .data,data")
         ^^ir.Var v = prog.vars
         while v != 0 {
+            if in_chip(v.name) != chip {
+                v = v.next
+                continue
+            }
             if v.kind == ir.V_VAR and v.init != 0 {
                 long esize = element_size(v.typestr)
                 raw("    even")
@@ -2397,10 +2452,23 @@ gen68k {
     }
 
     sub bss() {
+        bss_of(false)
+        if any_chip
+            bss_of(true)
+    }
+
+    sub bss_of(bool chip) {
         nl()
-        raw("    section  .bss,bss")
+        if chip
+            raw("    section  bss_c,bss,chip")
+        else
+            raw("    section  .bss,bss")
         ^^ir.Var v = prog.vars
         while v != 0 {
+            if in_chip(v.name) != chip {
+                v = v.next
+                continue
+            }
             long size = -1
             if v.kind == ir.V_VAR and v.init == 0
                 size = var_size(v)
@@ -2421,10 +2489,12 @@ gen68k {
             }
             v = v.next
         }
-        raw("    even")
-        put("p8_regfile:  ds.b  ")
-        putn(static_size + 4)
-        nl()
+        if not chip {
+            raw("    even")
+            put("p8_regfile:  ds.b  ")
+            putn(static_size + 4)
+            nl()
+        }
     }
 
     sub generate(^^ir.Program p, ^^buf.Buf output) {
@@ -2440,8 +2510,17 @@ gen68k {
         mark_frame_variables()
         cpu68000 = strings.compare(p.target, "amiga500") == 0
         amiga = buf.bytes_equal(p.target, "amiga", 5)
-        if cpu68000
-            error("this code generator uses instructions of the 68020, which this machine does not have", p.target)
+        any_chip = false
+        uses_fpu = false
+        ^^ir.Block cb = p.blocks
+        while cb != 0 {
+            ; (the floats library's own assembly has the FPU's instructions)
+            if strings.compare(cb.name, "floats") == 0
+                uses_fpu = true
+            if cb.chipram and amiga
+                any_chip = true
+            cb = cb.next
+        }
         put("; Program: ")
         put(p.name)
         nl()

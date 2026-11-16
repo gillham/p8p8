@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	qemucmp amigacmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	qemucmp amigacmp amigacmp500 cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -289,6 +289,10 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^output=AMIGAHUNK$$' $(OUT)/m68kir.p8ir
 	@grep -q '^exec.OpenLibrary = -552 ; @bank 1$$' $(OUT)/m68kir.p8ir
 	@grep -q '^callfar #1,-552,exec.OpenLibrary(r[0-9]*\.p@s19,r[0-9]*\.l@s10):r[0-9]*\.p@s10$$' $(OUT)/m68kir.p8ir
+	@echo "test Amiga chip memory"
+	@$(P8P8) -lib lib -target amiga500 -codegen own -ir -out $(OUT) tests/programs/amiga/chipram.p8
+	@grep '^    section  .*_c,' $(OUT)/chipram.asm | diff -u tests/expected/chipram_sections.txt -
+	@grep -q '^<BLOCK NAME="p8b_chip" ADDRESS="" AMIGACHIPRAM="true"' $(OUT)/chipram.p8ir
 	@echo "test console runtime"
 	@$(P8P8) -lib lib -target llvm64 -llvm -out $(OUT) tests/console.p8
 	@grep -c '^declare i32 @prog8_getkey()\|^declare i32 @prog8_termsize()' $(OUT)/console.ll | diff -u tests/expected/console_two.txt -
@@ -368,8 +372,13 @@ qemucmp:	$(P8P8)
 	@tests/qemucmp.sh $(P8P8) $(QEMUTESTS)
 
 # the same for the Amiga 1200, run in vamos (P8P8_VAMOS names it when it is not in the PATH)
+AMIGATESTS=$(QEMUTESTS) $(wildcard tests/programs/amiga/*.p8)
 amigacmp:	$(P8P8)
-	@QEMUCMP_TARGET=amiga1200 tests/qemucmp.sh $(P8P8) $(QEMUTESTS)
+	@QEMUCMP_TARGET=amiga1200 tests/qemucmp.sh $(P8P8) $(AMIGATESTS)
+
+# and for the Amiga 500: a 68000, long multiplication and division by the library's routines
+amigacmp500:	$(P8P8)
+	@QEMUCMP_TARGET=amiga500 tests/qemucmp.sh $(P8P8) $(AMIGATESTS)
 
 # and for llvm16: a 6502 program built with the llvm-mos SDK, run in its simulator mos-sim
 # (LLVM_MOS names the SDK, default ~/.local/llvm-mos; programs with floats are skipped: upstream has none on llvm16)

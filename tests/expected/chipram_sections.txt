@@ -1,0 +1,3 @@
+    section  code_c,code,chip
+    section  data_c,data,chip
+    section  bss_c,bss,chip

@@ -1254,7 +1254,17 @@ main {
             ; laid out by the target's link.ld in the library
             if buf.bytes_equal(importer.target, "amiga", 5) {
                 ; AmigaOS: vasm writes the program file itself, a hunk file without an extension
-                buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Fhunkexe -opt-speed -ldots -spaces -nosym -quiet -o ")
+                if strings.compare(importer.target, "amiga500") == 0 {
+                    ; a 68000 and Kickstart 1.3's hunks.  A program with floats needs an FPU and,
+                    ; for the floats library's own assembly, a 68020, as upstream has it.
+                    if gen68k.uses_fpu
+                        buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881")
+                    else
+                        buf.add_str(cmd, "vasmm68k_mot -m68000")
+                    buf.add_str(cmd, " -Fhunkexe -kick1hunks -opt-speed -ldots -spaces -nosym -quiet -o ")
+                }
+                else
+                    buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Fhunkexe -opt-speed -ldots -spaces -nosym -quiet -o ")
                 add_output(name, "")
                 buf.add_byte(cmd, ' ')
                 add_output(name, ".asm")
@@ -1264,7 +1274,10 @@ main {
                     return
                 ; (vamos runs programs that only use the console; P8P8_VAMOS names it)
                 buf.clear(cmd)
-                buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68020 ")
+                if strings.compare(importer.target, "amiga500") == 0
+                    buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68000 ")
+                else
+                    buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68020 ")
                 add_output(name, "")
                 run_cmd("running the program")
                 return

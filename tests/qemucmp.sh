@@ -3,7 +3,7 @@
 # generator) and with p8p8's 68000 code generator, runs both in QEMU and compares what
 # they print.  Needs vasmm68k_mot, vlink and qemu-system-m68k.
 #
-# QEMUCMP_TARGET=amiga1200: Amiga programs, run in vamos (P8P8_VAMOS names it when it
+# QEMUCMP_TARGET=amiga1200 or amiga500: Amiga programs, run in vamos (P8P8_VAMOS names it when it
 # is not in the PATH), which runs programs that only use the console.
 #
 # Where the two differ, upstream's llvm64 build of the program is asked as well: when
@@ -23,6 +23,8 @@ work=${TMPDIR:-/tmp}/p8p8_qemucmp.$$
 mkdir -p "$work/up" "$work/p8"
 target=${QEMUCMP_TARGET:-qemu68k}
 vamos=${P8P8_VAMOS:-vamos}
+cpu=68020
+[ "$target" = amiga500 ] && cpu=68000
 run() {
     # run <dir> <name>: the program's output
     if [ "$target" = qemu68k ]; then
@@ -30,7 +32,7 @@ run() {
             -kernel "$2.elf" < /dev/null 2>&1)
     else
         # an Amiga program that only uses the console: vamos (its own messages go to stderr)
-        (cd "$1" && timeout "${QEMUCMP_TIMEOUT:-20}" "$vamos" -C 68020 "$2" < /dev/null 2> /dev/null)
+        (cd "$1" && timeout "${QEMUCMP_TIMEOUT:-20}" "$vamos" -C $cpu "$2" < /dev/null 2> /dev/null)
     fi
 }
 agree() {
