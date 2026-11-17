@@ -1221,6 +1221,24 @@ gen6502 {
         code()
         if wide_enabled
             join_runs(codebuf)
+        if wide_enabled and io_platform.env("P8P8_WIDESTATS") != 0 {
+            ; (for the work on the generator: how much of the word code is 16 bits wide)
+            buf.add_str(codebuf, "; 65816: ")
+            buf.add_long(codebuf, wide_done)
+            buf.add_str(codebuf, " of ")
+            buf.add_long(codebuf, wide_total)
+            buf.add_str(codebuf, " word instructions in runs\n")
+            ubyte op
+            for op in 0 to 255 {
+                if wide_missed[op] != 0 {
+                    buf.add_str(codebuf, "; 8-bit: ")
+                    buf.add_str(codebuf, ir.opcode_names[op])
+                    buf.add_byte(codebuf, ' ')
+                    buf.add_long(codebuf, wide_missed[op])
+                    buf.add_byte(codebuf, '\n')
+                }
+            }
+        }
         o = output
         header()
         constants()
@@ -1805,6 +1823,9 @@ gen6502 {
         if not c816 or io_platform.env("P8P8_NOWIDE") != 0 or find_sub("p8b_main.p8s_start") == 0
             return
         wide_enabled = true
+        wide_done = 0
+        wide_total = 0
+        sys.memset(&wide_missed, sizeof(long) * 256, 0)
         wide_rest = target.is("native65816", "rest") and io_platform.env("P8P8_NATIVE_RUN") == 0
         long needed = ir.regcount as long + 1
         if needed > wcap {
@@ -1886,11 +1907,17 @@ gen6502 {
         return whome[r] == here and wfirst[r] >= first and wlast[r] <= last
     }
 
+    long wide_done = 0
+    long wide_total = 0
+    long[256] wide_missed           ; per opcode: the word instructions that were written 8 bits wide
+
     sub wide_chunk(^^ir.Chunk c, ^^ubyte lbl) {
         wchunk = c
         ^^ir.Instr i = c.first
         long index = 0
         while i != 0 {
+            if is_word(i.type)
+                wide_total++
             wide_reset_reg(i.r1)
             wide_reset_reg(i.r2)
             wide_reset_reg(i.r3)
@@ -1934,6 +1961,8 @@ gen6502 {
             length = wide_length(i, 0)
         if length != 0 and not wide_try(i, 0, length)
             length = 0
+        if wide_pending and length != 0 and win_count != 0
+            wide_close(false)       ; (what comes into the run is fetched 8 bits wide)
         if wide_pending {
             if length != 0 {
                 ; The run before fell through to here and this chunk begins with a run:
@@ -1954,13 +1983,14 @@ gen6502 {
             if lbl != 0
                 label(lbl)
             if length != 0 {
-                wide_open()
-                if lbl != 0
+                wide_enter()
+                if lbl != 0 and win_count == 0
                     wide_entry_label(lbl)
             }
         }
         if length != 0 {
             length = wide_finish(i, length)
+            wide_done += length
             repeat length
                 i = i.next
             index += length
@@ -1968,13 +1998,16 @@ gen6502 {
         while i != 0 {
             length = wide_length(i, index)
             if length != 0 and wide_try(i, index, length) {
-                wide_open()
+                wide_enter()
                 length = wide_finish(i, length)
+                wide_done += length
                 repeat length
                     i = i.next
                 index += length
                 continue
             }
+            if is_word(i.type)
+                wide_missed[i.op]++
             instruction(i)
             i = i.next
             index++
@@ -1998,22 +2031,208 @@ gen6502 {
                 break
         }
         while length >= 3 {
-            bool closed = true
+            ; (a load at the end does nothing that the 8-bit code after it would not do)
             j = i
-            long k
-            for k in 0 to length - 1 {
-                if not wide_inside(j.r1, index, index + length - 1) or not wide_inside(j.r2, index, index + length - 1)
-                        or not wide_inside(j.r3, index, index + length - 1) {
-                    closed = false
-                    break
-                }
+            repeat length - 1
                 j = j.next
+            if j.op == ir.OP_LOADM or j.op == ir.OP_LOAD or j.op == ir.OP_LOADR {
+                length--
+                continue
             }
-            if closed
+            ; every value that comes in or goes out costs about what an instruction gains
+            if wide_classify(i, index, length) and length >= 3 + win_count + wout_count
+                    and (wout_count == 0 or wide_ok(j) == 1)
                 return length
             length--
         }
+        win_count = 0
+        wout_count = 0
         return 0
+    }
+
+    ; The registers of a run that are not its own: those that come into it with a value
+    ; (win) and those whose value is needed after it (wout).  Outside a run every byte
+    ; of a register is in a cell of its own, so they are carried over in 8-bit code
+    ; before and after the run.
+    uword[3] win
+    ubyte[3] win_kind               ; W_ACC, W_S1 or W_S2: where the run finds it
+    ubyte win_count = 0
+    uword[3] wout
+    ubyte[3] wout_kind              ; where the run leaves it
+    ubyte wout_count = 0
+    uword[24] wseen
+    bool[24] wseen_written
+    long[24] wseen_last
+    ubyte wseen_count = 0
+
+    sub wide_seen(uword r, bool defined, bool written, long index) -> bool {
+        if r == 0
+            return true
+        if r >= wcap
+            return false
+        ubyte k = 0
+        while k < wseen_count {
+            if wseen[k] == r
+                break
+            k++
+        }
+        if k == wseen_count {
+            if k == len(wseen)
+                return false
+            wseen[k] = r
+            wseen_written[k] = false
+            wseen_count++
+            if not defined {
+                ; it has a value from before the run
+                if win_count == len(win)
+                    return false
+                win[win_count] = r
+                win_count++
+            }
+        }
+        if written
+            wseen_written[k] = true
+        wseen_last[k] = index
+        return true
+    }
+
+    ; fills win and wout for the run of length instructions from i; false: not such a run
+    sub wide_classify(^^ir.Instr i, long index, long length) -> bool {
+        win_count = 0
+        wout_count = 0
+        wseen_count = 0
+        pointer here = wchunk
+        long last = index + length - 1
+        ^^ir.Instr j = i
+        long k
+        for k in 0 to length - 1 {
+            if j.r3 != 0
+                return false
+            bool defined = false
+            bool written = true
+            when j.op {
+                ir.OP_LOADM, ir.OP_LOAD, ir.OP_LOADR -> defined = true
+                ir.OP_STOREM, ir.OP_CMP, ir.OP_CMPI -> written = false
+                else -> {
+                    if wide_ok(j) == 3
+                        written = false
+                }
+            }
+            if not wide_seen(j.r2, false, false, index + k) or not wide_seen(j.r1, defined, written, index + k)
+                return false
+            j = j.next
+        }
+        ubyte n
+        for n in 0 to wseen_count - 1 {
+            uword r = wseen[n]
+            bool foreign = whome[r] != here
+            if wseen_written[n] and (foreign or wlast[r] > last) {
+                if wout_count == len(wout)
+                    return false
+                wout[wout_count] = r
+                wout_count++
+            }
+            if foreign {
+                ; (named in other chunks as well: for this run, how long it is needed in it)
+                wlast[r] = wseen_last[n]
+                if wseen_written[n]
+                    wlast[r] = last + 1
+            }
+        }
+        ; where the values that come in are: the one the first instruction works on in the
+        ; accumulator, the others in the scratch words
+        uword first = 0
+        ubyte scratch = W_S1
+        for n in 0 to 2 {
+            if n < win_count {
+                if not defined_by(i) and win[n] == i.r1
+                    first = i.r1
+            }
+        }
+        if first == 0 {
+            for n in 0 to 2 {
+                if n < win_count and win[n] == i.r2
+                    first = i.r2
+            }
+        }
+        for n in 0 to 2 {
+            if n < win_count {
+                if whome[win[n]] == here and wfirst[win[n]] >= index
+                    return false            ; (used before it has a value?)
+                if win[n] == first
+                    win_kind[n] = W_ACC
+                else {
+                    if scratch == 0
+                        return false
+                    win_kind[n] = scratch
+                    if scratch == W_S1
+                        scratch = W_S2
+                    else
+                        scratch = 0
+                }
+            }
+        }
+        return true
+    }
+
+    sub defined_by(^^ir.Instr i) -> bool {
+        return i.op == ir.OP_LOADM or i.op == ir.OP_LOAD or i.op == ir.OP_LOADR
+    }
+
+    ; The 8-bit code before a run: the values that come into it, from the cells of their
+    ; registers into the scratch words and (last) both halves of the accumulator.
+    sub wide_enter() {
+        ubyte n
+        for n in 0 to 2 {
+            if n < win_count and win_kind[n] != W_ACC {
+                ^^ubyte lowname = "P8ZP_SCRATCH_W1"
+                ^^ubyte high = "P8ZP_SCRATCH_W1+1"
+                if win_kind[n] == W_S2 {
+                    lowname = "P8ZP_SCRATCH_W2"
+                    high = "P8ZP_SCRATCH_W2+1"
+                }
+                lda_reg(win[n], 0)
+                ins("sta", lowname)
+                lda_reg(win[n], 1)
+                ins("sta", high)
+            }
+        }
+        for n in 0 to 2 {
+            if n < win_count and win_kind[n] == W_ACC {
+                lda_reg(win[n], 1)
+                raw("    xba")
+                lda_reg(win[n], 0)
+            }
+        }
+        wide_open()
+    }
+
+    ; and the 8-bit code after it: the values that go out, into the cells
+    sub wide_leave() {
+        ubyte n
+        for n in 0 to 2 {
+            if n < wout_count and wout_kind[n] == W_ACC {
+                ins("sta", cell(wout[n], 0))
+                raw("    xba")
+                ins("sta", cell(wout[n], 1))
+            }
+        }
+        for n in 0 to 2 {
+            if n < wout_count and wout_kind[n] != W_ACC {
+                if wout_kind[n] == W_S1 {
+                    ins("lda", "P8ZP_SCRATCH_W1")
+                    ins("sta", cell(wout[n], 0))
+                    ins("lda", "P8ZP_SCRATCH_W1+1")
+                    ins("sta", cell(wout[n], 1))
+                }
+                else {
+                    ins("lda", "P8ZP_SCRATCH_W2")
+                    ins("sta", cell(wout[n], 0))
+                    ins("lda", "P8ZP_SCRATCH_W2+1")
+                    ins("sta", cell(wout[n], 1))
+                }
+            }
+        }
     }
 
     ; Where one run ends and the next begins with nothing in between (the label
@@ -2756,6 +2975,17 @@ gen6502 {
                 wkind[j.r2] = W_ACC
             j = j.next
         }
+        ubyte n
+        for n in 0 to 2 {
+            if n < win_count {
+                wkind[win[n]] = win_kind[n]
+                when win_kind[n] {
+                    W_ACC -> wacc = win[n]
+                    W_S1 -> w1_used = true
+                    W_S2 -> w2_used = true
+                }
+            }
+        }
         j = i
         wstore_at = -1
         wend = index + length - 1
@@ -2769,6 +2999,18 @@ gen6502 {
             repeat wskip + 1
                 j = j.next
             k += wskip + 1
+        }
+        for n in 0 to 2 {
+            if n < wout_count {
+                ; where the run leaves what is needed after it
+                uword o = wout[n]
+                if wacc == o
+                    wout_kind[n] = W_ACC
+                else if wkind[o] == W_S1 or wkind[o] == W_S2
+                    wout_kind[n] = wkind[o]
+                else
+                    return false
+            }
         }
         return true
     }
@@ -2824,6 +3066,11 @@ gen6502 {
     ; follows it; gives the number of IR instructions that are done with.
     sub wide_finish(^^ir.Instr i, long length) -> long {
         buf.add_bytes(w(), wb.data, wb.len)
+        if wout_count != 0 {
+            wide_close(false)
+            wide_leave()
+            return length
+        }
         ^^ir.Instr last = i
         repeat length - 1
             last = last.next

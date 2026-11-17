@@ -40,6 +40,9 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- A variable may be declared in an `unroll` loop, as upstream allows.
+- `tools/benchx16.sh` runs upstream's benchmark program on a Commander X16
+  built by the reference compiler and by p8p8.
 - `-cpu 6502|65c02|65816` chooses the CPU of a 6502 machine's program.  For
   the 65816, runs of word arithmetic on variables are done in the 16-bit
   accumulator, comparisons and rotations among them, and a loop of

@@ -1355,7 +1355,7 @@ checker {
         ^^ast.Node s = n.b
         while s != 0 {
             when s.kind {
-                ast.N_ASM, ast.N_ASSIGN, ast.N_AUGASSIGN, ast.N_INCDEC, ast.N_CALLSTMT -> {
+                ast.N_ASM, ast.N_VARDECL, ast.N_ASSIGN, ast.N_AUGASSIGN, ast.N_INCDEC, ast.N_CALLSTMT -> {
                 }
                 else -> error(s, "invalid statement in unroll loop")
             }
