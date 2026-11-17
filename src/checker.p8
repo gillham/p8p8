@@ -892,6 +892,20 @@ checker {
                 error(s, "struct must contain at least one field")
             return
         }
+        ; a field that is a struct itself (not a pointer to one)
+        ^^symtab.Sym ss = s.extra
+        if ss != 0 and ss.inner != 0 {
+            ^^symtab.Sym f = ss.inner.syms
+            while f != 0 {
+                if f.type != 0 and types.is_struct(f.type) {
+                    begin_message("no support for nested structs at '")
+                    buf.add_str(parser.scratch, f.name)
+                    buf.add_byte(parser.scratch, 39)
+                    error_scratch(s)
+                }
+                f = f.next
+            }
+        }
         checks++
     }
 

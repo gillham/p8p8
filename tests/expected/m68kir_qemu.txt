@@ -7,7 +7,7 @@ storehr.w r.w,s10.w
 storehr.f r.f,s26.f
 storehr.b r.b,s11.b
 storehr.f r.f,s25.f
-call p8b_main.p8s_mixed(p8v_n=r.b)
+call p8b_main.p8s_mixed(p8v_n=r.b):@s25,@s10,@s26,@s11
 loadhr.f r.f,s25.f
 loadhr.w r.w,s10.w
 loadhr.f r.f,s26.f
@@ -16,10 +16,10 @@ storehr.w r.w,s10.w
 storehr.f r.f,s26.f
 storehr.b r.b,s11.b
 storehr.f r.f,s25.f
-call p8b_main.p8s_divide(p8v_a=r.w,p8v_b=r.w)
+call p8b_main.p8s_divide(p8v_a=r.w,p8v_b=r.w):@s10,@s11
 loadhr.w r.w,s10.w
 loadhr.b r.b,s11.b
-call p8b_main.p8s_passed(p8v_n=r.b)
+call p8b_main.p8s_passed(p8v_n=r.b):@s25,@s10,@s26,@s11
 loadhr.f r.f,s25.f
 loadhr.w r.w,s10.w
 loadhr.f r.f,s26.f

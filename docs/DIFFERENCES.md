@@ -99,8 +99,9 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
     makes it a square, whose type is `uword`, and then reports a type
     mismatch;
   - a `str` assigned to a `long` on a 6502 target.  Upstream's
-    documentation says it is allowed on every target; its compiler takes it
-    for the virtual machine only.
+    documentation says it is allowed on every target; `prog8c` took it for
+    the virtual machine only (seen at e13ac65c7).  The LLVM branch takes it
+    everywhere since 94f9494c2.
 
   And the other way round, programs that upstream accepts and p8p8 does not:
   - an `if` expression whose first value begins with a sign and has no
@@ -111,9 +112,10 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
 
   An address variable indexed by a signed variable (`ptr[i]`, where an
   array would be refused) is accepted by both and counts backwards for a
-  negative index.  For a signed *byte* on the 6502, upstream's code adds the
-  index as if it were unsigned; p8p8 extends its sign, as upstream's virtual
-  machine does.
+  negative index.  For a signed *byte* on the 6502, `prog8c`'s code added
+  the index as if it were unsigned (seen at e13ac65c7); p8p8 extends its
+  sign, as the virtual machine does, and so does the LLVM branch since
+  94f9494c2.
 
   The values of a multi-value return are computed in the order they are
   written, on every target.  Upstream's 6502 code computes the first one
@@ -122,7 +124,8 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
 
   `len()` of an array that is a field of a struct is accepted by p8p8 and
   refused by upstream.  The address of an element of such a field
-  (`&p.values[2]`) crashes upstream's compiler; p8p8 compiles it.
+  (`&p.values[2]`) crashed `prog8c` (seen at b9fae1820); p8p8 compiles it,
+  and so does the LLVM branch since 9ed2fe9ea.
 
   There will be others: the 195 cases were written here, they are not
   upstream's own test suite.
@@ -157,6 +160,8 @@ Options are upstream's where both have them, with one dash or two.
   target.  (Up to 0.1.0 p8p8 only checked a program for an llvm target.)
 - `-srcdirs` takes `:` and `;` between directories on every system;
   upstream takes `:` on Unix and `;` on Windows.
+- `-codegen upstream` is p8p8's: the program is built from p8p8's IR by
+  `prog8c-llvm`'s back end, for the 6502 and the 68000 machines.
 - `-Xcompile` is there for llvm32 only.
 - `-triple` for llvm32 reads the LLVM branch's profile files, but only the
   keys of the hosted 32-bit platforms ([TARGETS.md](TARGETS.md)); for llvm64

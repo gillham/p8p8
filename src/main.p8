@@ -620,7 +620,7 @@ main {
         out.nl()
         out.puts("  -codegen own|upstream   for a 6502 machine: p8p8's own code generator and 64tass (the default), or prog8c-llvm's back end")
         out.nl()
-        out.puts("                          (qemu68k: p8p8's own 68000 code generator with vasm and vlink; there is no other)")
+        out.puts("                          (the same choice for the 68000 machines, with vasm and vlink)")
         out.nl()
         out.puts("  -asmlist       the assembler writes a listing (name.list)")
         out.nl()
@@ -1250,6 +1250,24 @@ main {
         }
     }
 
+    ; runs a 68000 program: qemu68k in QEMU, an Amiga program in vamos (which runs
+    ; programs that only use the console; P8P8_VAMOS names it)
+    sub run_68k(^^ubyte name) {
+        buf.clear(cmd)
+        if buf.bytes_equal(importer.target, "amiga", 5) {
+            if strings.compare(importer.target, "amiga500") == 0
+                buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68000 ")
+            else
+                buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68020 ")
+            add_output(name, "")
+        }
+        else {
+            buf.add_str(cmd, "qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic -kernel ")
+            add_output(name, ".elf")
+        }
+        run_cmd("running the program")
+    }
+
     sub build(^^ubyte name, bool is_llvm) {
         if cmd == 0
             cmd = buf.new(512)
@@ -1280,16 +1298,8 @@ main {
                 add_output(name, ".asm")
                 run_cmd("assembling the program")
                 built_ext = ""
-                if not opt_run
-                    return
-                ; (vamos runs programs that only use the console; P8P8_VAMOS names it)
-                buf.clear(cmd)
-                if strings.compare(importer.target, "amiga500") == 0
-                    buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68000 ")
-                else
-                    buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68020 ")
-                add_output(name, "")
-                run_cmd("running the program")
+                if opt_run
+                    run_68k(name)
                 return
             }
             buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Felf -opt-speed -ldots -spaces -quiet -o ")
@@ -1308,12 +1318,8 @@ main {
             add_output(name, ".o")
             run_cmd("linking the program")
             built_ext = ".elf"
-            if not opt_run
-                return
-            buf.clear(cmd)
-            buf.add_str(cmd, "qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic -kernel ")
-            add_output(name, ".elf")
-            run_cmd("running the program")
+            if opt_run
+                run_68k(name)
             return
         }
         if not is_llvm and opt_own {
@@ -1380,6 +1386,16 @@ main {
             buf.add_str(cmd, "\" ")
             add_output(name, ".p8ir")
             extension = ".prg"
+            if is_m68k {
+                ; (a 68000 machine: prog8c-llvm's back end writes the program as p8p8's own does)
+                run_cmd("building the program")
+                built_ext = ".elf"
+                if buf.bytes_equal(importer.target, "amiga", 5)
+                    built_ext = ""
+                if opt_run
+                    run_68k(name)
+                return
+            }
         }
         else {
             if llvm32 {

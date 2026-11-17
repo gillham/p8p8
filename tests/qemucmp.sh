@@ -13,6 +13,10 @@
 # program that is off (its llvm64 program alone will not do: some lines depend on the
 # byte order).
 #
+# QEMUCMP_CODEGEN=upstream: p8p8 writes the IR and prog8c-llvm's 68000 back end builds the
+# program from it (p8c -codegen upstream), which tests p8p8's front end apart from its
+# own code generator.
+#
 # A program that p8p8's generator cannot build yet is counted apart, not as a failure:
 # the generator is new, and the list of what it lacks is what this prints.
 # QEMUCMP_STRICT=1 makes those failures too.
@@ -24,6 +28,12 @@ lib=${P8P8_LIB:-lib}
 work=${TMPDIR:-/tmp}/p8p8_qemucmp.$$
 mkdir -p "$work/up" "$work/p8"
 target=${QEMUCMP_TARGET:-qemu68k}
+codegen=
+generator="own code generator"
+if [ "${QEMUCMP_CODEGEN:-own}" = upstream ]; then
+    codegen="-codegen upstream"
+    generator="p8p8's IR, upstream's code generator"
+fi
 vamos=${P8P8_VAMOS:-vamos}
 cpu=68020
 [ "$target" = amiga500 ] && cpu=68000
@@ -65,7 +75,7 @@ for f in "$@"; do
         continue
     fi
     total=$((total + 1))
-    if ! "$p8p8" -target $target -lib "$lib" -build -out "$work/p8" "$f" > "$work/p8.err" 2>&1; then
+    if ! "$p8p8" -target $target -lib "$lib" $codegen -build -out "$work/p8" "$f" > "$work/p8.err" 2>&1; then
         if grep -q "not supported" "$work/p8.err"; then
             echo "not yet ($(grep -m1 "not supported" "$work/p8.err" | sed 's/^68000 code generator: //')): $f"
             lacking=$((lacking + 1))
@@ -103,5 +113,5 @@ for f in "$@"; do
     fi
 done
 rm -rf "$work"
-echo "68000 comparison ($target, own code generator): $total programs, $failed failed, $lacking not built yet, $other where upstream's 68000 program is the odd one"
+echo "68000 comparison ($target, $generator): $total programs, $failed failed, $lacking not built yet, $other where upstream's 68000 program is the odd one"
 [ "$failed" -eq 0 ] && { [ -z "$QEMUCMP_STRICT" ] || [ "$lacking" -eq 0 ]; }

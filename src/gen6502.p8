@@ -1403,14 +1403,18 @@ gen6502 {
     }
 
     ; the subroutine that this one is nested in, or 0
+    ; the subroutine that s is declared in: the innermost one, when they are nested deeper
     sub parent_of(^^ir.Block bl, ^^ir.Sub s) -> ^^ir.Sub {
         ^^ir.Sub other = bl.subs
+        ^^ir.Sub parent = 0
         while other != 0 {
-            if other != s and not other.is_asm and nested_in(s.name, other.name)
-                return other
+            if other != s and not other.is_asm and nested_in(s.name, other.name) {
+                if parent == 0 or buf.cstr_len(other.name) > buf.cstr_len(parent.name)
+                    parent = other
+            }
             other = other.next
         }
-        return 0
+        return parent
     }
 
     ; the last part of a scoped name

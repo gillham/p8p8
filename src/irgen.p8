@@ -5716,6 +5716,20 @@ irgen {
         ^^ir.Instr callins = ir.emit_call(chunk, sym_name(s))
         callins.args = first
         ^^ast.Node rt = typer.returns_of(s)
+        if rt != 0 and rt.next != 0 and prefixing and types.POINTER_SIZE == 4 {
+            ; Several values, on a 68000: they come back in d0, d1 ... (and fp0 ...), and
+            ; are fetched from there after the call.  The call names those registers as
+            ; results without a destination, as upstream does, so that a code generator
+            ; knows the call writes them.
+            ubyte rcount = return_slots(rt)
+            ubyte rk
+            for rk in 0 to rcount - 1 {
+                ^^ir.Arg place = ir.new_arg(0, 0, ir.T_NONE)
+                place.slot = return_slot[rk]
+                ir.add_result(callins, place)
+            }
+            return 0
+        }
         if rt != 0 and rt.next == 0 and want_result {
             ubyte t = irt(typer.return_type(rt))
             uword rr = ir.new_reg(t)

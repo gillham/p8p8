@@ -147,8 +147,8 @@ and of that library.  Run `p8c` without arguments
 for the list of options.
 
 For a 6502 machine the program is built with p8p8's own code generator and
-64tass.  `-codegen upstream` hands p8p8's IR to `prog8c-llvm` instead, and
-`-ir` only writes the IR.
+64tass.  `-codegen upstream` hands p8p8's IR to `prog8c-llvm` instead (for a
+68000 machine too), and `-ir` only writes the IR.
 
 `-target qemu68k` builds a 68000 program with p8p8's 68000 code generator;
 that needs `vasmm68k_mot` and `vlink`, and `qemu-system-m68k` for `-run`.
@@ -265,6 +265,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make wasihost` | p8c built as WebAssembly (llvm32) and run with wasmtime writes what the native p8c writes: its own source, and the 6502 assembly of the test programs |
 | `make buildall` | every C64 and X16 example builds |
 | `make emucmp`, `make emucmp64` | programs built by both compilers print the same in x16emu and in VICE |
+| `make qemucmpir` | the same programs built from p8p8's IR by `prog8c-llvm`'s 68000 back end (`-codegen upstream`) |
 | `make qemucmp`, `make amigacmp`, `make amigacmp500` | programs built for qemu68k, the Amiga 1200 and the Amiga 500 by both compilers print the same in QEMU and in vamos |
 | `tools/bench68k.sh` | how long small benchmarks take on an Amiga 500 in Copperline, from both compilers |
 | `tools/benchp8vi.sh` | the same for one command of a real program, the editor [p8vi](https://github.com/retrodores/p8vi), which it clones; needs a Kickstart 1.3 ROM (`COPPERCMP_ROM`) |

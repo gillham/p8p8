@@ -920,6 +920,9 @@ ir {
             }
             if a.reg != 0
                 add_reg(a.reg, a.type)
+            else if a.type == T_NONE {
+                ; (a result that is only a place: "@s12", a hardware register the call writes)
+            }
             else {
                 buf.add_byte(text, '#')
                 add_number(a.value)

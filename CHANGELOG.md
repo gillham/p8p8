@@ -36,6 +36,16 @@
   an instance belongs; and a `str` parameter compared with a string compared
   the two addresses, not the text.  On the 6502 a struct instance without
   values was not defined at all.
+- Follows Prog8 master at 8f50c2ed1 and the LLVM branch at a7076bf71 (the
+  library and the reference material).  A struct field that is a struct is
+  refused with upstream's new message.
+- `-codegen upstream` for the 68000 machines: `prog8c-llvm`'s back end
+  builds the program from p8p8's IR (`make qemucmpir`: 37 programs, all the
+  same as from the source).  For that, a call of a subroutine with several
+  return values names the registers they come back in.
+- Fixed for the 6502: a subroutine declared in a subroutine that is itself
+  declared in one was put in the wrong scope and could not be called
+  (upstream's `lineclip` has one now).
 - Without `-check`, `-ir` or another option that says what to do, a program
   for an llvm target is compiled to its `.ll` file, as `prog8c` does it;
   0.1.0 only checked it.  Programs for 68000 machines are built.
