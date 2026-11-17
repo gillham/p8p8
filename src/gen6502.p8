@@ -1685,6 +1685,17 @@ gen6502 {
         ^^ir.Instr a = c.first
         while a != 0 {
             ^^ir.Instr b = a.next
+            mark_ay_chain(a)
+            if a.scale == 251 or a.scale == 252 {
+                a = a.next
+                continue
+            }
+            if a.op == ir.OP_INC and a.r1 != 0 and (a.type == ir.T_POINTER or a.type == ir.T_WORD) {
+                ; (pointer + 1 is written as an increment: the same thing)
+                a.op = ir.OP_ADD
+                a.mode = ir.M_RI
+                a.value = 1
+            }
             if a.op == ir.OP_ADD and a.mode == ir.M_RI and a.r1 != 0 and a.r1 <= ir.regcount and reg_uses[a.r1] == 3
                     and a.value >= 0 and a.value < 250 and (a.type == ir.T_POINTER or a.type == ir.T_WORD) {
                 ; pointer + constant, followed only: the constant becomes the displacement
@@ -1716,6 +1727,45 @@ gen6502 {
                     d.r3 = b.r2
                     d.scale = 255
                 }
+            }
+            if b != 0 and a.op == ir.OP_LOADI and type_size(a.type) == 1 and a.r1 != 0 and a.r1 <= ir.regcount and reg_uses[a.r1] == 2
+                    and (b.op == ir.OP_ADDR or b.op == ir.OP_SUBR or b.op == ir.OP_ANDR or b.op == ir.OP_ORR or b.op == ir.OP_XORR)
+                    and b.mode == ir.M_RR and type_size(b.type) == 1 and b.r2 == a.r1 and b.r1 != a.r1 and b.r1 != a.r2 and b.r1 != a.r3
+                    and a.offset >= 0 and a.offset <= 255 {
+                ; a byte through a pointer that is only an operand: the operation takes it from there
+                b.r2 = a.r2
+                b.r3 = a.r3
+                b.offset = a.offset
+                b.scale = 254
+                if a.scale == 255
+                    b.scale = 253
+                a.op = ir.OP_NOP
+            }
+            if b != 0 and b.next != 0 and a.op == ir.OP_LOAD and a.sym == 0 and a.r1 != 0 and a.r1 <= ir.regcount
+                    and (b.op == ir.OP_LOADMZ or b.op == ir.OP_LOADM) and b.r1 != a.r1 and b.r1 <= ir.regcount and reg_uses[b.r1] == 2 {
+                ; constant * variable, the constant first: the variable times the constant,
+                ; which is shifts and additions when the constant has few bits
+                ^^ir.Instr m = b.next
+                if m.op == ir.OP_MULR and m.mode == ir.M_RR and m.r1 == a.r1 and m.r2 == b.r1 and type_size(m.type) <= 2
+                        and (b.op == ir.OP_LOADMZ or b.type == m.type) and (b.op == ir.OP_LOADM or type_size(m.type) == 2)
+                        and shift_add_cost(a.value, type_size(m.type)) <= 180 {
+                    b.r1 = a.r1
+                    a.op = ir.OP_NOP
+                    m.op = ir.OP_MUL
+                    m.mode = ir.M_RI
+                    m.value = a.value
+                    m.r2 = 0
+                }
+            }
+            if b != 0 and a.op == ir.OP_ADDR and a.mode == ir.M_RR and a.r1 != a.r2 and a.r1 <= ir.regcount and a.r2 <= ir.regcount
+                    and (b.op == ir.OP_LOADI or b.op == ir.OP_STOREI or b.op == ir.OP_STOREZI) and b.r2 == a.r1 and b.r1 != a.r1
+                    and b.offset == 0 and b.scale != 255 and type_size(b.type) == 1
+                    and reg_uses[a.r1] == 3 and reg_zext[a.r2] == 1 and reg_uses[a.r2] == 2 {
+                ; a pointer (from anywhere: a variable, most often) + a byte, followed only:
+                ; the byte is the index
+                a.op = ir.OP_NOP
+                b.r3 = a.r2
+                b.scale = 255
             }
             a = a.next
         }
@@ -1860,7 +1910,7 @@ gen6502 {
     ; can the instruction be part of a 16-bit run?  0: no, 1: yes, 2: yes, and the run ends
     ; with it (a comparison), 3: the same, a comparison that branches itself
     sub wide_ok(^^ir.Instr i) -> ubyte {
-        if not is_word(i.type)
+        if not is_word(i.type) or i.scale >= 251
             return 0
         when i.op {
             ir.OP_LOADM, ir.OP_STOREM, ir.OP_STOREZM, ir.OP_STOREIM, ir.OP_LOAD, ir.OP_LOADR,
@@ -3388,8 +3438,7 @@ gen6502 {
         else
             v &= $ffff
         long top = 15
-        long one = 1
-        while top > 0 and v & (one << (top as ubyte)) == 0
+        while top > 0 and (v >> (top as ubyte)) & 1 == 0
             top--
         lda_reg(r, 0)
         ins("sta", "P8ZP_SCRATCH_W2")
@@ -3404,7 +3453,7 @@ gen6502 {
             ins("asl", "a")
             if size == 2
                 ins("rol", "P8ZP_SCRATCH_W1+1")
-            if v & (one << (k as ubyte)) != 0 {
+            if (v >> (k as ubyte)) & 1 != 0 {
                 ins("clc", 0)
                 ins("adc", "P8ZP_SCRATCH_W2")
                 if size == 2 {
@@ -3678,6 +3727,142 @@ gen6502 {
     ; ---- pointers and indexes ----
 
     ; the pointer in a register into the scratch pair, to be followed with (zp),y
+    ; A word that is loaded from a variable, has bytes added to it or subtracted from it,
+    ; and is stored (fuse_indexed marked the chain): the low byte stays in A and the high
+    ; byte in Y, which only moves on a carry.
+    sub ay_chain(^^ir.Instr head) {
+        memory_operand(head)
+        ins_at("lda", mem_symbol, mem_offset)
+        ins_at("ldy", mem_symbol, mem_offset + 1)
+        ^^ir.Instr j = head.next
+        ^^ir.Instr zx = 0
+        while j != 0 and j.scale == 252 {
+            when j.op {
+                ir.OP_LOADMZ -> zx = j
+                ir.OP_ADDR -> {
+                    ins("clc", 0)
+                    memory_operand(zx)
+                    ins_at("adc", mem_symbol, mem_offset)
+                    ins("bcc", "+")
+                    ins("iny", 0)
+                    anon_label("+")
+                }
+                ir.OP_SUBR -> {
+                    ins("sec", 0)
+                    memory_operand(zx)
+                    ins_at("sbc", mem_symbol, mem_offset)
+                    ins("bcs", "+")
+                    ins("dey", 0)
+                    anon_label("+")
+                }
+                ir.OP_ADD, ir.OP_INC -> {
+                    ins("clc", 0)
+                    if j.op == ir.OP_INC
+                        ins_imm("adc", 1)
+                    else
+                        ins_imm("adc", j.value as long)
+                    ins("bcc", "+")
+                    ins("iny", 0)
+                    anon_label("+")
+                }
+                ir.OP_SUB, ir.OP_DEC -> {
+                    ins("sec", 0)
+                    if j.op == ir.OP_DEC
+                        ins_imm("sbc", 1)
+                    else
+                        ins_imm("sbc", j.value as long)
+                    ins("bcs", "+")
+                    ins("dey", 0)
+                    anon_label("+")
+                }
+                ir.OP_STOREM -> {
+                    memory_operand(j)
+                    ins_at("sta", mem_symbol, mem_offset)
+                    ins_at("sty", mem_symbol, mem_offset + 1)
+                }
+            }
+            j = j.next
+        }
+    }
+
+    ; finds such a chain from the load a, and marks it
+    sub mark_ay_chain(^^ir.Instr a) {
+        uword r = a.r1
+        if a.op != ir.OP_LOADM or type_size(a.type) != 2 or r == 0 or r > ir.regcount or a.scale >= 250
+            return
+        ubyte ops = 0
+        ^^ir.Instr j = a.next
+        ^^ir.Instr zx = 0
+        ^^ir.Instr tail = 0
+        while j != 0 and tail == 0 {
+            if j.scale >= 250
+                return
+            when j.op {
+                ir.OP_LOADMZ -> {
+                    ; the byte for the addition that follows
+                    ^^ir.Instr user = j.next
+                    if zx != 0 or j.r1 > ir.regcount or reg_uses[j.r1] != 2 or user == 0 or user.r2 != j.r1
+                            or (user.op != ir.OP_ADDR and user.op != ir.OP_SUBR)
+                        return
+                    zx = j
+                }
+                ir.OP_ADDR, ir.OP_SUBR -> {
+                    if j.r1 != r or zx == 0 or j.r2 != zx.r1 or j.mode != ir.M_RR or type_size(j.type) != 2
+                        return
+                    zx = 0
+                    ops++
+                }
+                ir.OP_ADD, ir.OP_SUB -> {
+                    if j.r1 != r or j.mode != ir.M_RI or j.sym != 0 or j.value < 1 or j.value > 255 or type_size(j.type) != 2
+                        return
+                    ops++
+                }
+                ir.OP_INC, ir.OP_DEC -> {
+                    if j.r1 != r or type_size(j.type) != 2
+                        return
+                    ops++
+                }
+                ir.OP_STOREM -> {
+                    if j.r1 != r or type_size(j.type) != 2 or zx != 0
+                        return
+                    tail = j
+                }
+                else -> return
+            }
+            j = j.next
+        }
+        if tail == 0 or ops == 0 or reg_uses[r] != ops + 2
+            return
+        a.scale = 251
+        j = a.next
+        while j != tail {
+            j.scale = 252
+            j = j.next
+        }
+        tail.scale = 252
+    }
+
+    ; r1 = r1 <operation> the byte a pointer points at (fuse_indexed put the load and the
+    ; operation together: scale 254 with a constant offset, 253 with a byte index in r3).
+    ; The value stays in A from one such operation to the next.
+    sub combine_indirect(^^ir.Instr i, str mnemonic) -> bool {
+        if i.scale != 253 and i.scale != 254
+            return false
+        pointer_to_scratch(i.r2)
+        if i.scale == 253
+            ins("ldy", cell(i.r3, 0))
+        else
+            ins_imm("ldy", i.offset)
+        lda_reg(i.r1, 0)
+        if mnemonic[0] == 'a' and mnemonic[1] == 'd'
+            ins("clc", 0)
+        else if mnemonic[0] == 's'
+            ins("sec", 0)
+        ins(mnemonic, "(P8ZP_SCRATCH_W1),y")
+        sta_reg(i.r1, 0)
+        return true
+    }
+
     sub pointer_to_scratch(uword r) {
         lda_reg(r, 0)
         ins("sta", "P8ZP_SCRATCH_W1")
@@ -3968,6 +4153,12 @@ gen6502 {
     }
 
     sub instruction(^^ir.Instr i) {
+        if i.scale == 252
+            return                  ; (written with the head of its chain)
+        if i.scale == 251 {
+            ay_chain(i)
+            return
+        }
         ubyte size = type_size(i.type)
         ubyte k
         if i.type == ir.T_FLOAT or i.t1 == ir.T_FLOAT or (i.op >= ir.OP_FFROMUB and i.op <= ir.OP_FCOMP) {
@@ -4195,23 +4386,33 @@ gen6502 {
             ir.OP_BGT, ir.OP_BGTR, ir.OP_BGE, ir.OP_BGER, ir.OP_BLT, ir.OP_BLE,
             ir.OP_BGTS, ir.OP_BGTSR, ir.OP_BGES, ir.OP_BGESR, ir.OP_BLTS, ir.OP_BLES -> compare_branch(i, size)
             ir.OP_AND, ir.OP_ANDR -> {
+                if combine_indirect(i, "and")
+                    return
                 second_operand(i)
                 combine("and", i.r1, size)
             }
             ir.OP_OR, ir.OP_ORR -> {
+                if combine_indirect(i, "ora")
+                    return
                 second_operand(i)
                 combine("ora", i.r1, size)
             }
             ir.OP_XOR, ir.OP_XORR -> {
+                if combine_indirect(i, "eor")
+                    return
                 second_operand(i)
                 combine("eor", i.r1, size)
             }
             ir.OP_ADD, ir.OP_ADDR -> {
+                if combine_indirect(i, "adc")
+                    return
                 second_operand(i)
                 ins("clc", 0)
                 combine("adc", i.r1, size)
             }
             ir.OP_SUB, ir.OP_SUBR -> {
+                if combine_indirect(i, "sbc")
+                    return
                 second_operand(i)
                 ins("sec", 0)
                 combine("sbc", i.r1, size)

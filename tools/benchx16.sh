@@ -18,6 +18,7 @@ prog8c-llvm -target cx16 -quiet -out "$work/up" $src/benchmark.p8 > "$work/up.lo
     { echo "p8c -cpu 65816 does not build the benchmark: $work/816.log" >&2; exit 1; }
 for d in up c02 816; do
     # (the emulator does not end by itself: it is stopped when the total is printed)
+    : > "$work/$d/echo.txt"
     (cd "$work/$d" && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy exec x16emu -c816 -prg benchmark.prg -run -warp -echo \
         > echo.txt 2>&1 < /dev/null) &
     emu=$!

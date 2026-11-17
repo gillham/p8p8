@@ -2546,6 +2546,10 @@ irgen {
                     void ir.emit_rm(chunk, ir.OP_STOREM, ir.T_BYTE, r, 0, addr as long)
                     return
                 }
+                if target == once_node {
+                    void ir.emit_rp(chunk, ir.OP_STOREI, ir.T_BYTE, r, once_reg, 0)
+                    return
+                }
                 uword ar
                 ubyte at
                 ar, at = expression(target.a)
@@ -2850,7 +2854,37 @@ irgen {
         return true
     }
 
+    ; The address of @(address) in an in-place operation is worked out once when it has
+    ; a call in it: the target is read and written through the same register.
+    ^^ast.Node once_node = 0
+    uword once_reg = 0
+
+    sub has_call(^^ast.Node e) -> bool {
+        if e == 0
+            return false
+        if e.kind == ast.N_CALL
+            return true
+        return has_call(e.a) or has_call(e.b) or has_call(e.c) or has_call(e.d)
+    }
+
+    sub address_once(^^ast.Node target) {
+        once_node = 0
+        if target.kind != ast.N_MEMREAD or not has_call(target.a)
+            return
+        uword ar
+        ubyte at
+        ar, at = expression(target.a)
+        once_reg = convert(ar, at, ir.T_POINTER, false)
+        once_node = target
+    }
+
     sub augassign(^^ast.Node n) {
+        address_once(n.a)
+        augassign_once(n)
+        once_node = 0
+    }
+
+    sub augassign_once(^^ast.Node n) {
         if memory_update(n)
             return
         ^^ast.Node target = n.a
@@ -2943,6 +2977,7 @@ irgen {
                 return
             }
         }
+        address_once(target)
         uword r
         ubyte t
         r, t = expression(target)
@@ -2951,6 +2986,7 @@ irgen {
         else
             void ir.emit_r(chunk, ir.OP_DEC, t, r)
         store(target, r, t, false)
+        once_node = 0
     }
 
     sub swapstmt(^^ast.Node n) {
@@ -4474,6 +4510,10 @@ irgen {
                 ok, cv = typer.const_eval(e.a)
                 if ok {
                     void ir.emit_rm(chunk, ir.OP_LOADM, ir.T_BYTE, mr, 0, cv as long)
+                    return mr, ir.T_BYTE
+                }
+                if e == once_node {
+                    void ir.emit_rp(chunk, ir.OP_LOADI, ir.T_BYTE, mr, once_reg, 0)
                     return mr, ir.T_BYTE
                 }
                 uword ar

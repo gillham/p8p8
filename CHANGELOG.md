@@ -40,6 +40,12 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- An in-place operation on `@(address)` works the address out once, as
+  upstream does: a call in it was made twice.
+- Faster 6502 code for bytes through a pointer with a byte index, sums of
+  such bytes, words that bytes are added to, and a constant times a variable.
+  On upstream's benchmark program p8p8's code scores 5044 where the
+  reference compiler's scores 5203 (it was 4516).
 - A variable may be declared in an `unroll` loop, as upstream allows.
 - `tools/benchx16.sh` runs upstream's benchmark program on a Commander X16
   built by the reference compiler and by p8p8.
