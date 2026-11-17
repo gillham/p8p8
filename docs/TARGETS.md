@@ -69,7 +69,8 @@ Numbers are decimal, `$hex`, `0xhex` or `%binary`.  A list of addresses is
 
 | Key | Meaning |
 |-----|---------|
-| `cpu` | `6502` or `65c02`.  p8p8's code generator has no other yet. |
+| `cpu` | `6502`, `65c02` or `65816` (`-cpu` on the command line chooses another) |
+| `native65816` | `rest`: with a 65816 the program runs in native mode from start to end, because the machine's ROM allows it.  Without the key it stays in emulation mode, and only the 16-bit runs of the code switch |
 | `encoding` | the default text encoding: `petscii`, `iso`, `atascii`, ... |
 | `output_type` | `PRG`, `RAW`, `XEX` or `LIBRARY`: the default of `%output`, and what the assembler is asked to write |
 | `launcher` | `BASIC` or `NONE`: the default of `%launcher` |

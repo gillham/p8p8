@@ -1172,6 +1172,7 @@ gen6502 {
         if cpu_option == 0 and target.loaded and not c02 and not target.is("cpu", "6502") and not target.is("cpu", "cpu6502")
             error("this code generator has no instructions for the target's cpu", target.text("cpu"))
         read_options()
+        wide_prepare()
         assign_cells()
         count_registers()
         zp_assign()
@@ -1218,6 +1219,8 @@ gen6502 {
         buf.clear(codebuf)
         o = codebuf
         code()
+        if wide_enabled
+            join_runs(codebuf)
         o = output
         header()
         constants()
@@ -1329,7 +1332,17 @@ gen6502 {
         }
         if prog.floats and target.text("startup_code_floats") != 0
             raw(target.text("startup_code_floats"))
-        ins("jsr", "p8b_main.p8s_start")
+        if wide_enabled and wide_rest {
+            ; the 65816's native mode while the program runs, with 8-bit registers as in
+            ; emulation mode; back to that before the program ends
+            raw("    clc")
+            raw("    xce")
+            ins("jsr", "p8b_main.p8s_start")
+            raw("    sec")
+            raw("    xce")
+        }
+        else
+            ins("jsr", "p8b_main.p8s_start")
         ins("jmp", "p8_sys_startup.cleanup_at_exit")
         if target.text("exit_code") != 0
             raw(target.text("exit_code"))
@@ -1677,11 +1690,818 @@ gen6502 {
         if c == 0
             return
         fuse_indexed(c)
+        if wide_enabled and (s == 0 or not s.no_pool) {
+            wide_chunk(c)
+            return
+        }
         ^^ir.Instr i = c.first
         while i != 0 {
             instruction(i)
             i = i.next
         }
+    }
+
+    ; ---- the 65816: word arithmetic in the 16-bit accumulator ----
+    ;
+    ; A run of consecutive IR instructions on words is written for the 16-bit
+    ; accumulator, between one "rep #$20" and one "sep #$20".  That needs the
+    ; 65816's native mode.  Where the machine's ROM is written for it (the
+    ; target's native65816 = rest: the Commander X16) the whole program runs
+    ; in native mode with 8-bit registers, which is what the 6502 code here
+    ; and the library's assembly expect, and the entry code switches to it
+    ; around main.start.  Elsewhere the program stays in emulation mode and
+    ; each run switches for itself (the C64's ROM divides floats wrongly in
+    ; native mode).  About a run:
+    ; - the run names no virtual register that is also named outside it, so
+    ;   nothing has to pass through the byte cells of the 8-bit code;
+    ; - a register that is loaded from a variable is that variable until it is
+    ;   changed, one that is loaded with a number is that number, and one value
+    ;   at a time is in the accumulator; a second one that is still needed waits
+    ;   in one of the two scratch words;
+    ; - a run that would need more than that is written as 8-bit code after all.
+    ; The peephole passes take the run for text: they know nothing across it.
+    ; Not in a subroutine that may run from an interrupt: the machine's ROM
+    ; calls those in emulation mode, where there are no 16 bits.
+
+    bool wide_enabled = false
+    bool wide_rest = false          ; the program stays in native mode (the target's native65816 = rest)
+    ^^pointer whome = 0             ; per virtual register: the chunk that names it, or MANY
+    ^^long wfirst = 0               ; the first and last instruction of that chunk that names it
+    ^^long wlast = 0
+    ^^ubyte wkind = 0               ; in a run: where its value is (W_...)
+    ^^pointer wsrc = 0              ; W_ALIAS, W_CONST: the instruction that loaded it
+    long wcap = 0
+    ^^buf.Buf wb = 0                ; the text of the run being tried
+    bool wfail = false
+    uword wacc = 0                  ; the register whose value the accumulator holds, or 0
+    bool w1_used = false
+    bool w2_used = false
+    ^^ir.Chunk wchunk = 0
+    uword[64] waliases              ; the registers that are a variable, in this run
+    ubyte walias_count = 0
+    const ubyte W_ACC = 0           ; in the accumulator (or nowhere yet)
+    const ubyte W_ALIAS = 1         ; the variable it was loaded from
+    const ubyte W_CONST = 2         ; a number or an address
+    const ubyte W_S1 = 3            ; a scratch word
+    const ubyte W_S2 = 4
+    const long MANY = 1
+
+    sub wide_note(uword r, ^^ir.Chunk c) {
+        if r == 0 or r >= wcap
+            return
+        pointer here = c
+        if whome[r] == 0
+            whome[r] = here
+        else if whome[r] != here
+            whome[r] = MANY
+    }
+
+    sub wide_note_chunk(^^ir.Chunk c) {
+        while c != 0 {
+            ^^ir.Instr i = c.first
+            while i != 0 {
+                wide_note(i.r1, c)
+                wide_note(i.r2, c)
+                wide_note(i.r3, c)
+                ^^ir.Arg a = i.args
+                while a != 0 {
+                    wide_note(a.reg, c)
+                    a = a.next
+                }
+                a = i.results
+                while a != 0 {
+                    wide_note(a.reg, c)
+                    a = a.next
+                }
+                i = i.next
+            }
+            c = c.next
+        }
+    }
+
+    ; which chunk names each virtual register, over the whole program
+    sub wide_prepare() {
+        wide_enabled = false
+        if not c816 or io_platform.env("P8P8_NOWIDE") != 0 or find_sub("p8b_main.p8s_start") == 0
+            return
+        wide_enabled = true
+        wide_rest = target.is("native65816", "rest") and io_platform.env("P8P8_NATIVE_RUN") == 0
+        long needed = ir.regcount as long + 1
+        if needed > wcap {
+            whome = mem.alloc(needed * sizeof(pointer))
+            wsrc = mem.alloc(needed * sizeof(pointer))
+            wfirst = mem.alloc(needed * 4)
+            wlast = mem.alloc(needed * 4)
+            wkind = mem.alloc(needed)
+            wcap = needed
+        }
+        long k
+        for k in 0 to wcap - 1
+            whome[k] = 0
+        if wb == 0
+            wb = buf.new(4096)
+        wide_note_chunk(prog.initglobals)
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                wide_note_chunk(s.chunks)
+                s = s.next
+            }
+            bl = bl.next
+        }
+    }
+
+    sub is_word(ubyte t) -> bool {
+        return t == ir.T_WORD or t == ir.T_POINTER
+    }
+
+    ; can the instruction be part of a 16-bit run?  0: no, 1: yes, 2: yes, and the run ends with it
+    sub wide_ok(^^ir.Instr i) -> ubyte {
+        if not is_word(i.type)
+            return 0
+        when i.op {
+            ir.OP_LOADM, ir.OP_STOREM, ir.OP_STOREZM, ir.OP_STOREIM, ir.OP_LOAD, ir.OP_LOADR,
+            ir.OP_ADDR, ir.OP_SUBR, ir.OP_ANDR, ir.OP_ORR, ir.OP_XORR,
+            ir.OP_ADD, ir.OP_SUB, ir.OP_AND, ir.OP_OR, ir.OP_XOR,
+            ir.OP_ADDM, ir.OP_SUBM, ir.OP_ANDM, ir.OP_ORM, ir.OP_XORM, ir.OP_ADDIM, ir.OP_SUBIM,
+            ir.OP_INCM, ir.OP_DECM, ir.OP_INC, ir.OP_DEC, ir.OP_LSL, ir.OP_LSR, ir.OP_LSLM, ir.OP_LSRM,
+            ir.OP_NEG, ir.OP_INV -> return 1
+            ir.OP_LSLI, ir.OP_LSRI -> {
+                if i.value >= 1 and i.value <= 15
+                    return 1
+                return 0
+            }
+            ir.OP_CMP, ir.OP_CMPI -> return 2
+        }
+        return 0
+    }
+
+    sub wide_index_reg(uword r, long index) {
+        if r == 0 or r >= wcap
+            return
+        pointer here = wchunk
+        if whome[r] != here
+            return
+        if wfirst[r] < 0
+            wfirst[r] = index
+        wlast[r] = index
+    }
+
+    sub wide_reset_reg(uword r) {
+        if r != 0 and r < wcap
+            wfirst[r] = -1
+    }
+
+    ; is register r named only inside instructions first .. last of this chunk
+    sub wide_inside(uword r, long first, long last) -> bool {
+        if r == 0
+            return true
+        if r >= wcap
+            return false
+        pointer here = wchunk
+        return whome[r] == here and wfirst[r] >= first and wlast[r] <= last
+    }
+
+    sub wide_chunk(^^ir.Chunk c) {
+        wchunk = c
+        ^^ir.Instr i = c.first
+        long index = 0
+        while i != 0 {
+            wide_reset_reg(i.r1)
+            wide_reset_reg(i.r2)
+            wide_reset_reg(i.r3)
+            ^^ir.Arg ra = i.args
+            while ra != 0 {
+                wide_reset_reg(ra.reg)
+                ra = ra.next
+            }
+            ra = i.results
+            while ra != 0 {
+                wide_reset_reg(ra.reg)
+                ra = ra.next
+            }
+            i = i.next
+        }
+        i = c.first
+        ^^ir.Arg a
+        while i != 0 {
+            wide_index_reg(i.r1, index)
+            wide_index_reg(i.r2, index)
+            wide_index_reg(i.r3, index)
+            ; (a call names registers too: its arguments and results)
+            a = i.args
+            while a != 0 {
+                wide_index_reg(a.reg, index)
+                a = a.next
+            }
+            a = i.results
+            while a != 0 {
+                wide_index_reg(a.reg, index)
+                a = a.next
+            }
+            index++
+            i = i.next
+        }
+        i = c.first
+        index = 0
+        while i != 0 {
+            if wide_ok(i) != 0 {
+                ; the longest run from here, then shortened until it is closed
+                long length = 0
+                ^^ir.Instr j = i
+                while j != 0 {
+                    ubyte ok = wide_ok(j)
+                    if ok == 0
+                        break
+                    length++
+                    j = j.next
+                    if ok == 2
+                        break
+                }
+                while length >= 3 {
+                    bool closed = true
+                    j = i
+                    long k
+                    for k in 0 to length - 1 {
+                        if not wide_inside(j.r1, index, index + length - 1) or not wide_inside(j.r2, index, index + length - 1)
+                                or not wide_inside(j.r3, index, index + length - 1) {
+                            closed = false
+                            break
+                        }
+                        j = j.next
+                    }
+                    if closed
+                        break
+                    length--
+                }
+                if length >= 3 and wide_run(i, index, length) {
+                    repeat length
+                        i = i.next
+                    index += length
+                    continue
+                }
+            }
+            instruction(i)
+            i = i.next
+            index++
+        }
+    }
+
+    ; Where one run ends and the next begins with nothing in between (the label
+    ; that stood there was not needed), the accumulator stays 16 bits wide.
+    sub join_runs(^^buf.Buf b) {
+        ^^ubyte seam = "    sep  #$20\n    .as\n    rep  #$20\n    .al\n"
+        if not wide_rest
+            seam = "    sep  #$20\n    .as\n    sec\n    xce\n    clc\n    xce\n    rep  #$20\n    .al\n"
+        long n = buf.cstr_len(seam)
+        long from = 0
+        long dst = 0
+        while from < b.len {
+            if b.data[from] == ' ' and from + n <= b.len and buf.bytes_equal(b.data + from, seam, n)
+                from += n
+            else {
+                b.data[dst] = b.data[from]
+                dst++
+                from++
+            }
+        }
+        b.len = dst
+    }
+
+    ; ---- writing a run ----
+
+    sub wl(str text) {
+        buf.add_str(wb, "    ")
+        buf.add_str(wb, text)
+        buf.add_byte(wb, '\n')
+    }
+
+    ; the memory operand of instruction m
+    sub wmem_text(^^ir.Instr m) {
+        memory_operand(m)
+        buf.add_str(wb, mem_symbol)
+        if mem_offset > 0 {
+            buf.add_byte(wb, '+')
+            buf.add_long(wb, mem_offset)
+        }
+        else if mem_offset < 0
+            buf.add_long(wb, mem_offset)
+    }
+
+    ; "    mnemonic  memory"
+    sub wmem(str mnemonic, ^^ir.Instr m) {
+        buf.add_str(wb, "    ")
+        buf.add_str(wb, mnemonic)
+        buf.add_str(wb, "  ")
+        wmem_text(m)
+        buf.add_byte(wb, '\n')
+    }
+
+    ; "    mnemonic  #number"
+    sub wimm(str mnemonic, quad value) {
+        buf.add_str(wb, "    ")
+        buf.add_str(wb, mnemonic)
+        buf.add_str(wb, "  #")
+        buf.add_long(wb, (value & $ffff) as long)
+        buf.add_byte(wb, '\n')
+    }
+
+    ; "    mnemonic  operand", the operand being where register r's value is (not the accumulator)
+    sub wop(str mnemonic, uword r) {
+        buf.add_str(wb, "    ")
+        buf.add_str(wb, mnemonic)
+        buf.add_str(wb, "  ")
+        ^^ir.Instr src
+        when wkind[r] {
+            W_ALIAS -> {
+                src = wsrc[r]
+                wmem_text(src)
+            }
+            W_CONST -> {
+                src = wsrc[r]
+                buf.add_byte(wb, '#')
+                if src.sym != 0 {
+                    buf.add_str(wb, src.sym)
+                    if src.offset > 0 {
+                        buf.add_byte(wb, '+')
+                        buf.add_long(wb, src.offset)
+                    }
+                    else if src.offset < 0
+                        buf.add_long(wb, src.offset)
+                }
+                else
+                    buf.add_long(wb, (src.value & $ffff) as long)
+            }
+            W_S1 -> buf.add_str(wb, "P8ZP_SCRATCH_W1")
+            W_S2 -> buf.add_str(wb, "P8ZP_SCRATCH_W2")
+            else -> wfail = true
+        }
+        buf.add_byte(wb, '\n')
+    }
+
+    sub wide_release(uword r) {
+        when wkind[r] {
+            W_S1 -> w1_used = false
+            W_S2 -> w2_used = false
+        }
+    }
+
+    ; the value in the accumulator is put aside, when it is needed after instruction index
+    sub wide_save(long index) {
+        if wacc == 0
+            return
+        if wlast[wacc] > index
+            wide_spill()
+        wacc = 0
+    }
+
+    ; the accumulator's value into a scratch word; it stays in the accumulator too
+    sub wide_spill() {
+        if not w1_used {
+            w1_used = true
+            wl("sta  P8ZP_SCRATCH_W1")
+            wkind[wacc] = W_S1
+        }
+        else if not w2_used {
+            w2_used = true
+            wl("sta  P8ZP_SCRATCH_W2")
+            wkind[wacc] = W_S2
+        }
+        else
+            wfail = true
+    }
+
+    ; register r's value into the accumulator (what was there is put aside when needed)
+    sub wide_load(uword r, long index) {
+        if wacc == r
+            return
+        wide_save(index - 1)
+        wop("lda", r)
+        if wlast[r] <= index
+            wide_release(r)
+        ; (it keeps its other place as well, as long as it is not changed)
+        wacc = r
+    }
+
+    ; register r is about to be changed in the accumulator: it has no other place any more
+    sub wide_own(uword r) {
+        wide_release(r)
+        wkind[r] = W_ACC
+    }
+
+    ; do the two memory operands name the same variable
+    sub wide_same(^^ir.Instr a, ^^ir.Instr b) -> bool {
+        if a.sym != 0 or b.sym != 0
+            return a.sym == b.sym
+        return a.offset == b.offset
+    }
+
+    ; instruction m (at index) writes its memory operand: no register that is still
+    ; needed may be that variable
+    sub wide_written(^^ir.Instr m, long index) {
+        ubyte k = 0
+        while k < walias_count {
+            uword r = waliases[k]
+            if wkind[r] == W_ALIAS and wlast[r] > index {
+                ^^ir.Instr src = wsrc[r]
+                if wide_same(src, m)
+                    wfail = true
+            }
+            k++
+        }
+    }
+
+    ; the accumulator (register r) with the value of register x: "    mnemonic  x"
+    sub wide_binary(^^ir.Instr i, long index, str mnemonic, bool commutes, ubyte carry) {
+        uword r1 = i.r1
+        uword r2 = i.r2
+        if wacc == r2 and r1 != r2 {
+            ; the second operand is the one in the accumulator
+            if not commutes or wlast[r2] > index {
+                wide_spill()
+                if wfail
+                    return
+            }
+            if commutes {
+                when carry {
+                    1 -> wl("clc")
+                    2 -> wl("sec")
+                }
+                wop(mnemonic, r1)
+            }
+            else {
+                ubyte where = wkind[r2]
+                wop("lda", r1)
+                when carry {
+                    1 -> wl("clc")
+                    2 -> wl("sec")
+                }
+                wop(mnemonic, r2)
+                if wlast[r2] <= index {
+                    wide_release(r2)
+                    wkind[r2] = W_ACC
+                }
+            }
+            if commutes and wlast[r2] <= index
+                wide_release(r2)
+            wide_own(r1)
+            wacc = r1
+            return
+        }
+        wide_load(r1, index)
+        wide_own(r1)
+        when carry {
+            1 -> wl("clc")
+            2 -> wl("sec")
+        }
+        if r1 == r2 {
+            ; (with itself: it is only in the accumulator now)
+            wl("sta  P8ZP_SCRATCH_REG")
+            wfail = true
+            return
+        }
+        wop(mnemonic, r2)
+        if wlast[r2] <= index
+            wide_release(r2)
+    }
+
+    ; memory = memory <operation> register r1, for an operation that commutes
+    sub wide_memory(^^ir.Instr i, long index, str mnemonic, ubyte carry) {
+        uword r = i.r1
+        wide_written(i, index)
+        if wacc == r {
+            if wlast[r] > index
+                wide_spill()
+        }
+        else {
+            wide_save(index - 1)
+            wmem("lda", i)
+            wacc = 0
+            when carry {
+                1 -> wl("clc")
+                2 -> wl("sec")
+            }
+            wop(mnemonic, r)
+            if wlast[r] <= index
+                wide_release(r)
+            wmem("sta", i)
+            return
+        }
+        when carry {
+            1 -> wl("clc")
+            2 -> wl("sec")
+        }
+        wmem(mnemonic, i)
+        wmem("sta", i)
+        wacc = 0
+    }
+
+    sub wide_instruction(^^ir.Instr i, long index) {
+        uword r = i.r1
+        long k
+        when i.op {
+            ir.OP_LOADM -> {
+                if i.sym != 0 and peep6502.scanned(i.sym).mark & peep6502.K_PLAIN != 0 and walias_count < len(waliases) {
+                    ; a plain variable: the register is the variable, until one of them changes
+                    wkind[r] = W_ALIAS
+                    wsrc[r] = i
+                    waliases[walias_count] = r
+                    walias_count++
+                }
+                else {
+                    ; (anything else is read now, and once)
+                    wide_save(index - 1)
+                    wmem("lda", i)
+                    wkind[r] = W_ACC
+                    wacc = r
+                }
+            }
+            ir.OP_LOAD -> {
+                wkind[r] = W_CONST
+                wsrc[r] = i
+            }
+            ir.OP_LOADR -> {
+                uword from = i.r2
+                if wacc == from {
+                    if wlast[from] > index
+                        wide_spill()
+                    wkind[r] = W_ACC
+                    wacc = r
+                }
+                else if wkind[from] == W_ALIAS or wkind[from] == W_CONST {
+                    wkind[r] = wkind[from]
+                    wsrc[r] = wsrc[from]
+                    if wkind[r] == W_ALIAS {
+                        if walias_count < len(waliases) {
+                            waliases[walias_count] = r
+                            walias_count++
+                        }
+                        else
+                            wfail = true
+                    }
+                }
+                else {
+                    wide_save(index - 1)
+                    wop("lda", from)
+                    if wlast[from] <= index
+                        wide_release(from)
+                    wkind[r] = W_ACC
+                    wacc = r
+                }
+            }
+            ir.OP_STOREM -> {
+                if wkind[r] == W_ALIAS and wacc != r {
+                    ^^ir.Instr same = wsrc[r]
+                    if wide_same(same, i)
+                        return              ; (the variable into itself)
+                }
+                wide_written(i, index)
+                if wkind[r] == W_CONST and wacc != r {
+                    ^^ir.Instr number = wsrc[r]
+                    if number.sym == 0 and number.value & $ffff == 0 {
+                        wmem("stz", i)
+                        return
+                    }
+                }
+                wide_load(r, index)
+                wmem("sta", i)
+            }
+            ir.OP_STOREZM -> {
+                wide_written(i, index)
+                wmem("stz", i)
+            }
+            ir.OP_STOREIM -> {
+                wide_written(i, index)
+                if i.value & $ffff == 0
+                    wmem("stz", i)
+                else {
+                    wide_save(index - 1)
+                    wimm("lda", i.value)
+                    wmem("sta", i)
+                    wacc = 0
+                }
+            }
+            ir.OP_ADDR -> wide_binary(i, index, "adc", true, 1)
+            ir.OP_SUBR -> wide_binary(i, index, "sbc", false, 2)
+            ir.OP_ANDR -> wide_binary(i, index, "and", true, 0)
+            ir.OP_ORR -> wide_binary(i, index, "ora", true, 0)
+            ir.OP_XORR -> wide_binary(i, index, "eor", true, 0)
+            ir.OP_ADD -> {
+                wide_load(r, index)
+                wide_own(r)
+                wl("clc")
+                wimm("adc", i.value)
+            }
+            ir.OP_SUB -> {
+                wide_load(r, index)
+                wide_own(r)
+                wl("sec")
+                wimm("sbc", i.value)
+            }
+            ir.OP_AND -> {
+                wide_load(r, index)
+                wide_own(r)
+                wimm("and", i.value)
+            }
+            ir.OP_OR -> {
+                wide_load(r, index)
+                wide_own(r)
+                wimm("ora", i.value)
+            }
+            ir.OP_XOR -> {
+                wide_load(r, index)
+                wide_own(r)
+                wimm("eor", i.value)
+            }
+            ir.OP_ADDM -> wide_memory(i, index, "adc", 1)
+            ir.OP_ANDM -> wide_memory(i, index, "and", 0)
+            ir.OP_ORM -> wide_memory(i, index, "ora", 0)
+            ir.OP_XORM -> wide_memory(i, index, "eor", 0)
+            ir.OP_SUBM -> {
+                ; memory = memory - r1
+                wide_written(i, index)
+                if wacc == r {
+                    wide_spill()
+                    if wfail
+                        return
+                }
+                else
+                    wide_save(index - 1)
+                wmem("lda", i)
+                wl("sec")
+                wop("sbc", r)
+                if wlast[r] <= index
+                    wide_release(r)
+                wmem("sta", i)
+                wacc = 0
+            }
+            ir.OP_ADDIM, ir.OP_SUBIM -> {
+                wide_written(i, index)
+                wide_save(index - 1)
+                wmem("lda", i)
+                if i.op == ir.OP_ADDIM {
+                    wl("clc")
+                    wimm("adc", i.value)
+                }
+                else {
+                    wl("sec")
+                    wimm("sbc", i.value)
+                }
+                wmem("sta", i)
+                wacc = 0
+            }
+            ir.OP_INCM -> {
+                wide_written(i, index)
+                wmem("inc", i)
+            }
+            ir.OP_DECM -> {
+                wide_written(i, index)
+                wmem("dec", i)
+            }
+            ir.OP_LSLM -> {
+                wide_written(i, index)
+                wmem("asl", i)
+            }
+            ir.OP_LSRM -> {
+                wide_written(i, index)
+                wmem("lsr", i)
+            }
+            ir.OP_INC -> {
+                wide_load(r, index)
+                wide_own(r)
+                wl("inc  a")
+            }
+            ir.OP_DEC -> {
+                wide_load(r, index)
+                wide_own(r)
+                wl("dec  a")
+            }
+            ir.OP_LSL, ir.OP_LSLI -> {
+                wide_load(r, index)
+                wide_own(r)
+                k = 1
+                if i.op == ir.OP_LSLI
+                    k = i.value as long
+                if k >= 8 {
+                    ; by eight: the low byte becomes the high one
+                    wl("and  #$00ff")
+                    wl("xba")
+                    k -= 8
+                }
+                repeat k as ubyte
+                    wl("asl  a")
+            }
+            ir.OP_LSR, ir.OP_LSRI -> {
+                wide_load(r, index)
+                wide_own(r)
+                k = 1
+                if i.op == ir.OP_LSRI
+                    k = i.value as long
+                if k == 15 {
+                    ; only the top bit is left: through the carry
+                    wl("asl  a")
+                    wl("lda  #0")
+                    wl("rol  a")
+                    k = 0
+                }
+                else if k >= 8 {
+                    wl("xba")
+                    wl("and  #$00ff")
+                    k -= 8
+                }
+                repeat k as ubyte
+                    wl("lsr  a")
+            }
+            ir.OP_NEG -> {
+                wide_load(r, index)
+                wide_own(r)
+                wl("eor  #$ffff")
+                wl("inc  a")
+            }
+            ir.OP_INV -> {
+                wide_load(r, index)
+                wide_own(r)
+                wl("eor  #$ffff")
+            }
+            ir.OP_CMPI -> {
+                wide_load(r, index)
+                wimm("cmp", i.value)
+            }
+            ir.OP_CMP -> {
+                uword other = i.r2
+                if wacc == other and r != other {
+                    wide_spill()
+                    if wfail
+                        return
+                    ubyte kept = wkind[other]
+                    wop("lda", r)
+                    wop("cmp", other)
+                    wacc = r
+                }
+                else {
+                    wide_load(r, index)
+                    if r == other
+                        wfail = true
+                    else
+                        wop("cmp", other)
+                }
+            }
+            else -> wfail = true
+        }
+    }
+
+    ; Writes the run of length instructions from i (at index of the chunk) for the
+    ; 16-bit accumulator; false when it will not go, and nothing is written then.
+    sub wide_run(^^ir.Instr i, long index, long length) -> bool {
+        buf.clear(wb)
+        wfail = false
+        wacc = 0
+        w1_used = false
+        w2_used = false
+        walias_count = 0
+        ^^ir.Instr j = i
+        long k
+        for k in 0 to length - 1 {
+            if j.r1 != 0
+                wkind[j.r1] = W_ACC
+            if j.r2 != 0
+                wkind[j.r2] = W_ACC
+            j = j.next
+        }
+        j = i
+        ^^ir.Instr last = i
+        for k in 0 to length - 1 {
+            wide_instruction(j, index + k)
+            if wfail
+                return false
+            last = j
+            j = j.next
+        }
+        if not wide_rest {
+            ; (into native mode for the run only)
+            raw("    clc")
+            raw("    xce")
+        }
+        raw("    rep  #$20")
+        raw("    .al")
+        buf.add_bytes(w(), wb.data, wb.len)
+        raw("    sep  #$20")
+        raw("    .as")
+        if not wide_rest {
+            ; back to emulation mode; a comparison's flags are kept for the branch that follows
+            if wide_ok(last) == 2 {
+                raw("    php")
+                raw("    sec")
+                raw("    xce")
+                raw("    plp")
+            }
+            else {
+                raw("    sec")
+                raw("    xce")
+            }
+        }
+        return true
     }
 
     ; ---- instructions ----
@@ -3362,6 +4182,11 @@ gen6502 {
                 if inlined != 0
                     asm_text(inlined.asmtext, inlined.asmlen)       ; its body, in place of the call
                 else {
+                    if wide_enabled and wide_rest and (starts_with(i.sym, "sys.exit") or starts_with(i.sym, "sys.reset_system") or starts_with(i.sym, "sys.poweroff_system")) {
+                        ; the program ends here: the machine gets its CPU back in emulation mode
+                        raw("    sec")
+                        raw("    xce")
+                    }
                     ins("jsr", i.sym)
                     ubyte used = call_uses(i, in_registers)
                     ^^ir.Sub callee = find_sub(i.sym)

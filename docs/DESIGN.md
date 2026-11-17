@@ -254,6 +254,38 @@ without an operating system), the Amiga 1200 and the Amiga 500.
 - vasm assembles with names in full (`-ldots`), without scopes; vlink lays
   the program out with the target's `link.ld` from the library.
 
+## The 65816
+
+`-cpu 65816` (or `cpu = 65816` in a target's file) gives the same 6502 code
+generator a CPU that has everything the 65C02 code here uses, and a 16-bit
+accumulator.  The second is where the 6502 family is weakest: adding two
+words is six instructions on a 65C02 and three on a 65816.
+
+- **Runs.**  Within a chunk, a run of consecutive IR instructions on words
+  is written for the 16-bit accumulator between one `rep #$20` and one
+  `sep #$20`.  Inside it one value is in the accumulator; a register that
+  was loaded from a variable is that variable until one of them changes, one
+  that was loaded with a number is that number, and a second value that is
+  still needed waits in one of the two scratch words.  A run names no
+  virtual register that is named outside it, because the 8-bit code keeps
+  every byte of a register in a cell of its own and the two bytes of a word
+  need not be next to each other.  A run that would need more is written as
+  8-bit code.  The peephole passes take a run for text.
+- **Native mode.**  16-bit registers only exist in the 65816's native mode.
+  Where the machine's ROM is written for programs in native mode (the
+  target's `native65816 = rest`: the Commander X16), the entry code switches
+  to it around `main.start`, with 8-bit registers as the rest of the code
+  and the library's assembly expect, and a call of `sys.exit` switches back
+  first.  On any other machine the program stays in emulation mode and each
+  run switches for itself: the C64's BASIC ROM divides floats wrongly when
+  it is called in native mode.  On the word loop of the benchmarks the
+  switching costs 23% (188 against 153 jiffies; the 65C02's code takes 366).
+- **Interrupts.**  A subroutine that may run from an interrupt has no runs:
+  the X16's ROM calls those in emulation mode.
+- Not yet: word arrays (two byte arrays on this CPU family), anything through
+  a pointer, comparisons that branch on greater or less, 16-bit index
+  registers, stack-relative addressing, block moves.
+
 ## Machines and the library
 
 Nothing about a particular machine is in the compiler.  A 6502 machine is a
