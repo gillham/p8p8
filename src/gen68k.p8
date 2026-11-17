@@ -122,6 +122,17 @@ gen68k {
                     return
                 }
             }
+            ; a move has set the flags that a test of the same place would set:
+            ;     move.b  (a0,d3.w),d2
+            ;     tst.b  d2                <-- left out
+            if clen > 12 and buf.bytes_equal(cl, "    tst.", 8) and buf.bytes_equal(pl, "    move.", 9) and pl[9] == cl[8] {
+                long tlen = clen - 12           ; the operand of tst, without the line end
+                if plen > tlen + 2 and pl[plen - tlen - 2] == ',' and buf.bytes_equal(pl + plen - tlen - 1, cl + 11, tlen)
+                        and ((cl[11] == 'd' and tlen == 2) or (tlen > 4 and buf.bytes_equal(cl + 11 + tlen - 4, "(a5)", 4))) {
+                    o.len = cur
+                    return
+                }
+            }
         }
         prev_line = cur
         this_line = o.len
@@ -206,6 +217,10 @@ gen68k {
             use_first = mem.grow(use_first, cell_cap * 4, needed * 4)
             use_last = mem.grow(use_last, cell_cap * 4, needed * 4)
             use_stamp = mem.grow(use_stamp, cell_cap * 4, needed * 4)
+            const_of = mem.grow(const_of, cell_cap * sizeof(pointer), needed * sizeof(pointer))
+            root_var = mem.grow(root_var, cell_cap * sizeof(pointer), needed * sizeof(pointer))
+            sum_base = mem.grow(sum_base, cell_cap * 2, needed * 2)
+            sum_index = mem.grow(sum_index, cell_cap * 2, needed * 2)
             cell_cap = needed
         }
     }
@@ -265,11 +280,34 @@ gen68k {
         long adjust = 0
         if size < 4
             adjust = 4 - size
+        if r < cell_cap and reg_of[r] == IS_CONSTANT {
+            ; it is a number or an address: written where it is used
+            ^^ir.Instr ci = const_of[r]
+            if ci.sym != 0 {
+                putc('#')
+                put(ci.sym)
+                if ci.offset > 0 {
+                    putc('+')
+                    putn(ci.offset)
+                }
+                else if ci.offset < 0
+                    putn(ci.offset)
+            }
+            else
+                imm(ci.value, t)
+            return
+        }
         if r < cell_cap and reg_of[r] != 0 {
             if extra != 0
                 error("a part of a value in a CPU register", 0)
-            putc('d')
-            putn(reg_of[r])
+            if reg_of[r] >= 10 {
+                putc('a')
+                putn(reg_of[r] - 8)
+            }
+            else {
+                putc('d')
+                putn(reg_of[r])
+            }
             return
         }
         if r >= cell_cap or cell_stamp[r] != stamp {
@@ -305,7 +343,7 @@ gen68k {
             if extra != 0 {
                 putn(extra)
             }
-            put("(a0,d1.l)")
+            put(index_operand)
             return
         }
         if i.sym != 0 {
@@ -343,12 +381,35 @@ gen68k {
     }
 
     ; for loadx, storex, storezx: the address in a0 and the scaled index in d1
+    str index_operand = "(a0,d1.l)    "
+
     sub index_setup(^^ir.Instr i) {
         indexed = false
         put("    lea  ")
         memop(i)
         raw(",a0")
         ubyte it = ir.reg_type(i.r2)
+        void strings.copy("(a0,d1.l)", index_operand)
+        if in_reg(i.r2) and it != ir.T_BYTE and (i.scale <= 1 or (not cpu68000 and (i.scale == 2 or i.scale == 4 or i.scale == 8))) {
+            ; the index is in a data register already (a word reaches every element: an
+            ; array has no more than 32768); a 68020 scales it too
+            index_operand[4] = 'd'
+            index_operand[5] = '0' + reg_of[i.r2]
+            index_operand[6] = '.'
+            index_operand[7] = 'w'
+            if it != ir.T_WORD
+                index_operand[7] = 'l'
+            index_operand[8] = ')'
+            index_operand[9] = 0
+            if i.scale > 1 {
+                index_operand[8] = '*'
+                index_operand[9] = '0' + i.scale
+                index_operand[10] = ')'
+                index_operand[11] = 0
+            }
+            indexed = true
+            return
+        }
         if it == ir.T_LONG or it == ir.T_POINTER {
             op("move", ir.T_LONG)
             rg(i.r2, ir.T_LONG)
@@ -471,8 +532,82 @@ gen68k {
 
     ; r1 = r1 <operation> second operand, for add, sub, and, or (xor wants a data register)
     ; kind 0: #value, 1: register r2, 2: memory, the result in memory (operation with r1)
+    ; in a data register
     sub in_reg(uword r) -> bool {
-        return r < cell_cap and reg_of[r] != 0
+        return r < cell_cap and reg_of[r] != 0 and reg_of[r] < 10
+    }
+
+    ; in an address register (a virtual register that shares a pointer variable's)
+    sub in_areg(uword r) -> bool {
+        return r < cell_cap and reg_of[r] >= 10 and reg_of[r] <= 12
+    }
+
+    sub is_sum(uword r) -> bool {
+        return r < cell_cap and reg_of[r] == IS_SUM
+    }
+
+    ; the CPU register of the variable that is the instruction's memory operand, or 0
+    sub mem_hwreg(^^ir.Instr i) -> ubyte {
+        if i.sym == 0 or not framed or cursub == 0
+            return 0
+        ^^ir.Var v = var_of(i.sym)
+        if v != 0 and v.stacklocal and v.owner == cursub
+            return v.hwreg
+        return 0
+    }
+
+    ; "offset(aN)" for the address in register r: through its own address register, or a0
+    sub through(uword r, long offset) {
+        if is_sum(r) {
+            ; base + index, in one addressing mode (base_a0 has set them up)
+            uword br = sum_base[r]
+            uword xr = sum_index[r]
+            putn(offset)
+            if in_areg(br) {
+                put("(a")
+                putn(reg_of[br] - 8)
+            }
+            else
+                put("(a0")
+            if in_reg(xr) {
+                put(",d")
+                putn(reg_of[xr])
+            }
+            else
+                put(",d1")
+            put(".l)")
+            return
+        }
+        if in_areg(r) {
+            putn(offset)
+            put("(a")
+            putn(reg_of[r] - 8)
+            putc(')')
+            return
+        }
+        putn(offset)
+        put("(a0)")
+    }
+
+    sub base_a0(uword r) {
+        if is_sum(r) {
+            if not in_areg(sum_base[r]) {
+                put("    movea.l  ")
+                rg(sum_base[r], ir.T_LONG)
+                raw(",a0")
+            }
+            if not in_reg(sum_index[r]) {
+                put("    move.l  ")
+                rg(sum_index[r], ir.T_LONG)
+                raw(",d1")
+            }
+            return
+        }
+        if in_areg(r)
+            return
+        put("    movea.l  ")
+        rg(r, ir.T_LONG)
+        raw(",a0")
     }
 
     ; is the instruction's memory operand a variable that lives in a data register
@@ -660,20 +795,8 @@ gen68k {
         if k < 0 or (signed and what != A_MUL)
             return false
         when what {
-            A_MUL -> {
-                op("move", t)
-                rg(i.r1, t)
-                raw(",d0")
-                shift_d0_const(S_LSL, t, k as long)
-                store_d0(i.r1, t)
-            }
-            A_DIV -> {
-                op("move", t)
-                rg(i.r1, t)
-                raw(",d0")
-                shift_d0_const(S_LSR, t, k as long)
-                store_d0(i.r1, t)
-            }
+            A_MUL -> shift_reg(S_LSL, i, k as long)
+            A_DIV -> shift_reg(S_LSR, i, k as long)
             else -> {
                 long mask = 1
                 mask <<= k as ubyte
@@ -961,6 +1084,15 @@ gen68k {
     }
 
     sub leave() {
+        if framed and not linked {
+            ; nothing in a frame: the saved registers are on top of the stack
+            if used_mask != 0 {
+                put("    movem.l  (sp)+,")
+                put_mask(used_mask)
+                nl()
+            }
+            return
+        }
         if framed {
             if used_mask != 0 {
                 put("    movem.l  -")
@@ -971,6 +1103,22 @@ gen68k {
             }
             ins("unlk  a5")
         }
+    }
+
+    bool linked = false             ; the subroutine being written has set up a5 (link)
+
+    ; does the code move the stack pointer itself (then registers are restored by way of a5)
+    sub moves_stack(^^ir.Chunk c) -> bool {
+        while c != 0 {
+            ^^ir.Instr i = c.first
+            while i != 0 {
+                if i.op == ir.OP_PUSH or i.op == ir.OP_POP or i.op == ir.OP_PUSHST or i.op == ir.OP_POPST
+                    return true
+                i = i.next
+            }
+            c = c.next
+        }
+        return false
     }
 
     ; The Amiga's libraries by the numbers upstream gives them (an extsub's bank): the
@@ -1620,6 +1768,8 @@ gen68k {
             ir.OP_NOP, ir.OP_BREAKPOINT, ir.OP_SEI, ir.OP_CLI -> {
             }
             ir.OP_LOAD -> {
+                if i.r1 < cell_cap and reg_of[i.r1] == IS_CONSTANT
+                    return              ; written where it is used
                 if i.sym != 0 {
                     put("    move.l  #")
                     put(i.sym)
@@ -1647,6 +1797,8 @@ gen68k {
                 }
             }
             ir.OP_LOADM -> {
+                if i.r1 < cell_cap and reg_of[i.r1] != 0 and reg_of[i.r1] == mem_hwreg(i)
+                    return              ; it shares the variable's register
                 op("move", t)
                 memop(i)
                 comma()
@@ -1665,6 +1817,10 @@ gen68k {
                 nl()
             }
             ir.OP_LOADR -> {
+                if is_sum(i.r1)
+                    return              ; an address that is formed where it is used
+                if in_reg(i.r1) and reg_of[i.r1] == reg_of[i.r2]
+                    return
                 op("move", t)
                 rg(i.r2, t)
                 comma()
@@ -1694,32 +1850,26 @@ gen68k {
                 nl()
             }
             ir.OP_LOADI -> {
-                put("    movea.l  ")
-                rg(i.r2, ir.T_LONG)
-                raw(",a0")
+                base_a0(i.r2)
                 op("move", t)
-                putn(i.offset)
-                put("(a0),")
+                through(i.r2, i.offset)
+                comma()
                 rg(i.r1, t)
                 nl()
             }
             ir.OP_STOREI -> {
-                put("    movea.l  ")
-                rg(i.r2, ir.T_LONG)
-                raw(",a0")
+                base_a0(i.r2)
                 op("move", t)
                 rg(i.r1, t)
                 comma()
-                putn(i.offset)
-                raw("(a0)")
+                through(i.r2, i.offset)
+                nl()
             }
             ir.OP_STOREZI -> {
-                put("    movea.l  ")
-                rg(i.r2, ir.T_LONG)
-                raw(",a0")
+                base_a0(i.r2)
                 op("clr", t)
-                putn(i.offset)
-                raw("(a0)")
+                through(i.r2, i.offset)
+                nl()
             }
             ir.OP_STOREM -> {
                 op("move", t)
@@ -1782,7 +1932,9 @@ gen68k {
                 ins("rts")
             }
             ir.OP_RETURNR -> {
-                load_zx(i.r1, t, "d0")
+                op("move", t)
+                rg(i.r1, t)
+                raw(",d0")
                 leave()
                 ins("rts")
             }
@@ -1851,7 +2003,10 @@ gen68k {
                 memop(i)
                 nl()
             }
-            ir.OP_ADDR -> simple("add", i, 1, false)
+            ir.OP_ADDR -> {
+                if not is_sum(i.r1)
+                    simple("add", i, 1, false)
+            }
             ir.OP_ADD -> simple("addi", i, 0, false)
             ir.OP_ADDM -> simple("add", i, 2, false)
             ir.OP_ADDIM -> simple("addi", i, 3, false)
@@ -1977,6 +2132,18 @@ gen68k {
             }
             ir.OP_EXT, ir.OP_EXTL -> {
                 ; r1 (wider) = r2, zeros above
+                if in_reg(i.r1) and reg_of[i.r1] != reg_of[i.r2] {
+                    ; straight into its data register
+                    put("    moveq  #0,")
+                    rg_whole(i.r1)
+                    nl()
+                    op("move", t)
+                    rg(i.r2, t)
+                    comma()
+                    rg_whole(i.r1)
+                    nl()
+                    return
+                }
                 load_zx(i.r2, t, "d0")
                 op("move", ir.T_LONG)
                 put("d0,")
@@ -1991,6 +2158,8 @@ gen68k {
                 nl()
             }
             ir.OP_LSIGB -> {
+                if in_reg(i.r1) and reg_of[i.r1] == reg_of[i.r2]
+                    return              ; the low end of the same register
                 op("move", ir.T_BYTE)
                 rg(i.r2, ir.T_BYTE)
                 comma()
@@ -1998,6 +2167,8 @@ gen68k {
                 nl()
             }
             ir.OP_LSIGW -> {
+                if in_reg(i.r1) and reg_of[i.r1] == reg_of[i.r2]
+                    return
                 op("move", ir.T_WORD)
                 rg(i.r2, ir.T_WORD)
                 comma()
@@ -2006,7 +2177,7 @@ gen68k {
             }
             ir.OP_MSIGB -> {
                 ; the highest byte of r2
-                if reg_of[i.r2] != 0 {
+                if in_reg(i.r2) {
                     op("move", t)
                     rg(i.r2, t)
                     raw(",d0")
@@ -2025,7 +2196,7 @@ gen68k {
                 }
             }
             ir.OP_MSIGW -> {
-                if reg_of[i.r2] != 0 {
+                if in_reg(i.r2) {
                     op("move", ir.T_LONG)
                     rg(i.r2, ir.T_LONG)
                     raw(",d0")
@@ -2129,12 +2300,17 @@ gen68k {
         place_chunks(chunks)
         if framed and cursub != 0
             place_variables(cursub)
+        linked = framed
+        if framed and frame_size == 0 and cursub != 0 and not moves_stack(chunks)
+            linked = false
         if framed {
             if frame_size & 1 != 0
                 frame_size++
-            put("    link  a5,#-")
-            putn(frame_size)
-            nl()
+            if linked {
+                put("    link  a5,#-")
+                putn(frame_size)
+                nl()
+            }
             if used_mask != 0 {
                 put("    movem.l  ")
                 put_mask(used_mask)
@@ -2166,6 +2342,12 @@ gen68k {
     ^^long use_first = 0            ; the first and last instruction of that chunk that names it
     ^^long use_last = 0
     ^^long use_stamp = 0
+    ^^pointer const_of = 0          ; per virtual register that is a constant (reg_of 255): the load that says which
+    ^^pointer root_var = 0          ; per virtual register that shares a variable's register: the variable
+    const ubyte IS_CONSTANT = 255
+    ^^uword sum_base = 0            ; per virtual register that is base + index (reg_of 254): the two
+    ^^uword sum_index = 0
+    const ubyte IS_SUM = 254
     uword used_mask = 0             ; of the subroutine being written: bit n for dn, bit 8+n for an
     ubyte free_mask = 0
     const uword ALL_REGS = %0001110011111100
@@ -2407,6 +2589,15 @@ gen68k {
             free_mask = lsb(available)
             i = c.first
             while i != 0 {
+                when i.op {
+                    ir.OP_LOADM -> share_register(i, s, chunk_number, index)
+                    ir.OP_LOAD -> constant_register(i, chunk_number, index)
+                    ir.OP_LSIGB, ir.OP_LSIGW -> share_copy(i, chunk_number, index)
+                    ir.OP_LOADR -> {
+                        if not sum_register(i, chunk_number, index)
+                            share_copy(i, chunk_number, index)
+                    }
+                }
                 take_register(i.r1, chunk_number, index)
                 take_register(i.r2, chunk_number, index)
                 take_register(i.r3, chunk_number, index)
@@ -2438,6 +2629,219 @@ gen68k {
             }
             c = c.next
         }
+    }
+
+    ; Does the instruction only read its first register?  (Everything else writes it.)
+    sub reads_first(ubyte opcode) -> bool {
+        when opcode {
+            ir.OP_STOREM, ir.OP_STOREX, ir.OP_STOREI, ir.OP_STOREHR, ir.OP_PUSH, ir.OP_RETURNR, ir.OP_CMP, ir.OP_CMPI,
+            ir.OP_BGT, ir.OP_BGTR, ir.OP_BLT, ir.OP_BGTS, ir.OP_BGTSR, ir.OP_BLTS, ir.OP_BGE, ir.OP_BGER, ir.OP_BLE,
+            ir.OP_BGES, ir.OP_BGESR, ir.OP_BLES, ir.OP_ADDM, ir.OP_SUBM, ir.OP_MULM, ir.OP_MULSM, ir.OP_DIVM, ir.OP_DIVSM,
+            ir.OP_ANDM, ir.OP_ORM, ir.OP_XORM, ir.OP_ASRNM, ir.OP_LSRNM, ir.OP_LSLNM, ir.OP_JUMPI, ir.OP_CALLI -> return true
+        }
+        return false
+    }
+
+    ; From the instruction after i (at index) to the last mention of r: is r
+    ; only read, and do the variable v and the virtual register src (either may
+    ; be 0) keep their values?  With address set, r may only be used as an
+    ; address (through it, or copied on); with constant set, only where a number
+    ; can stand.
+    sub stays(^^ir.Instr i, long index, uword r, ^^ir.Var v, uword src, bool address, bool constant) -> bool {
+        ^^ir.Instr j = i.next
+        long k = index + 1
+        ^^ir.Arg a
+        while j != 0 and k <= use_last[r] {
+            if v != 0 and j.sym != 0 and j.mode != ir.M_CALL and j.op != ir.OP_LOADM and j.op != ir.OP_LOADMZ {
+                if var_of(j.sym) == v
+                    return false
+            }
+            if j.r1 == r and (address or not reads_first(j.op))
+                return false
+            if src != 0 and ((j.r1 == src and not reads_first(j.op)) or (j.r2 == src and j.op == ir.OP_DIVMODR))
+                return false
+            if constant and j.r1 == r {
+                when j.op {
+                    ir.OP_STOREM, ir.OP_STOREX, ir.OP_STOREI, ir.OP_STOREHR, ir.OP_PUSH, ir.OP_RETURNR,
+                    ir.OP_ADDM, ir.OP_SUBM, ir.OP_MULM, ir.OP_MULSM, ir.OP_DIVM, ir.OP_DIVSM,
+                    ir.OP_ANDM, ir.OP_ORM, ir.OP_XORM, ir.OP_ASRNM, ir.OP_LSRNM, ir.OP_LSLNM -> {
+                    }
+                    else -> return false
+                }
+            }
+            if j.r2 == r {
+                if j.op == ir.OP_DIVMODR
+                    return false
+                if address and j.op != ir.OP_LOADI and j.op != ir.OP_STOREI and j.op != ir.OP_STOREZI and j.op != ir.OP_LOADR
+                    return false
+                if address and j.type == ir.T_FLOAT
+                    return false
+                if constant and (j.op == ir.OP_MSIGB or j.op == ir.OP_MSIGW)
+                    return false
+            }
+            if j.r3 == r and address
+                return false
+            a = j.args
+            while a != 0 {
+                if a.reg == r and address
+                    return false
+                a = a.next
+            }
+            a = j.results
+            while a != 0 {
+                if a.reg == r or (src != 0 and a.reg == src)
+                    return false
+                a = a.next
+            }
+            j = j.next
+            k++
+        }
+        return true
+    }
+
+    ; is x written by instruction j (x a virtual register; its variable, when it shares one's register)
+    sub changed_by(^^ir.Instr j, uword x) -> bool {
+        if (j.r1 == x and not reads_first(j.op)) or (j.r2 == x and j.op == ir.OP_DIVMODR)
+            return true
+        ^^ir.Arg a = j.results
+        while a != 0 {
+            if a.reg == x
+                return true
+            a = a.next
+        }
+        if x < cell_cap and use_home[x] == -2 and root_var[x] != 0 and reg_of[x] != IS_CONSTANT and reg_of[x] != IS_SUM {
+            if j.sym != 0 and j.mode != ir.M_CALL and j.op != ir.OP_LOADM and j.op != ir.OP_LOADMZ {
+                if var_of(j.sym) == root_var[x]
+                    return true
+            }
+        }
+        return false
+    }
+
+    ; "copy the base; add the index; use the sum as an address": when the sum is
+    ; used for nothing else, the 68000 forms it in the addressing mode,
+    ; offset(base,index.l), and neither the copy nor the addition is written.
+    ; i is the copy, at this index of the chunk.
+    sub sum_register(^^ir.Instr i, long chunk_number, long index) -> bool {
+        uword r = i.r1
+        ^^ir.Instr add = i.next
+        if not starts_here(r, chunk_number, index) or add == 0 or add.op != ir.OP_ADDR or add.r1 != r
+            return false
+        uword br = i.r2
+        uword xr = add.r2
+        if br == 0 or xr == 0 or br == r or xr == r or br >= cell_cap or xr >= cell_cap
+            return false
+        if (i.type != ir.T_POINTER and i.type != ir.T_LONG) or (add.type != ir.T_POINTER and add.type != ir.T_LONG)
+            return false
+        if reg_of[br] == IS_SUM or reg_of[xr] == IS_SUM or ir.reg_type(xr) == ir.T_FLOAT or ir.reg_type(br) == ir.T_FLOAT
+            return false
+        ^^ir.Instr j = add.next
+        long k = index + 2
+        ^^ir.Arg a
+        bool used = false
+        while j != 0 and k <= use_last[r] {
+            if j.r1 == r or j.r3 == r
+                return false
+            if j.r2 == r {
+                if j.op != ir.OP_LOADI and j.op != ir.OP_STOREI and j.op != ir.OP_STOREZI
+                    return false
+                if j.type == ir.T_FLOAT or j.offset < -128 or j.offset > 127
+                    return false
+                used = true
+            }
+            a = j.args
+            while a != 0 {
+                if a.reg == r
+                    return false
+                a = a.next
+            }
+            a = j.results
+            while a != 0 {
+                if a.reg == r
+                    return false
+                a = a.next
+            }
+            ; base and index must still be what they were when the sum is used
+            ; (an instruction that uses the sum may change them: it reads first)
+            if k < use_last[r] and (changed_by(j, br) or changed_by(j, xr))
+                return false
+            j = j.next
+            k++
+        }
+        if not used
+            return false
+        ; base and index keep their registers until then
+        if use_home[br] == chunk_number and use_last[br] < use_last[r]
+            use_last[br] = use_last[r]
+        if use_home[xr] == chunk_number and use_last[xr] < use_last[r]
+            use_last[xr] = use_last[r]
+        reg_of[r] = IS_SUM
+        sum_base[r] = br
+        sum_index[r] = xr
+        use_home[r] = -2
+        return true
+    }
+
+    sub starts_here(uword r, long chunk_number, long index) -> bool {
+        return r != 0 and r < cell_cap and reg_of[r] == 0 and use_home[r] == chunk_number and use_first[r] == index
+            and ir.reg_type(r) != ir.T_FLOAT
+    }
+
+    ; A virtual register that is loaded from a variable which lives in a CPU
+    ; register is that register, as long as neither changes while it is in use:
+    ; the load i (at this index of the chunk) then costs nothing.  For a pointer
+    ; variable in an address register only when the copy is used as an address.
+    sub share_register(^^ir.Instr i, ^^ir.Sub s, long chunk_number, long index) {
+        uword r = i.r1
+        if not starts_here(r, chunk_number, index) or i.sym == 0
+            return
+        ^^ir.Var v = var_of(i.sym)
+        if v == 0 or not v.stacklocal or v.owner != s or v.hwreg == 0
+            return
+        if not stays(i, index, r, v, 0, v.hwreg >= 10, false)
+            return
+        reg_of[r] = v.hwreg
+        root_var[r] = v
+        use_home[r] = -2            ; (not one of the pool's: nothing is given back for it)
+    }
+
+    ; A virtual register that is loaded with a number or an address and never
+    ; changed is that number wherever it is used; the load is not written.
+    sub constant_register(^^ir.Instr i, long chunk_number, long index) {
+        uword r = i.r1
+        if not starts_here(r, chunk_number, index) or i.type == ir.T_FLOAT
+            return
+        if not stays(i, index, r, 0, 0, false, true)
+            return
+        reg_of[r] = IS_CONSTANT
+        const_of[r] = i
+        use_home[r] = -2
+    }
+
+    ; A copy of a value in a data register (the whole of it, or its low byte
+    ; or word) is that register too, while neither changes.
+    sub share_copy(^^ir.Instr i, long chunk_number, long index) {
+        uword r = i.r1
+        uword src = i.r2
+        if not starts_here(r, chunk_number, index) or src == 0 or src >= cell_cap or reg_of[src] < 2 or reg_of[src] > 7
+            return
+        if use_home[src] == -2 {
+            ; the source shares a variable's register
+            ^^ir.Var v = root_var[src]
+            if v == 0 or not stays(i, index, r, v, 0, false, false)
+                return
+            root_var[r] = v
+        }
+        else {
+            ; the source is in a register of its own, which it keeps until the copy is done with
+            if use_home[src] != chunk_number or not stays(i, index, r, 0, src, false, false)
+                return
+            if use_last[src] < use_last[r]
+                use_last[src] = use_last[r]
+            root_var[r] = 0
+        }
+        reg_of[r] = reg_of[src]
+        use_home[r] = -2
     }
 
     sub whole_chunk(uword r, long chunk_number, long length) {

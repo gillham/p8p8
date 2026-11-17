@@ -201,9 +201,19 @@ without an operating system), the Amiga 1200 and the Amiga 500.
   uses, so a call keeps them; the ones that its calls pass arguments or take
   results in are not used in it, and a subroutine that calls through a
   pointer uses none.  `P8P8_NOREGS` in the environment turns this off.
+- A virtual register often needs no place of its own: one that is loaded
+  from a variable in a register and not changed is that register; so is a
+  copy of a register, or of its low byte or word; one that only holds a
+  number or an address is written as that wherever it is used; and "copy
+  the base, add the index, use the sum as an address" becomes the addressing
+  mode `offset(base,index.l)`.  Each of these is decided before the code is
+  written, by looking ahead in the chunk for anything that changes one of
+  the values involved.
 - Multiplication, division and remainder by a power of two are shifts and
-  masks; a value that was just stored in its cell is not fetched again.
-  There are no other passes over the code.
+  masks.  A subroutine with nothing in its frame has no `link`.  Two things
+  are done to the lines as they are written: a value that was just stored
+  in its cell is not fetched again, and a `tst` right after the `move` that
+  set the same flags is left out.
 - The cells of a subroutine are in a stack frame under a5.  So are its own
   plain variables and parameters, when nothing but the subroutine names them
   (no other subroutine, no assembly text, no address taken): that is what a
