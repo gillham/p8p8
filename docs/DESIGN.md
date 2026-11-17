@@ -228,7 +228,11 @@ without an operating system), the Amiga 1200 and the Amiga 500.
   return on its own; its cells are in a static area.
 - Arguments of assembly routines go into the registers their declarations
   name, results come from them; a subroutine's own value comes back in d0,
-  several values in d0, d1 and so on.
+  several values in d0, d1 and so on.  The first two parameters of a
+  subroutine that are not floats and that nothing but the subroutine names
+  arrive in d0 and d1; the others in their static variables, as before.
+- An assembly routine of the library that nothing refers to is left out,
+  as for the 6502.
 - On the Amiga a routine of a library is called through the library's jump
   table: its base in a6 (exec's from address 4, the others from the
   variables the library's startup code fills), then `jsr offset(a6)`.  The

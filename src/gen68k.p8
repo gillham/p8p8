@@ -1172,6 +1172,48 @@ gen68k {
         raw("Base,a6")
     }
 
+    ; The first two parameters of a subroutine that are not floats and live in
+    ; its frame or in a register (that is: nothing but the subroutine itself
+    ; names them) arrive in d0 and d1; every other one in its static variable,
+    ; where the caller writes it.  1 for d0, 2 for d1, 0 for the variable.
+    sub parameter_register(^^ir.Sub s, ^^ir.Var v) -> ubyte {
+        if s == 0 or s.is_asm or v == 0 or io_platform.env("P8P8_NOREGS") != 0
+            return 0
+        ubyte n = 0
+        ^^ir.Param p = s.params
+        while p != 0 {
+            ^^ir.Var pv = var_of(p.name)
+            if pv != 0 and pv.stacklocal and pv.owner == s and not is_float(pv.typestr) {
+                n++
+                if pv == v
+                    return n
+                if n == 2
+                    return 0
+            }
+            else if pv == v
+                return 0
+            p = p.next
+        }
+        return 0
+    }
+
+    ^^buf.Buf argname = 0
+
+    ; the same seen from a call: the subroutine's name and the argument's
+    sub argument_register(^^ubyte callee, ^^ubyte name) -> ubyte {
+        ^^ir.Sub s = sub_of(callee, buf.cstr_len(callee))
+        if s == 0 or s.is_asm
+            return 0
+        if argname == 0
+            argname = buf.new(128)
+        buf.clear(argname)
+        buf.add_str(argname, callee)
+        buf.add_byte(argname, '.')
+        buf.add_str(argname, name)
+        buf.add_byte(argname, 0)
+        return parameter_register(s, var_of(argname.data))
+    }
+
     sub call_instr(^^ir.Instr i) {
         bool library_call = i.op == ir.OP_CALLFAR
         if i.op == ir.OP_CALLFARVB {
@@ -1203,7 +1245,7 @@ gen68k {
                         nl()
                     }
                 }
-                else {
+                else if argument_register(i.sym, a.name) == 0 {
                     op("move", a.type)
                     if a.reg != 0
                         rg(a.reg, a.type)
@@ -1218,6 +1260,25 @@ gen68k {
             }
             else if a.slot >= ir.SLOT_FLAGS
                 error("a status flag as an argument is not supported yet", i.sym)
+            a = a.next
+        }
+        ; the arguments that travel in d0 and d1 (see argument_register), after everything
+        ; that may use those two on the way
+        a = i.args
+        while a != 0 {
+            if a.slot == 255 and a.name != 0 and a.type != ir.T_FLOAT {
+                ubyte ar = argument_register(i.sym, a.name)
+                if ar != 0 {
+                    op("move", a.type)
+                    if a.reg != 0
+                        rg(a.reg, a.type)
+                    else
+                        imm(a.value, a.type)
+                    put(",d")
+                    putn(ar - 1)
+                    nl()
+                }
+            }
             a = a.next
         }
         a = i.args
@@ -2606,6 +2667,15 @@ gen68k {
                     take_register(a.reg, chunk_number, index)
                     a = a.next
                 }
+                if i.mode == ir.M_CALL {
+                    ; the arguments are done with before the results come back:
+                    ; a result may have the register of an argument that ends here
+                    a = i.args
+                    while a != 0 {
+                        give_register(a.reg, chunk_number, index)
+                        a = a.next
+                    }
+                }
                 a = i.results
                 while a != 0 {
                     take_register(a.reg, chunk_number, index)
@@ -2614,10 +2684,12 @@ gen68k {
                 give_register(i.r1, chunk_number, index)
                 give_register(i.r2, chunk_number, index)
                 give_register(i.r3, chunk_number, index)
-                a = i.args
-                while a != 0 {
-                    give_register(a.reg, chunk_number, index)
-                    a = a.next
+                if i.mode != ir.M_CALL {
+                    a = i.args
+                    while a != 0 {
+                        give_register(a.reg, chunk_number, index)
+                        a = a.next
+                    }
                 }
                 a = i.results
                 while a != 0 {
@@ -3094,7 +3166,13 @@ gen68k {
                         2 -> put("    move.w  ")
                         else -> put("    move.l  ")
                     }
-                    put(v.name)
+                    ubyte arrives = parameter_register(s, v)
+                    if arrives != 0 {
+                        putc('d')
+                        putn(arrives - 1)
+                    }
+                    else
+                        put(v.name)
                     comma()
                     if v.hwreg >= 10 {
                         putc('a')

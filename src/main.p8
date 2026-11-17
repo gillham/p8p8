@@ -871,7 +871,7 @@ main {
         if diag.errors > 0
             return
         bool is_llvm = buf.bytes_equal(importer.target, "llvm", 4)
-        irprune.asmsubs_kept = not opt_own or is_llvm or is_m68k
+        irprune.asmsubs_kept = not opt_own or is_llvm
         crumb.at("removing unused code")
         if not opt_keepunused
             irprune.run(p)

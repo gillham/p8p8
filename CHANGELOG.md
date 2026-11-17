@@ -28,8 +28,8 @@
   `%option amiga_chipram` blocks in chip memory.  Variables and
   temporaries live in CPU registers where they can; on six small
   benchmarks (`tools/bench68k.sh`, an Amiga 500 in Copperline) the programs
-  take between 0.68 and 0.93 times as long as the reference compiler's and
-  are 10 to 15% larger.
+  take between 0.68 and 0.92 times as long as the reference compiler's
+  (0.57 to 0.98 on an Amiga 1200) and are about 10% smaller.
 - Fixed, on every target: an element of an array that is a field of a
   struct (`p.values[i]`) was read through the field's first bytes as if they
   were a pointer; `^^Thing t = []` at block level made an empty array where
