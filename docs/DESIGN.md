@@ -206,11 +206,13 @@ without an operating system), the Amiga 1200 and the Amiga 500.
   copy of a register, or of its low byte or word; one that only holds a
   number or an address is written as that wherever it is used; and "copy
   the base, add the index, use the sum as an address" becomes the addressing
-  mode `offset(base,index.l)`.  Each of these is decided before the code is
+  mode `offset(base,index.l)`; and "load a variable, work on it, store it
+  back" is worked on in the variable's register.  Each of these is decided before the code is
   written, by looking ahead in the chunk for anything that changes one of
   the values involved.
 - Multiplication, division and remainder by a power of two are shifts and
-  masks.  A subroutine with nothing in its frame has no `link`.  Two things
+  masks; a 68020 multiplies and divides longs in the register that holds
+  the value.  A subroutine with nothing in its frame has no `link`.  Two things
   are done to the lines as they are written: a value that was just stored
   in its cell is not fetched again, and a `tst` right after the `move` that
   set the same flags is left out.

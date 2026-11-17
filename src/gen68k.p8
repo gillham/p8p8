@@ -812,10 +812,76 @@ gen68k {
         return true
     }
 
+    ; Longs on a 68020, which multiplies and divides them with any operand: in
+    ; the data register that holds the value when it is in one, else in d0.
+    ; The remainder comes in d1.
+    sub arith_long(ubyte what, ^^ir.Instr i, ubyte kind, bool signed) {
+        bool in_place = kind != 2 and in_reg(i.r1)
+        if not in_place {
+            put("    move.l  ")
+            if kind == 2
+                memop(i)
+            else
+                rg(i.r1, ir.T_LONG)
+            raw(",d0")
+        }
+        when what {
+            A_MUL -> put("    mulu.l  ")
+            A_DIV -> {
+                if signed
+                    put("    divs.l  ")
+                else
+                    put("    divu.l  ")
+            }
+            else -> {
+                if signed
+                    put("    divsl.l  ")
+                else
+                    put("    divul.l  ")
+            }
+        }
+        when kind {
+            0 -> {
+                putc('#')
+                putn(i.value as long)
+            }
+            1 -> rg(i.r2, ir.T_LONG)
+            else -> rg(i.r1, ir.T_LONG)
+        }
+        comma()
+        if what == A_MOD
+            put("d1:")
+        if in_place
+            rg(i.r1, ir.T_LONG)
+        else
+            put("d0")
+        nl()
+        if what == A_MOD {
+            put("    move.l  d1,")
+            if in_place
+                rg(i.r1, ir.T_LONG)
+            else
+                put("d0")
+            nl()
+        }
+        if not in_place {
+            put("    move.l  d0,")
+            if kind == 2
+                memop(i)
+            else
+                rg(i.r1, ir.T_LONG)
+            nl()
+        }
+    }
+
     sub arith(ubyte what, ^^ir.Instr i, ubyte kind, bool signed) {
         ubyte t = i.type
         if kind == 0 and arith_power(what, i, signed)
             return
+        if (t == ir.T_LONG or t == ir.T_POINTER) and not cpu68000 {
+            arith_long(what, i, kind, signed)
+            return
+        }
         when kind {
             0 -> {
                 load_ext(i.r1, t, "d0", signed)
@@ -1737,18 +1803,22 @@ gen68k {
                 fstore(i.r1)
             }
             ir.OP_FTOUB, ir.OP_FTOSB -> {
+                ; (a cast cuts the fraction off; the FPU's own conversion would round)
                 fload(i.r2)
+                ins("fintrz  fp0")
                 ins("moveq  #0,d0")
                 ins("fmove.b  fp0,d0")
                 store_d0(i.r1, ir.T_BYTE)
             }
             ir.OP_FTOUW, ir.OP_FTOSW -> {
                 fload(i.r2)
+                ins("fintrz  fp0")
                 ins("fmove.w  fp0,d0")
                 store_d0(i.r1, ir.T_WORD)
             }
             ir.OP_FTOSL -> {
                 fload(i.r2)
+                ins("fintrz  fp0")
                 ins("fmove.l  fp0,d0")
                 store_d0(i.r1, ir.T_LONG)
             }
@@ -1933,6 +2003,8 @@ gen68k {
                 nl()
             }
             ir.OP_STOREM -> {
+                if in_reg(i.r1) and reg_of[i.r1] == mem_hwreg(i)
+                    return              ; it was worked out in the variable's register
                 op("move", t)
                 rg(i.r1, t)
                 comma()
@@ -2870,11 +2942,62 @@ gen68k {
         ^^ir.Var v = var_of(i.sym)
         if v == 0 or not v.stacklocal or v.owner != s or v.hwreg == 0
             return
-        if not stays(i, index, r, v, 0, v.hwreg >= 10, false)
+        if not stays(i, index, r, v, 0, v.hwreg >= 10, false) {
+            if v.hwreg < 10 and updates(i, index, r, v, chunk_number) {
+                ; "load the variable, work on it, store it back": worked on where it is
+                reg_of[r] = v.hwreg
+                root_var[r] = 0
+                use_home[r] = -2
+            }
             return
+        }
         reg_of[r] = v.hwreg
         root_var[r] = v
         use_home[r] = -2            ; (not one of the pool's: nothing is given back for it)
+        shared_until(v, chunk_number, use_last[r])
+    }
+
+    ; a variable in a register remembers how long a virtual register shares it
+    ; (in fields that are free once it has its register: uses is the chunk, zpaddr the index)
+    sub shared_until(^^ir.Var v, long chunk_number, long last) {
+        if v.uses != chunk_number {
+            v.uses = chunk_number
+            v.zpaddr = last
+        }
+        else if v.zpaddr < last
+            v.zpaddr = last
+    }
+
+    ; Is r, loaded from v by instruction i, stored back to v by its last
+    ; mention, with nothing else naming v in between and nothing sharing v's
+    ; register any more?
+    sub updates(^^ir.Instr i, long index, uword r, ^^ir.Var v, long chunk_number) -> bool {
+        if v.uses == chunk_number and v.zpaddr > index
+            return false
+        ^^ir.Instr j = i.next
+        long k = index + 1
+        ^^ir.Arg a
+        while j != 0 and k < use_last[r] {
+            if j.sym != 0 and j.mode != ir.M_CALL {
+                if var_of(j.sym) == v
+                    return false
+            }
+            a = j.results
+            while a != 0 {
+                if a.reg == r
+                    return false
+                a = a.next
+            }
+            if j.r2 == r and j.op == ir.OP_DIVMODR
+                return false
+            if j.type == ir.T_FLOAT and (j.r1 == r or j.r2 == r)
+                return false
+            j = j.next
+            k++
+        }
+        if j == 0 or k != use_last[r] or j.op != ir.OP_STOREM or j.r1 != r or j.sym == 0
+            return false
+        return var_of(j.sym) == v and j.offset == 0 and type_size(j.type) == element_size(v.typestr)
     }
 
     ; A virtual register that is loaded with a number or an address and never
@@ -2903,6 +3026,7 @@ gen68k {
             if v == 0 or not stays(i, index, r, v, 0, false, false)
                 return
             root_var[r] = v
+            shared_until(v, chunk_number, use_last[r])
         }
         else {
             ; the source is in a register of its own, which it keeps until the copy is done with

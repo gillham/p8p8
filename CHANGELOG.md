@@ -28,14 +28,15 @@
   `%option amiga_chipram` blocks in chip memory.  Variables and
   temporaries live in CPU registers where they can; on six small
   benchmarks (`tools/bench68k.sh`, an Amiga 500 in Copperline) the programs
-  take between 0.68 and 0.92 times as long as the reference compiler's
-  (0.57 to 0.98 on an Amiga 1200) and are about 10% smaller.
+  take between 0.68 and 0.80 times as long as the reference compiler's
+  (0.57 to 0.87 on an Amiga 1200) and are about 10% smaller.
 - Fixed, on every target: an element of an array that is a field of a
   struct (`p.values[i]`) was read through the field's first bytes as if they
   were a pointer; `^^Thing t = []` at block level made an empty array where
   an instance belongs; and a `str` parameter compared with a string compared
   the two addresses, not the text.  On the 6502 a struct instance without
   values was not defined at all.
+- Fixed for the 68000: a float cast to an integer was rounded, not cut off.
 - Fixed in the LLVM back end: the complement (`~`) of a byte or word right
   after arithmetic on a wider type was written as invalid LLVM IR.
 - `make coppercmp` compares the screens of upstream's Amiga examples in the
