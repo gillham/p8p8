@@ -15,8 +15,10 @@
 ;   names, which are in its frame (a subroutine that calls itself needs
 ;   that).  The caller still writes an argument to the static parameter;
 ;   the subroutine takes it into its frame when it is entered;
-; - d0, d1, a0 and a1 are scratch within one instruction, nothing is kept in
-;   a CPU register from one instruction to the next;
+; - d0, d1, a0 and a1 are scratch within one instruction.  d2-d7 hold values
+;   from one instruction to the next (see "registers" below): the variables
+;   of a subroutine that it uses most, and virtual registers that live within
+;   one chunk.  A subroutine saves the ones it uses, so a call leaves them be;
 ; - a subroutine's value comes back in d0; the arguments of an ordinary
 ;   subroutine go into its parameter variables, those of an assembly routine
 ;   into the registers its declaration names (slots 10-17 d0-d7, 18-24 a0-a6).
@@ -29,6 +31,7 @@
 %import out
 %import strings
 %import strtab
+%import io_platform
 
 gen68k {
     ^^ir.Program prog = 0
@@ -85,11 +88,48 @@ gen68k {
 
     sub nl() {
         buf.add_byte(o, '\n')
+        line_done()
     }
 
     sub raw(str text) {
         buf.add_str(o, text)
         buf.add_byte(o, '\n')
+        line_done()
+    }
+
+    ; A value that was just put in its cell or register is not fetched again:
+    ;     move.w  d0,-6(a5)
+    ;     move.w  -6(a5),d0        <-- left out
+    long prev_line = -1             ; where the line before this one starts in the output, or -1
+    long this_line = 0
+
+    sub line_done() {
+        long cur = this_line
+        long clen = o.len - cur
+        if prev_line >= 0 {
+            long plen = cur - prev_line
+            ^^ubyte pl = o.data + prev_line
+            ^^ubyte cl = o.data + cur
+            if plen == clen and clen > 19 and buf.bytes_equal(pl, "    move.", 9) and buf.bytes_equal(pl, cl, 12)
+                    and buf.bytes_equal(pl + 12, "d0,", 3) and buf.bytes_equal(cl + clen - 4, ",d0", 3)
+                    and buf.bytes_equal(pl + 15, cl + 12, clen - 16) {
+                ; only a cell or a data register: reading a device again is not the same
+                ^^ubyte place = cl + 12
+                long alen = clen - 16
+                if (alen == 2 and place[0] == 'd') or buf.bytes_equal(place, "p8_regfile", 10)
+                        or (alen > 4 and buf.bytes_equal(place + alen - 4, "(a5)", 4)) {
+                    o.len = cur
+                    return
+                }
+            }
+        }
+        prev_line = cur
+        this_line = o.len
+    }
+
+    sub line_reset() {
+        prev_line = -1
+        this_line = o.len
     }
 
     sub comma() {
@@ -161,12 +201,17 @@ gen68k {
         if needed > cell_cap {
             cell_of = mem.grow(cell_of, cell_cap * 4, needed * 4)
             cell_stamp = mem.grow(cell_stamp, cell_cap * 4, needed * 4)
+            reg_of = mem.grow(reg_of, cell_cap, needed)
+            use_home = mem.grow(use_home, cell_cap * 4, needed * 4)
+            use_first = mem.grow(use_first, cell_cap * 4, needed * 4)
+            use_last = mem.grow(use_last, cell_cap * 4, needed * 4)
+            use_stamp = mem.grow(use_stamp, cell_cap * 4, needed * 4)
             cell_cap = needed
         }
     }
 
     sub place(uword r) {
-        if r == 0 or r >= cell_cap or cell_stamp[r] == stamp
+        if r == 0 or r >= cell_cap or cell_stamp[r] == stamp or reg_of[r] != 0
             return
         cell_stamp[r] = stamp
         long size = 4
@@ -220,6 +265,13 @@ gen68k {
         long adjust = 0
         if size < 4
             adjust = 4 - size
+        if r < cell_cap and reg_of[r] != 0 {
+            if extra != 0
+                error("a part of a value in a CPU register", 0)
+            putc('d')
+            putn(reg_of[r])
+            return
+        }
         if r >= cell_cap or cell_stamp[r] != stamp {
             error("a register without a cell", 0)
             return
@@ -259,6 +311,16 @@ gen68k {
         if i.sym != 0 {
             ^^ir.Var fv = var_of(i.sym)
             if fv != 0 and fv.stacklocal and framed and fv.owner == cursub {
+                if fv.hwreg >= 10 {
+                    putc('a')
+                    putn(fv.hwreg - 8)
+                    return
+                }
+                if fv.hwreg != 0 {
+                    putc('d')
+                    putn(fv.hwreg)
+                    return
+                }
                 putn(i.offset + extra - fv.zpaddr)
                 put("(a5)")
                 return
@@ -409,6 +471,26 @@ gen68k {
 
     ; r1 = r1 <operation> second operand, for add, sub, and, or (xor wants a data register)
     ; kind 0: #value, 1: register r2, 2: memory, the result in memory (operation with r1)
+    sub in_reg(uword r) -> bool {
+        return r < cell_cap and reg_of[r] != 0
+    }
+
+    ; is the instruction's memory operand a variable that lives in a data register
+    sub mem_in_reg(^^ir.Instr i) -> bool {
+        if i.sym == 0 or not framed or cursub == 0
+            return false
+        ^^ir.Var v = var_of(i.sym)
+        return v != 0 and v.stacklocal and v.owner == cursub and v.hwreg != 0 and v.hwreg < 10
+    }
+
+    ; or one that lives in an address register (a pointer: a2, a3 or a4)
+    sub mem_in_areg(^^ir.Instr i) -> bool {
+        if i.sym == 0 or not framed or cursub == 0
+            return false
+        ^^ir.Var v = var_of(i.sym)
+        return v != 0 and v.stacklocal and v.owner == cursub and v.hwreg >= 10
+    }
+
     sub simple(str mnemonic, ^^ir.Instr i, ubyte kind, bool needs_dreg) {
         ubyte t = i.type
         when kind {
@@ -420,6 +502,15 @@ gen68k {
                 nl()
             }
             1 -> {
+                if in_reg(i.r2) or (in_reg(i.r1) and not needs_dreg) {
+                    ; one of the two is in a data register: the operation in one step
+                    op(mnemonic, t)
+                    rg(i.r2, t)
+                    comma()
+                    rg(i.r1, t)
+                    nl()
+                    return
+                }
                 op("move", t)
                 rg(i.r2, t)
                 raw(",d0")
@@ -429,6 +520,26 @@ gen68k {
                 nl()
             }
             2 -> {
+                if mem_in_areg(i) {
+                    ; (only add and sub get here: see static_use)
+                    if mnemonic[0] == 'a'
+                        op("adda", t)
+                    else
+                        op("suba", t)
+                    rg(i.r1, t)
+                    comma()
+                    memop(i)
+                    nl()
+                    return
+                }
+                if in_reg(i.r1) or (mem_in_reg(i) and not needs_dreg) {
+                    op(mnemonic, t)
+                    rg(i.r1, t)
+                    comma()
+                    memop(i)
+                    nl()
+                    return
+                }
                 op("move", t)
                 rg(i.r1, t)
                 raw(",d0")
@@ -439,6 +550,17 @@ gen68k {
             }
             3 -> {
                 ; #value into memory
+                if mem_in_areg(i) {
+                    if mnemonic[0] == 'a'
+                        op("adda", t)
+                    else
+                        op("suba", t)
+                    imm(i.value, t)
+                    comma()
+                    memop(i)
+                    nl()
+                    return
+                }
                 op(mnemonic, t)
                 imm(i.value, t)
                 comma()
@@ -513,8 +635,64 @@ gen68k {
     }
 
     ; kind as for simple(): 0 r1 with #value, 1 r1 with r2, 2 memory with r1 (into memory)
+    ; the exponent of a power of two (from 2 on) that fits the type, or -1
+    sub power_of_two(quad value, ubyte t) -> byte {
+        long v = value as long
+        when t {
+            ir.T_BYTE -> v &= 255
+            ir.T_WORD -> v &= $ffff
+        }
+        byte k
+        long bit = 2
+        for k in 1 to 30 {
+            if v == bit
+                return k
+            bit <<= 1
+        }
+        return -1
+    }
+
+    ; r1 times, divided by, or modulo a constant power of two: shifts and masks
+    ; (not a signed division, which rounds towards zero)
+    sub arith_power(ubyte what, ^^ir.Instr i, bool signed) -> bool {
+        ubyte t = i.type
+        byte k = power_of_two(i.value, t)
+        if k < 0 or (signed and what != A_MUL)
+            return false
+        when what {
+            A_MUL -> {
+                op("move", t)
+                rg(i.r1, t)
+                raw(",d0")
+                shift_d0_const(S_LSL, t, k as long)
+                store_d0(i.r1, t)
+            }
+            A_DIV -> {
+                op("move", t)
+                rg(i.r1, t)
+                raw(",d0")
+                shift_d0_const(S_LSR, t, k as long)
+                store_d0(i.r1, t)
+            }
+            else -> {
+                long mask = 1
+                mask <<= k as ubyte
+                mask--
+                op("andi", t)
+                putc('#')
+                putn(mask)
+                comma()
+                rg(i.r1, t)
+                nl()
+            }
+        }
+        return true
+    }
+
     sub arith(ubyte what, ^^ir.Instr i, ubyte kind, bool signed) {
         ubyte t = i.type
+        if kind == 0 and arith_power(what, i, signed)
+            return
         when kind {
             0 -> {
                 load_ext(i.r1, t, "d0", signed)
@@ -570,6 +748,35 @@ gen68k {
     ; a register shifted or rotated: count -1 takes it from register r2
     sub shift_reg(ubyte kind, ^^ir.Instr i, long count) {
         ubyte t = i.type
+        if in_reg(i.r1) {
+            ; in its data register, where it is
+            if count == 0
+                return
+            if count < 0 or count > 8 {
+                if count < 0 {
+                    ins("moveq  #0,d1")
+                    op("move", ir.T_BYTE)
+                    rg(i.r2, ir.T_BYTE)
+                    raw(",d1")
+                }
+                else {
+                    put("    moveq  #")
+                    putn(count & 63)
+                    raw(",d1")
+                }
+                op(shift_names[kind], t)
+                put("d1,")
+            }
+            else {
+                op(shift_names[kind], t)
+                putc('#')
+                putn(count)
+                comma()
+            }
+            rg(i.r1, t)
+            nl()
+            return
+        }
         op("move", t)
         rg(i.r1, t)
         raw(",d0")
@@ -622,6 +829,13 @@ gen68k {
         if i.mode == ir.M_RIT {
             op("cmpi", t)
             imm(i.value, t)
+            comma()
+            rg(i.r1, t)
+            nl()
+        }
+        else if in_reg(i.r1) {
+            op("cmp", t)
+            rg(i.r2, t)
             comma()
             rg(i.r1, t)
             nl()
@@ -747,8 +961,16 @@ gen68k {
     }
 
     sub leave() {
-        if framed
+        if framed {
+            if used_mask != 0 {
+                put("    movem.l  -")
+                putn(frame_size + 4 * mask_count(used_mask))
+                put("(a5),")
+                put_mask(used_mask)
+                nl()
+            }
             ins("unlk  a5")
+        }
     }
 
     ; The Amiga's libraries by the numbers upstream gives them (an extsub's bank): the
@@ -1507,12 +1729,21 @@ gen68k {
                 nl()
             }
             ir.OP_STOREZM -> {
-                op("clr", t)
-                memop(i)
-                nl()
+                if mem_in_areg(i) {
+                    put("    suba.l  ")
+                    memop(i)
+                    comma()
+                    memop(i)
+                    nl()
+                }
+                else {
+                    op("clr", t)
+                    memop(i)
+                    nl()
+                }
             }
             ir.OP_STOREIM -> {
-                if i.value == 0
+                if i.value == 0 and not mem_in_areg(i)
                     op("clr", t)
                 else {
                     op("move", t)
@@ -1717,12 +1948,21 @@ gen68k {
                 store_d0(i.r1, ir.T_BYTE)
             }
             ir.OP_CMP -> {
-                op("move", t)
-                rg(i.r1, t)
-                raw(",d0")
-                op("cmp", t)
-                rg(i.r2, t)
-                raw(",d0")
+                if in_reg(i.r1) {
+                    op("cmp", t)
+                    rg(i.r2, t)
+                    comma()
+                    rg(i.r1, t)
+                    nl()
+                }
+                else {
+                    op("move", t)
+                    rg(i.r1, t)
+                    raw(",d0")
+                    op("cmp", t)
+                    rg(i.r2, t)
+                    raw(",d0")
+                }
             }
             ir.OP_CMPI -> {
                 if i.value == 0
@@ -1766,34 +2006,59 @@ gen68k {
             }
             ir.OP_MSIGB -> {
                 ; the highest byte of r2
-                op("move", ir.T_BYTE)
-                rg(i.r2, t)
-                comma()
-                rg(i.r1, ir.T_BYTE)
-                nl()
+                if reg_of[i.r2] != 0 {
+                    op("move", t)
+                    rg(i.r2, t)
+                    raw(",d0")
+                    if t == ir.T_WORD
+                        ins("lsr.w  #8,d0")
+                    else
+                        ins("rol.l  #8,d0")
+                    store_d0(i.r1, ir.T_BYTE)
+                }
+                else {
+                    op("move", ir.T_BYTE)
+                    rg(i.r2, t)
+                    comma()
+                    rg(i.r1, ir.T_BYTE)
+                    nl()
+                }
             }
             ir.OP_MSIGW -> {
-                op("move", ir.T_WORD)
-                rg(i.r2, t)
-                comma()
-                rg(i.r1, ir.T_WORD)
-                nl()
+                if reg_of[i.r2] != 0 {
+                    op("move", ir.T_LONG)
+                    rg(i.r2, ir.T_LONG)
+                    raw(",d0")
+                    ins("swap  d0")
+                    store_d0(i.r1, ir.T_WORD)
+                }
+                else {
+                    op("move", ir.T_WORD)
+                    rg(i.r2, t)
+                    comma()
+                    rg(i.r1, ir.T_WORD)
+                    nl()
+                }
             }
             ir.OP_CONCAT -> {
                 ; r1 (twice as wide) = r2 above r3
-                ubyte wide = ir.T_WORD
-                if t == ir.T_WORD
-                    wide = ir.T_LONG
                 op("move", t)
                 rg(i.r2, t)
-                comma()
-                rg(i.r1, wide)
-                nl()
-                op("move", t)
-                rg(i.r3, t)
-                comma()
-                rgo(i.r1, wide, type_size(t))
-                nl()
+                raw(",d0")
+                if t == ir.T_WORD {
+                    ins("swap  d0")
+                    op("move", t)
+                    rg(i.r3, t)
+                    raw(",d0")
+                    store_d0(i.r1, ir.T_LONG)
+                }
+                else {
+                    ins("lsl.w  #8,d0")
+                    op("move", t)
+                    rg(i.r3, t)
+                    raw(",d0")
+                    store_d0(i.r1, ir.T_WORD)
+                }
             }
             ir.OP_LSLN -> shift_reg(S_LSL, i, -1)
             ir.OP_LSRN -> shift_reg(S_LSR, i, -1)
@@ -1850,6 +2115,7 @@ gen68k {
         buf.add_bytes(o, text, length)
         if length == 0 or text[length - 1] != '\n'
             nl()
+        line_reset()
     }
 
     ; the frame of a piece of code: its cells placed, and the link instruction
@@ -1857,6 +2123,9 @@ gen68k {
         stamp++
         framed = with_frame
         frame_size = 0
+        used_mask = 0
+        if framed and cursub != 0 and io_platform.env("P8P8_NOREGS") == 0
+            allocate(cursub)
         place_chunks(chunks)
         if framed and cursub != 0
             place_variables(cursub)
@@ -1866,9 +2135,316 @@ gen68k {
             put("    link  a5,#-")
             putn(frame_size)
             nl()
+            if used_mask != 0 {
+                put("    movem.l  ")
+                put_mask(used_mask)
+                raw(",-(sp)")
+            }
             if cursub != 0
                 take_parameters(cursub)
         }
+    }
+
+    ; ---- registers ----
+    ;
+    ; d2 to d7 keep values across instructions in a subroutine with a frame.
+    ; Which of them a subroutine may use: not the ones that its calls pass
+    ; arguments or take results in, or that an assembly routine it calls says
+    ; it changes; none at all when it calls through a pointer or calls
+    ; something that is not a subroutine of the program.  Of those,
+    ; - the most used of its own plain variables (the ones in its frame
+    ;   otherwise) get one each for the whole subroutine, all but two;
+    ; - the rest go to virtual registers that are only named within one chunk,
+    ;   each from its first to its last mention there.  (A chunk is entered at
+    ;   its label only; when it jumps back to that label itself, the whole
+    ;   chunk counts.)
+    ; Everything else stays in memory as before.  The registers that are used
+    ; are saved on entry and restored on leaving, so every call keeps them.
+
+    ^^ubyte reg_of = 0              ; per virtual register: 2-7 for d2-d7, or 0
+    ^^long use_home = 0             ; per virtual register: the chunk it is named in, -1 for several
+    ^^long use_first = 0            ; the first and last instruction of that chunk that names it
+    ^^long use_last = 0
+    ^^long use_stamp = 0
+    uword used_mask = 0             ; of the subroutine being written: bit n for dn, bit 8+n for an
+    ubyte free_mask = 0
+    const uword ALL_REGS = %0001110011111100
+
+    sub mask_bit(ubyte k) -> uword {
+        uword bit = 1
+        bit <<= k
+        return bit
+    }
+
+    sub mask_count(uword mask) -> long {
+        long n = 0
+        ubyte k
+        for k in 2 to 12 {
+            if mask & mask_bit(k) != 0
+                n++
+        }
+        return n
+    }
+
+    sub put_mask(uword mask) {
+        bool first = true
+        ubyte k
+        for k in 2 to 12 {
+            if mask & mask_bit(k) != 0 {
+                if not first
+                    putc('/')
+                first = false
+                if k >= 8 {
+                    putc('a')
+                    putn(k - 8)
+                }
+                else {
+                    putc('d')
+                    putn(k)
+                }
+            }
+        }
+    }
+
+    ; the mask bit of a calling convention slot that is one of d2-d7 or a2-a4, or 0
+    sub slot_bit(ubyte slot) -> uword {
+        if slot >= 12 and slot <= 17
+            return mask_bit(slot - 10)
+        if slot >= 20 and slot <= 22
+            return mask_bit(slot - 10)
+        return 0
+    }
+
+    ; the registers that an instruction keeps a subroutine from using
+    sub reserved_by(^^ir.Instr i) -> uword {
+        uword mask = 0
+        ^^ir.Arg a
+        when i.op {
+            ir.OP_CALLI, ir.OP_CALLFARVB -> return ALL_REGS
+            ir.OP_LOADHR, ir.OP_STOREHR -> mask |= slot_bit(i.slot)
+            ir.OP_CALL, ir.OP_CALLFAR -> {
+                a = i.args
+                while a != 0 {
+                    mask |= slot_bit(a.slot)
+                    a = a.next
+                }
+                a = i.results
+                while a != 0 {
+                    mask |= slot_bit(a.slot)
+                    a = a.next
+                }
+                if i.op == ir.OP_CALL {
+                    ^^ir.Sub callee = sub_of(i.sym, buf.cstr_len(i.sym))
+                    if callee == 0
+                        return ALL_REGS
+                    if callee.is_asm {
+                        ; what its declaration says it changes
+                        ^^ubyte c = callee.clobbered
+                        if c != 0 {
+                            long k = 0
+                            while c[k] != 0 {
+                                if (c[k] == 'D' or c[k] == 'd') and c[k + 1] >= '2' and c[k + 1] <= '7'
+                                    mask |= mask_bit(c[k + 1] - '0')
+                                if (c[k] == 'A' or c[k] == 'a') and c[k + 1] >= '2' and c[k + 1] <= '4'
+                                    mask |= mask_bit(c[k + 1] - '0' + 8)
+                                k++
+                            }
+                        }
+                    }
+                    else if callee.returns != 0 {
+                        ; several values come back in d0, d1, d2 ...: floats apart
+                        ubyte count = 0
+                        long p = 0
+                        ^^ubyte rt = callee.returns
+                        while rt[p] != 0 {
+                            if not buf.bytes_equal(rt + p, "float", 5)
+                                count++
+                            while rt[p] != 0 and rt[p] != ','
+                                p++
+                            if rt[p] == ','
+                                p++
+                        }
+                        while count > 2 and count <= 8 {
+                            count--
+                            mask |= mask_bit(count)
+                        }
+                    }
+                }
+            }
+        }
+        return mask
+    }
+
+    sub note_use(uword r, long chunk_number, long index) {
+        if r == 0 or r >= cell_cap
+            return
+        if use_stamp[r] != stamp {
+            use_stamp[r] = stamp
+            use_home[r] = chunk_number
+            use_first[r] = index
+            use_last[r] = index
+            reg_of[r] = 0
+        }
+        else if use_home[r] != chunk_number
+            use_home[r] = -1
+        else
+            use_last[r] = index
+    }
+
+    ; a register for r at instruction index of chunk number, when it starts there
+    sub take_register(uword r, long chunk_number, long index) {
+        if r == 0 or r >= cell_cap or reg_of[r] != 0 or use_home[r] != chunk_number or use_first[r] != index
+            return
+        if ir.reg_type(r) == ir.T_FLOAT or free_mask == 0
+            return
+        ubyte k
+        for k in 2 to 7 {
+            if free_mask & (1 << k) != 0 {
+                free_mask &= (1 << k) ^ 255
+                used_mask |= mask_bit(k)
+                reg_of[r] = k
+                return
+            }
+        }
+    }
+
+    sub give_register(uword r, long chunk_number, long index) {
+        if r == 0 or r >= cell_cap or reg_of[r] == 0 or use_home[r] != chunk_number or use_last[r] != index
+            return
+        free_mask |= 1 << reg_of[r]
+    }
+
+    sub allocate(^^ir.Sub s) {
+        uword available = ALL_REGS
+        ^^ir.Chunk c = s.chunks
+        ^^ir.Instr i
+        ^^ir.Arg a
+        long chunk_number = 0
+        long index
+        ; what is named where, and what the calls need
+        while c != 0 {
+            chunk_number++
+            index = 0
+            bool loops = false
+            i = c.first
+            while i != 0 {
+                available &= reserved_by(i) ^ $ffff
+                note_use(i.r1, chunk_number, index)
+                note_use(i.r2, chunk_number, index)
+                note_use(i.r3, chunk_number, index)
+                a = i.args
+                while a != 0 {
+                    note_use(a.reg, chunk_number, index)
+                    a = a.next
+                }
+                a = i.results
+                while a != 0 {
+                    note_use(a.reg, chunk_number, index)
+                    a = a.next
+                }
+                if c.label != 0 and i.sym != 0 and i.mode != ir.M_CALL and strings.compare(i.sym, c.label) == 0
+                    loops = true
+                index++
+                i = i.next
+            }
+            if loops {
+                ; the chunk runs again from its label: what it names lives all through it
+                i = c.first
+                while i != 0 {
+                    whole_chunk(i.r1, chunk_number, index)
+                    whole_chunk(i.r2, chunk_number, index)
+                    whole_chunk(i.r3, chunk_number, index)
+                    i = i.next
+                }
+            }
+            c = c.next
+        }
+        ; the variables, the most used first: an address into a2-a4 when that will do,
+        ; anything else into a data register, of which two are left for the rest
+        long left = mask_count(available & $00ff) - 2
+        ^^ir.Var v
+        ubyte k
+        repeat {
+            ^^ir.Var best = 0
+            v = prog.vars
+            while v != 0 {
+                if v.stacklocal and v.plain and v.owner == s and v.hwreg == 0 and v.uses > 1 {
+                    if (left > 0 or (v.addressable and available & $1c00 != 0)) and (best == 0 or v.uses > best.uses)
+                        best = v
+                }
+                v = v.next
+            }
+            if best == 0
+                break
+            if best.addressable and available & $1c00 != 0 {
+                for k in 12 downto 10 {
+                    if available & mask_bit(k) != 0 {
+                        available &= mask_bit(k) ^ $ffff
+                        used_mask |= mask_bit(k)
+                        best.hwreg = k
+                        break
+                    }
+                }
+            }
+            else {
+                for k in 7 downto 2 {
+                    if available & mask_bit(k) != 0 {
+                        available &= mask_bit(k) ^ $ffff
+                        used_mask |= mask_bit(k)
+                        best.hwreg = k
+                        break
+                    }
+                }
+                left--
+            }
+        }
+        ; the virtual registers, chunk by chunk
+        chunk_number = 0
+        c = s.chunks
+        while c != 0 {
+            chunk_number++
+            index = 0
+            free_mask = lsb(available)
+            i = c.first
+            while i != 0 {
+                take_register(i.r1, chunk_number, index)
+                take_register(i.r2, chunk_number, index)
+                take_register(i.r3, chunk_number, index)
+                a = i.args
+                while a != 0 {
+                    take_register(a.reg, chunk_number, index)
+                    a = a.next
+                }
+                a = i.results
+                while a != 0 {
+                    take_register(a.reg, chunk_number, index)
+                    a = a.next
+                }
+                give_register(i.r1, chunk_number, index)
+                give_register(i.r2, chunk_number, index)
+                give_register(i.r3, chunk_number, index)
+                a = i.args
+                while a != 0 {
+                    give_register(a.reg, chunk_number, index)
+                    a = a.next
+                }
+                a = i.results
+                while a != 0 {
+                    give_register(a.reg, chunk_number, index)
+                    a = a.next
+                }
+                index++
+                i = i.next
+            }
+            c = c.next
+        }
+    }
+
+    sub whole_chunk(uword r, long chunk_number, long length) {
+        if r == 0 or r >= cell_cap or use_home[r] != chunk_number
+            return
+        use_first[r] = 0
+        use_last[r] = length
     }
 
     ; ---- variables in the frame ----
@@ -1944,6 +2520,17 @@ gen68k {
         ; a symbol as a value is its address; a use from elsewhere shares it
         if i.mode == ir.M_RI or i.mode == ir.M_I or i.mode == ir.M_RRI or v.owner != s
             v.stacklocal = false
+        ; for a CPU register: only ever used whole, and not a float
+        v.uses++
+        if i.offset != 0 or i.type == ir.T_FLOAT or type_size(i.type) != element_size(v.typestr)
+                or i.op == ir.OP_LOADX or i.op == ir.OP_STOREX or i.op == ir.OP_STOREZX
+            v.plain = false
+        when i.op {
+            ir.OP_LOADM, ir.OP_STOREM, ir.OP_STOREZM, ir.OP_STOREIM, ir.OP_INCM, ir.OP_DECM,
+            ir.OP_ADDM, ir.OP_SUBM, ir.OP_ADDIM, ir.OP_SUBIM -> {
+            }
+            else -> v.addressable = false
+        }
     }
 
     sub mark_frame_variables() {
@@ -1997,6 +2584,10 @@ gen68k {
                     if owner != 0 and not owner.is_asm and not has_assembly(owner.chunks) {
                         v.owner = owner
                         v.stacklocal = true
+                        v.plain = not is_float(v.typestr)
+                        v.addressable = starts_with(v.typestr, "pointer") or v.typestr[0] == '^'
+                        v.hwreg = 0
+                        v.uses = 0
                     }
                 }
             }
@@ -2063,7 +2654,7 @@ gen68k {
     sub place_variables(^^ir.Sub s) {
         ^^ir.Var v = prog.vars
         while v != 0 {
-            if v.stacklocal and v.owner == s {
+            if v.stacklocal and v.owner == s and v.hwreg == 0 {
                 long size = element_size(v.typestr)
                 if size > 1 and frame_size & 1 != 0
                     frame_size++
@@ -2101,8 +2692,20 @@ gen68k {
                     }
                     put(v.name)
                     comma()
-                    putn(0 - v.zpaddr)
-                    raw("(a5)")
+                    if v.hwreg >= 10 {
+                        putc('a')
+                        putn(v.hwreg - 8)
+                        nl()
+                    }
+                    else if v.hwreg != 0 {
+                        putc('d')
+                        putn(v.hwreg)
+                        nl()
+                    }
+                    else {
+                        putn(0 - v.zpaddr)
+                        raw("(a5)")
+                    }
                 }
             }
             p = p.next
@@ -2524,6 +3127,7 @@ gen68k {
         prog = p
         o = output
         errors = 0
+        line_reset()
         label_seq = 0
         static_size = 0
         cursub = 0

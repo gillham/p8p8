@@ -183,15 +183,27 @@ library's routines, the same ones the reference compiler calls.
 
 ## The 68000 code generator
 
-`src/gen68k.p8` writes assembly for vasm from the same IR.  It is new and
-plain: one IR instruction at a time, no passes over the result yet.  It
+`src/gen68k.p8` writes assembly for vasm from the same IR, one IR
+instruction at a time.  It
 writes programs for qemu68k (a bare 68020 in QEMU, where it can be tested
 without an operating system), the Amiga 1200 and the Amiga 500.
 
 - A virtual register is a cell of four bytes with the value at its low end,
   so that a value read narrower than it was written is its low part on a
-  big-endian machine too.  Nothing is kept in a CPU register from one IR
-  instruction to the next; d0, d1, a0 and a1 are scratch within one.
+  big-endian machine too.  d0, d1, a0 and a1 are scratch within one IR
+  instruction.
+- d2 to d7 keep values from one instruction to the next.  A subroutine's
+  own plain variables, the most used ones, get one each for the whole
+  subroutine (a pointer that is only loaded, stored and added to gets a2,
+  a3 or a4); what is left goes to virtual registers that are only named
+  within one chunk, each from its first to its last mention.  Everything
+  else is in the frame.  A subroutine saves and restores the registers it
+  uses, so a call keeps them; the ones that its calls pass arguments or take
+  results in are not used in it, and a subroutine that calls through a
+  pointer uses none.  `P8P8_NOREGS` in the environment turns this off.
+- Multiplication, division and remainder by a power of two are shifts and
+  masks; a value that was just stored in its cell is not fetched again.
+  There are no other passes over the code.
 - The cells of a subroutine are in a stack frame under a5.  So are its own
   plain variables and parameters, when nothing but the subroutine names them
   (no other subroutine, no assembly text, no address taken): that is what a
@@ -345,8 +357,9 @@ llvm16 are still in `main.p8` and `llvmgen.p8`.
   compiler built on Windows is checked from another host (`make
   hostbootstrap`).
 - The 65816 and the 45GS02; a Z80 code generator.
-- In the 68000 code generator: any passes over its output, and structs
-  whose fields are at odd addresses on a 68000.
+- In the 68000 code generator: registers for values that live across
+  chunks, passes over its output, and structs whose fields are at odd
+  addresses on a 68000.
 - The reference compiler's optimizer has no counterpart in p8p8's front
   end; the 6502 passes and LLVM do that work on their side.
 - A compiler that runs on an 8-bit machine.

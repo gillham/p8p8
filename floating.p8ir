@@ -1,0 +1,2874 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PROGRAM NAME="floating" COMPILERVERSION="14.0-BETA3-llvm.1" IRFORMAT="8">
+<OPTIONS>
+compTarget=virtual
+output=PRG
+launcher=BASIC
+zeropage=DONTUSE
+zpAllowed=0,255
+loadAddress=0
+memtop=$00ffffff
+optimize=true
+romable=false
+noSysInit=false
+outputDir=/Users/gillham/IdeaProjects/p8p8
+</OPTIONS>
+
+<ASMSYMBOLS>
+</ASMSYMBOLS>
+<VARS>
+<NOINITCLEAN>
+ubyte main.col zp=DONTCARE
+ubyte main.item.width zp=DONTCARE
+uword main.u.v zp=DONTCARE
+word main.s.v zp=DONTCARE
+bool main.t.v zp=DONTCARE
+float main.f.value zp=DONTCARE
+float main.arithmetic.b zp=DONTCARE
+float main.arithmetic.a zp=DONTCARE
+float main.arithmetic.c zp=DONTCARE
+float main.comparing.b zp=DONTCARE
+float main.comparing.a zp=DONTCARE
+float main.converting.x zp=DONTCARE
+word main.converting.sw zp=DONTCARE
+uword main.converting.uw zp=DONTCARE
+byte main.converting.sb zp=DONTCARE
+ubyte main.converting.ub zp=DONTCARE
+float main.converting.c zp=DONTCARE
+float main.functions.x zp=DONTCARE
+ubyte main.arrays.i zp=DONTCARE
+float main.arrays.sum zp=DONTCARE
+ubyte main.arrays.k zp=DONTCARE
+bool txt.eof_flag zp=DONTCARE
+ubyte txt.color.txtcol zp=DONTCARE
+ubyte txt.chrout.char zp=DONTCARE
+pointer txt.print.text zp=DONTCARE
+uword txt.print_uw.value zp=DONTCARE
+word txt.print_w.value zp=DONTCARE
+long txt.print_l.value zp=DONTCARE
+pointer txt.input_chars.buffer zp=DONTCARE
+ubyte txt.input_chars.count zp=DONTCARE
+pointer txt.input_chars.read_line.line zp=DONTCARE
+uword conv.str_uw.value zp=DONTCARE
+word conv.str_w.value zp=DONTCARE
+pointer conv.str_w.out_ptr zp=DONTCARE
+long conv.str_l.value zp=DONTCARE
+pointer conv.internal_str_uw.out_ptr zp=DONTCARE
+uword conv.internal_str_uw.value zp=DONTCARE
+uword conv.internal_str_uw.value2 zp=DONTCARE
+ubyte conv.internal_str_uw.digits zp=DONTCARE
+uword conv.internal_str_uw.value3 zp=DONTCARE
+ubyte conv.internal_str_uw.tens zp=DONTCARE
+uword conv.internal_str_uw.value4 zp=DONTCARE
+ubyte conv.internal_str_uw.hundreds zp=DONTCARE
+uword conv.internal_str_uw.value5 zp=DONTCARE
+ubyte conv.internal_str_uw.thousands zp=DONTCARE
+uword conv.internal_str_uw.value6 zp=DONTCARE
+ubyte conv.internal_str_uw.tenthousands zp=DONTCARE
+pointer conv.str2uword.string zp=DONTCARE
+pointer conv.str2word.string zp=DONTCARE
+pointer strings.copy.target zp=DONTCARE
+pointer strings.copy.source zp=DONTCARE
+ubyte strings.ncopy.maxlength zp=DONTCARE
+pointer strings.ncopy.target zp=DONTCARE
+pointer strings.ncopy.source zp=DONTCARE
+pointer strings.compare.st2 zp=DONTCARE
+pointer strings.compare.st1 zp=DONTCARE
+pointer strings.compare_nocase.st2 zp=DONTCARE
+pointer strings.compare_nocase.st1 zp=DONTCARE
+float floats.print.value zp=DONTCARE
+float floats.tostr.value zp=DONTCARE
+pointer floats.parse.value zp=DONTCARE
+float floats.pow.power zp=DONTCARE
+float floats.pow.value zp=DONTCARE
+float floats.sin.angle zp=DONTCARE
+float floats.cos.angle zp=DONTCARE
+float floats.tan.value zp=DONTCARE
+float floats.atan.value zp=DONTCARE
+float floats.ln.value zp=DONTCARE
+float floats.log2.value zp=DONTCARE
+float floats.round.value zp=DONTCARE
+float floats.floor.value zp=DONTCARE
+float floats.ceil.value zp=DONTCARE
+float floats.rndseed.seed zp=DONTCARE
+float floats.minf.f2 zp=DONTCARE
+float floats.minf.f1 zp=DONTCARE
+float floats.maxf.f2 zp=DONTCARE
+float floats.maxf.f1 zp=DONTCARE
+float floats.clampf.maximum zp=DONTCARE
+float floats.clampf.minimum zp=DONTCARE
+float floats.clampf.value zp=DONTCARE
+pointer sys.die.message zp=DONTCARE
+ubyte sys.die.code zp=DONTCARE
+uword sys.wait.jiffies zp=DONTCARE
+uword sys.memcopy.count zp=DONTCARE
+long sys.memcopy.tgt zp=DONTCARE
+long sys.memcopy.source zp=DONTCARE
+ubyte sys.memset.value zp=DONTCARE
+uword sys.memset.numbytes zp=DONTCARE
+long sys.memset.mem zp=DONTCARE
+uword sys.memsetw.value zp=DONTCARE
+uword sys.memsetw.numwords zp=DONTCARE
+long sys.memsetw.mem zp=DONTCARE
+uword sys.memcmp.size zp=DONTCARE
+long sys.memcmp.address2 zp=DONTCARE
+long sys.memcmp.address1 zp=DONTCARE
+ubyte sys.exit.returnvalue zp=DONTCARE
+ubyte sys.gfx_enable.mode zp=DONTCARE
+ubyte sys.gfx_clear.color zp=DONTCARE
+ubyte sys.gfx_plot.color zp=DONTCARE
+uword sys.gfx_plot.yy zp=DONTCARE
+uword sys.gfx_plot.xx zp=DONTCARE
+uword sys.gfx_getpixel.yy zp=DONTCARE
+uword sys.gfx_getpixel.xx zp=DONTCARE
+ubyte sys.gfx_text.color zp=DONTCARE
+pointer sys.gfx_text.textptr zp=DONTCARE
+uword sys.gfx_text.yy zp=DONTCARE
+uword sys.gfx_text.xx zp=DONTCARE
+pointer cx16.print_error.message zp=DONTCARE
+</NOINITCLEAN>
+<NOINITDIRTY>
+</NOINITDIRTY>
+<INIT>
+float[3] main.table=1.5,-2.25,100.0 zp=DONTCARE
+float main.kept=0.5 zp=DONTCARE
+ubyte[6] prog8_interned_strings.string_1=49,50,46,50,53,0 zp=NOT_IN_ZEROPAGE
+ubyte[5] prog8_interned_strings.string_2=45,48,46,53,0 zp=NOT_IN_ZEROPAGE
+ubyte[4] prog8_interned_strings.string_6=27,91,51,0 zp=NOT_IN_ZEROPAGE
+bool txt.eof_exit=1 zp=DONTCARE shared=true
+ubyte[8] txt.clear_screen.sequence=27,91,50,74,27,91,72,0 zp=DONTCARE shared=true
+ubyte[17] conv.string_out=63,63,63,63,63,63,63,63,63,63,63,63,63,63,63,63,0 zp=DONTCARE
+ubyte[21] floats.tostr.buffer=32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,32,0 zp=DONTCARE shared=true
+ubyte[17] sys.die.warning=10,10,80,82,79,71,82,65,77,32,68,73,69,68,58,32,0 zp=DONTCARE shared=true
+</INIT>
+<STRUCTINSTANCESNOINIT>
+</STRUCTINSTANCESNOINIT>
+<STRUCTINSTANCES>
+</STRUCTINSTANCES>
+<STRUCTDEFS>
+</STRUCTDEFS>
+<CONSTANTS>
+float floats.π=3.141592653589793
+float floats.PI=3.141592653589793
+float floats.TWOPI=6.283185307179586
+float floats.E=2.718281828459045
+float floats.EPSILON=4.9E-324
+ubyte sys.target=$ff
+ubyte sys.SIZEOF_BOOL=1
+ubyte sys.SIZEOF_BYTE=1
+ubyte sys.SIZEOF_UBYTE=1
+ubyte sys.SIZEOF_WORD=2
+ubyte sys.SIZEOF_UWORD=2
+ubyte sys.SIZEOF_LONG=4
+ubyte sys.SIZEOF_POINTER=4
+ubyte sys.SIZEOF_FLOAT=8
+byte sys.MIN_BYTE=-$80
+byte sys.MAX_BYTE=$7f
+ubyte sys.MIN_UBYTE=0
+ubyte sys.MAX_UBYTE=$ff
+word sys.MIN_WORD=-$8000
+word sys.MAX_WORD=$7fff
+uword sys.MIN_UWORD=0
+uword sys.MAX_UWORD=$ffff
+long sys.MIN_LONG=$80000000
+long sys.MAX_LONG=$7fffffff
+float sys.MAX_FLOAT=1.7976931348623157E308
+float sys.MIN_FLOAT=-1.7976931348623157E308
+</CONSTANTS>
+<MEMORYMAPPED>
+@uword cx16.r0=$00ff0000
+@uword cx16.r1=$00ff0002
+@uword cx16.r2=$00ff0004
+@uword cx16.r3=$00ff0006
+@uword cx16.r4=$00ff0008
+@uword cx16.r5=$00ff000a
+@uword cx16.r6=$00ff000c
+@uword cx16.r7=$00ff000e
+@uword cx16.r8=$00ff0010
+@uword cx16.r9=$00ff0012
+@uword cx16.r10=$00ff0014
+@uword cx16.r11=$00ff0016
+@uword cx16.r12=$00ff0018
+@uword cx16.r13=$00ff001a
+@uword cx16.r14=$00ff001c
+@uword cx16.r15=$00ff001e
+@word cx16.r0s=$00ff0000
+@word cx16.r1s=$00ff0002
+@word cx16.r2s=$00ff0004
+@word cx16.r3s=$00ff0006
+@word cx16.r4s=$00ff0008
+@word cx16.r5s=$00ff000a
+@word cx16.r6s=$00ff000c
+@word cx16.r7s=$00ff000e
+@word cx16.r8s=$00ff0010
+@word cx16.r9s=$00ff0012
+@word cx16.r10s=$00ff0014
+@word cx16.r11s=$00ff0016
+@word cx16.r12s=$00ff0018
+@word cx16.r13s=$00ff001a
+@word cx16.r14s=$00ff001c
+@word cx16.r15s=$00ff001e
+@long cx16.r0r1sl=$00ff0000
+@long cx16.r2r3sl=$00ff0004
+@long cx16.r4r5sl=$00ff0008
+@long cx16.r6r7sl=$00ff000c
+@long cx16.r8r9sl=$00ff0010
+@long cx16.r10r11sl=$00ff0014
+@long cx16.r12r13sl=$00ff0018
+@long cx16.r14r15sl=$00ff001c
+@ubyte cx16.r0L=$00ff0000
+@ubyte cx16.r1L=$00ff0002
+@ubyte cx16.r2L=$00ff0004
+@ubyte cx16.r3L=$00ff0006
+@ubyte cx16.r4L=$00ff0008
+@ubyte cx16.r5L=$00ff000a
+@ubyte cx16.r6L=$00ff000c
+@ubyte cx16.r7L=$00ff000e
+@ubyte cx16.r8L=$00ff0010
+@ubyte cx16.r9L=$00ff0012
+@ubyte cx16.r10L=$00ff0014
+@ubyte cx16.r11L=$00ff0016
+@ubyte cx16.r12L=$00ff0018
+@ubyte cx16.r13L=$00ff001a
+@ubyte cx16.r14L=$00ff001c
+@ubyte cx16.r15L=$00ff001e
+@ubyte cx16.r0H=$00ff0001
+@ubyte cx16.r1H=$00ff0003
+@ubyte cx16.r2H=$00ff0005
+@ubyte cx16.r3H=$00ff0007
+@ubyte cx16.r4H=$00ff0009
+@ubyte cx16.r5H=$00ff000b
+@ubyte cx16.r6H=$00ff000d
+@ubyte cx16.r7H=$00ff000f
+@ubyte cx16.r8H=$00ff0011
+@ubyte cx16.r9H=$00ff0013
+@ubyte cx16.r10H=$00ff0015
+@ubyte cx16.r11H=$00ff0017
+@ubyte cx16.r12H=$00ff0019
+@ubyte cx16.r13H=$00ff001b
+@ubyte cx16.r14H=$00ff001d
+@ubyte cx16.r15H=$00ff001f
+@byte cx16.r0sL=$00ff0000
+@byte cx16.r1sL=$00ff0002
+@byte cx16.r2sL=$00ff0004
+@byte cx16.r3sL=$00ff0006
+@byte cx16.r4sL=$00ff0008
+@byte cx16.r5sL=$00ff000a
+@byte cx16.r6sL=$00ff000c
+@byte cx16.r7sL=$00ff000e
+@byte cx16.r8sL=$00ff0010
+@byte cx16.r9sL=$00ff0012
+@byte cx16.r10sL=$00ff0014
+@byte cx16.r11sL=$00ff0016
+@byte cx16.r12sL=$00ff0018
+@byte cx16.r13sL=$00ff001a
+@byte cx16.r14sL=$00ff001c
+@byte cx16.r15sL=$00ff001e
+@byte cx16.r0sH=$00ff0001
+@byte cx16.r1sH=$00ff0003
+@byte cx16.r2sH=$00ff0005
+@byte cx16.r3sH=$00ff0007
+@byte cx16.r4sH=$00ff0009
+@byte cx16.r5sH=$00ff000b
+@byte cx16.r6sH=$00ff000d
+@byte cx16.r7sH=$00ff000f
+@byte cx16.r8sH=$00ff0011
+@byte cx16.r9sH=$00ff0013
+@byte cx16.r10sH=$00ff0015
+@byte cx16.r11sH=$00ff0017
+@byte cx16.r12sH=$00ff0019
+@byte cx16.r13sH=$00ff001b
+@byte cx16.r14sH=$00ff001d
+@byte cx16.r15sH=$00ff001f
+@bool cx16.r0bL=$00ff0000
+@bool cx16.r1bL=$00ff0002
+@bool cx16.r2bL=$00ff0004
+@bool cx16.r3bL=$00ff0006
+@bool cx16.r4bL=$00ff0008
+@bool cx16.r5bL=$00ff000a
+@bool cx16.r6bL=$00ff000c
+@bool cx16.r7bL=$00ff000e
+@bool cx16.r8bL=$00ff0010
+@bool cx16.r9bL=$00ff0012
+@bool cx16.r10bL=$00ff0014
+@bool cx16.r11bL=$00ff0016
+@bool cx16.r12bL=$00ff0018
+@bool cx16.r13bL=$00ff001a
+@bool cx16.r14bL=$00ff001c
+@bool cx16.r15bL=$00ff001e
+@bool cx16.r0bH=$00ff0001
+@bool cx16.r1bH=$00ff0003
+@bool cx16.r2bH=$00ff0005
+@bool cx16.r3bH=$00ff0007
+@bool cx16.r4bH=$00ff0009
+@bool cx16.r5bH=$00ff000b
+@bool cx16.r6bH=$00ff000d
+@bool cx16.r7bH=$00ff000f
+@bool cx16.r8bH=$00ff0011
+@bool cx16.r9bH=$00ff0013
+@bool cx16.r10bH=$00ff0015
+@bool cx16.r11bH=$00ff0017
+@bool cx16.r12bH=$00ff0019
+@bool cx16.r13bH=$00ff001b
+@bool cx16.r14bH=$00ff001d
+@bool cx16.r15bH=$00ff001f
+</MEMORYMAPPED>
+<MEMORYSLABS>
+</MEMORYSLABS>
+</VARS>
+<INITGLOBALS>
+<CHUNK><REGS><![CDATA[]]></REGS><CODE>
+</CODE></CHUNK>
+</INITGLOBALS>
+
+<BLOCK NAME="main" ADDRESS="" LIBRARY="false" POS="[tests/conformance/floating.p8: line 10 col 1-1]">
+<SUB NAME="main.item" RETURNS="" POS="[tests/conformance/floating.p8: line 13 col 5-6]">
+<PARAMS>
+ubyte main.item.width
+</PARAMS>
+<CHUNK LABEL="main.item"><REGS><![CDATA[
+INT REGS:
+ read: [r1=1, r2=1]
+ write: [r1=1, r2=1]
+ types:
+  r1 -> BYTE
+  r2 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 14 col 9-20]  col += width
+[tests/conformance/floating.p8: line 15 col 9-21]  if col >= 36 {
+]]></P8SRC><CODE>
+loadm.b r1.b,[main.item.width]
+addm.b r1.b,[main.col]
+loadm.b r2.b,[main.col]
+blt.b r2.b,#$24.b,p8_label_gen_2
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r3=1]
+ write: [r3=1]
+ types:
+  r3 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 17 col 13-19]  col = 0
+[library:/prog8lib/virtual/textio.p8: line 44 col 5-16]  chrout('\n')
+]]></P8SRC><CODE>
+load.b r3.b,#10.b
+call txt.chrout(char=r3.b)
+storezm.b [main.col]
+jump p8_label_gen_1
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_2"><REGS><![CDATA[
+INT REGS:
+ read: [r4=1]
+ write: [r4=1]
+ types:
+  r4 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 48 col 5-15]  chrout(' ')
+]]></P8SRC><CODE>
+load.b r4.b,#$20.b
+call txt.chrout(char=r4.b)
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_1"><REGS><![CDATA[]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 15 col 9-21]  if col >= 36 {
+]]></P8SRC><CODE>
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.u" RETURNS="" POS="[tests/conformance/floating.p8: line 23 col 5-6]">
+<PARAMS>
+uword main.u.v
+</PARAMS>
+<CHUNK LABEL="main.u"><REGS><![CDATA[
+INT REGS:
+ read: [r5=1, r6=1]
+ write: [r5=1, r6=1]
+ types:
+  r5 -> WORD
+  r6 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 24 col 9-23]  txt.print_uw(v)
+[tests/conformance/floating.p8: line 25 col 9-15]  item(6)
+]]></P8SRC><CODE>
+loadm.w r5.w,[main.u.v]
+call txt.print_uw(value=r5.w)
+load.b r6.b,#6.b
+call main.item(width=r6.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.s" RETURNS="" POS="[tests/conformance/floating.p8: line 28 col 5-50]">
+<PARAMS>
+word main.s.v
+</PARAMS>
+<CHUNK LABEL="main.s"><REGS><![CDATA[
+INT REGS:
+ read: [r7=1, r8=1]
+ write: [r7=1, r8=1]
+ types:
+  r7 -> WORD
+  r8 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 29 col 9-22]  txt.print_w(v)
+[tests/conformance/floating.p8: line 30 col 9-15]  item(7)
+]]></P8SRC><CODE>
+loadm.w r7.w,[main.s.v]
+call txt.print_w(value=r7.w)
+load.b r8.b,#7.b
+call main.item(width=r8.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.t" RETURNS="" POS="[tests/conformance/floating.p8: line 34 col 5-6]">
+<PARAMS>
+bool main.t.v
+</PARAMS>
+<CHUNK LABEL="main.t"><REGS><![CDATA[
+INT REGS:
+ read: [r9=1]
+ write: [r9=1]
+ types:
+  r9 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 35 col 9-27]  if v
+]]></P8SRC><CODE>
+loadm.b r9.b,[main.t.v]
+cmpi.b r9.b,#0.b
+bsteq p8_label_gen_4
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r10=1]
+ write: [r10=1]
+ types:
+  r10 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 36 col 13-27]  txt.chrout('y')
+]]></P8SRC><CODE>
+load.b r10.b,#$79.b
+call txt.chrout(char=r10.b)
+jump p8_label_gen_3
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_4"><REGS><![CDATA[
+INT REGS:
+ read: [r11=1]
+ write: [r11=1]
+ types:
+  r11 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 38 col 13-27]  txt.chrout('n')
+]]></P8SRC><CODE>
+load.b r11.b,#$6e.b
+call txt.chrout(char=r11.b)
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_3"><REGS><![CDATA[
+INT REGS:
+ read: [r12=2]
+ write: [r12=2]
+ types:
+  r12 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 39 col 9-13]  col++
+[tests/conformance/floating.p8: line 40 col 9-20]  if col % 6 == 0
+]]></P8SRC><CODE>
+incm.b [main.col]
+loadm.b r12.b,[main.col]
+mod.b r12.b,#6.b
+cmpi.b r12.b,#0.b
+bstne p8_label_gen_5
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r13=1]
+ write: [r13=1]
+ types:
+  r13 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 41 col 13-19]  item(1)
+]]></P8SRC><CODE>
+load.b r13.b,#1.b
+call main.item(width=r13.b)
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_5"><REGS><![CDATA[]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 40 col 9-20]  if col % 6 == 0
+]]></P8SRC><CODE>
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.line" RETURNS="" POS="[tests/conformance/floating.p8: line 44 col 5-6]">
+<PARAMS>
+</PARAMS>
+<CHUNK LABEL="main.line"><REGS><![CDATA[
+INT REGS:
+ read: [r14=1]
+ write: [r14=1]
+ types:
+  r14 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 45 col 9-21]  if col != 0
+]]></P8SRC><CODE>
+loadm.b r14.b,[main.col]
+cmpi.b r14.b,#0.b
+bsteq p8_label_gen_6
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r15=1]
+ write: [r15=1]
+ types:
+  r15 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 44 col 5-16]  chrout('\n')
+]]></P8SRC><CODE>
+load.b r15.b,#10.b
+call txt.chrout(char=r15.b)
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_6"><REGS><![CDATA[]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 47 col 9-15]  col = 0
+]]></P8SRC><CODE>
+storezm.b [main.col]
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.f" RETURNS="" POS="[tests/conformance/floating.p8: line 54 col 5-6]">
+<PARAMS>
+float main.f.value
+</PARAMS>
+<CHUNK LABEL="main.f"><REGS><![CDATA[
+INT REGS:
+ read: [r17=1]
+ write: [r17=1]
+ types:
+  r17 -> BYTE
+
+FP REGS:
+ read: [fr16=1]
+ write: [fr16=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 55 col 9-27]  floats.print(value)
+[tests/conformance/floating.p8: line 56 col 9-16]  item(10)
+]]></P8SRC><CODE>
+loadm.f fr16.f,[main.f.value]
+call floats.print(value=fr16.f)
+load.b r17.b,#10.b
+call main.item(width=r17.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.arithmetic" RETURNS="" POS="[tests/conformance/floating.p8: line 59 col 5-6]">
+<PARAMS>
+float main.arithmetic.a
+float main.arithmetic.b
+</PARAMS>
+<CHUNK LABEL="main.arithmetic"><REGS><![CDATA[
+FP REGS:
+ read: [fr18=2, fr19=1, fr20=2, fr21=1, fr22=2, fr23=1, fr24=2, fr25=1, fr26=2, fr27=4, fr28=2, fr29=1, fr30=1, fr31=1, fr32=1, fr33=1, fr34=1, fr35=1, fr36=1]
+ write: [fr18=2, fr19=1, fr20=2, fr21=1, fr22=2, fr23=1, fr24=2, fr25=1, fr26=2, fr27=4, fr28=2, fr29=1, fr30=1, fr31=1, fr32=1, fr33=1, fr34=1, fr35=1, fr36=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 60 col 9-16]  f(a + b)
+[tests/conformance/floating.p8: line 61 col 9-16]  f(a - b)
+[tests/conformance/floating.p8: line 62 col 9-16]  f(a * b)
+[tests/conformance/floating.p8: line 63 col 9-16]  f(a / b)
+[tests/conformance/floating.p8: line 64 col 9-13]  f(-a)
+[tests/conformance/floating.p8: line 65 col 9-28]  f(a * 2 + b / 4 - 1)
+[tests/conformance/floating.p8: line 66 col 19-19]  float c = a
+[tests/conformance/floating.p8: line 67 col 9-14]  c += b
+[tests/conformance/floating.p8: line 68 col 9-14]  c *= 2
+[tests/conformance/floating.p8: line 69 col 9-16]  c -= 0.5
+[tests/conformance/floating.p8: line 70 col 9-14]  c /= 4
+[tests/conformance/floating.p8: line 71 col 9-12]  f(c)
+[tests/conformance/floating.p8: line 72 col 9-17]  kept += a
+[tests/conformance/floating.p8: line 73 col 9-15]  f(kept)
+]]></P8SRC><CODE>
+loadm.f fr18.f,[main.arithmetic.a]
+loadm.f fr19.f,[main.arithmetic.b]
+addr.f fr18.f,fr19.f
+call main.f(value=fr18.f)
+loadm.f fr20.f,[main.arithmetic.a]
+loadm.f fr21.f,[main.arithmetic.b]
+subr.f fr20.f,fr21.f
+call main.f(value=fr20.f)
+loadm.f fr22.f,[main.arithmetic.a]
+loadm.f fr23.f,[main.arithmetic.b]
+mulsr.f fr22.f,fr23.f
+call main.f(value=fr22.f)
+loadm.f fr24.f,[main.arithmetic.a]
+loadm.f fr25.f,[main.arithmetic.b]
+divsr.f fr24.f,fr25.f
+call main.f(value=fr24.f)
+loadm.f fr26.f,[main.arithmetic.a]
+neg.f fr26.f
+call main.f(value=fr26.f)
+loadm.f fr27.f,[main.arithmetic.a]
+muls.f fr27.f,#2.0.f
+loadm.f fr28.f,[main.arithmetic.b]
+load.f fr29.f,#4.0.f
+divsr.f fr28.f,fr29.f
+addr.f fr27.f,fr28.f
+dec.f fr27.f
+call main.f(value=fr27.f)
+loadm.f fr30.f,[main.arithmetic.a]
+storem.f fr30.f,[main.arithmetic.c]
+loadm.f fr31.f,[main.arithmetic.b]
+addm.f fr31.f,[main.arithmetic.c]
+load.f fr32.f,#2.0.f
+mulsm.f fr32.f,[main.arithmetic.c]
+subim.f #0.5.f,[main.arithmetic.c]
+load.f fr33.f,#4.0.f
+divsm.f fr33.f,[main.arithmetic.c]
+loadm.f fr34.f,[main.arithmetic.c]
+call main.f(value=fr34.f)
+loadm.f fr35.f,[main.arithmetic.a]
+addm.f fr35.f,[main.kept]
+loadm.f fr36.f,[main.kept]
+call main.f(value=fr36.f)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.comparing" RETURNS="" POS="[tests/conformance/floating.p8: line 76 col 5-6]">
+<PARAMS>
+float main.comparing.a
+float main.comparing.b
+</PARAMS>
+<CHUNK LABEL="main.comparing"><REGS><![CDATA[
+INT REGS:
+ read: [r39=1]
+ write: [r39=1]
+ types:
+  r39 -> BYTE
+
+FP REGS:
+ read: [fr37=1, fr38=1]
+ write: [fr37=1, fr38=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 77 col 9-16]  t(a < b)
+]]></P8SRC><CODE>
+loadm.f fr37.f,[main.comparing.a]
+loadm.f fr38.f,[main.comparing.b]
+fcomp.f r39.b,fr37.f,fr38.f
+blts.b r39.b,#0.b,p8_label_gen_7
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r40=1]
+ types:
+  r40 -> BYTE
+]]></REGS><CODE>
+load.b r40.b,#0.b
+jump p8_label_gen_8
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_7"><REGS><![CDATA[
+INT REGS:
+ write: [r40=1]
+ types:
+  r40 -> BYTE
+]]></REGS><CODE>
+load.b r40.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_8"><REGS><![CDATA[
+INT REGS:
+ read: [r40=1, r43=1]
+ write: [r43=1]
+ types:
+  r40 -> BYTE
+  r43 -> BYTE
+
+FP REGS:
+ read: [fr41=1, fr42=1]
+ write: [fr41=1, fr42=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 78 col 9-17]  t(a <= b)
+]]></P8SRC><CODE>
+call main.t(v=r40.b)
+loadm.f fr41.f,[main.comparing.a]
+loadm.f fr42.f,[main.comparing.b]
+fcomp.f r43.b,fr41.f,fr42.f
+bles.b r43.b,#0.b,p8_label_gen_9
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r44=1]
+ types:
+  r44 -> BYTE
+]]></REGS><CODE>
+load.b r44.b,#0.b
+jump p8_label_gen_10
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_9"><REGS><![CDATA[
+INT REGS:
+ write: [r44=1]
+ types:
+  r44 -> BYTE
+]]></REGS><CODE>
+load.b r44.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_10"><REGS><![CDATA[
+INT REGS:
+ read: [r44=1, r47=1]
+ write: [r47=1]
+ types:
+  r44 -> BYTE
+  r47 -> BYTE
+
+FP REGS:
+ read: [fr45=1, fr46=1]
+ write: [fr45=1, fr46=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 79 col 9-16]  t(a > b)
+]]></P8SRC><CODE>
+call main.t(v=r44.b)
+loadm.f fr45.f,[main.comparing.a]
+loadm.f fr46.f,[main.comparing.b]
+fcomp.f r47.b,fr45.f,fr46.f
+bgts.b r47.b,#0.b,p8_label_gen_11
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r48=1]
+ types:
+  r48 -> BYTE
+]]></REGS><CODE>
+load.b r48.b,#0.b
+jump p8_label_gen_12
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_11"><REGS><![CDATA[
+INT REGS:
+ write: [r48=1]
+ types:
+  r48 -> BYTE
+]]></REGS><CODE>
+load.b r48.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_12"><REGS><![CDATA[
+INT REGS:
+ read: [r48=1, r51=1]
+ write: [r51=1]
+ types:
+  r48 -> BYTE
+  r51 -> BYTE
+
+FP REGS:
+ read: [fr49=1, fr50=1]
+ write: [fr49=1, fr50=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 80 col 9-17]  t(a >= b)
+]]></P8SRC><CODE>
+call main.t(v=r48.b)
+loadm.f fr49.f,[main.comparing.a]
+loadm.f fr50.f,[main.comparing.b]
+fcomp.f r51.b,fr49.f,fr50.f
+bges.b r51.b,#0.b,p8_label_gen_13
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r52=1]
+ types:
+  r52 -> BYTE
+]]></REGS><CODE>
+load.b r52.b,#0.b
+jump p8_label_gen_14
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_13"><REGS><![CDATA[
+INT REGS:
+ write: [r52=1]
+ types:
+  r52 -> BYTE
+]]></REGS><CODE>
+load.b r52.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_14"><REGS><![CDATA[
+INT REGS:
+ read: [r52=1, r55=1]
+ write: [r55=1]
+ types:
+  r52 -> BYTE
+  r55 -> BYTE
+
+FP REGS:
+ read: [fr53=1, fr54=1]
+ write: [fr53=1, fr54=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 81 col 9-17]  t(a == b)
+]]></P8SRC><CODE>
+call main.t(v=r52.b)
+loadm.f fr53.f,[main.comparing.a]
+loadm.f fr54.f,[main.comparing.b]
+fcomp.f r55.b,fr53.f,fr54.f
+cmpi.b r55.b,#0.b
+bsteq p8_label_gen_15
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r56=1]
+ types:
+  r56 -> BYTE
+]]></REGS><CODE>
+load.b r56.b,#0.b
+jump p8_label_gen_16
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_15"><REGS><![CDATA[
+INT REGS:
+ write: [r56=1]
+ types:
+  r56 -> BYTE
+]]></REGS><CODE>
+load.b r56.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_16"><REGS><![CDATA[
+INT REGS:
+ read: [r56=1, r59=1]
+ write: [r59=1]
+ types:
+  r56 -> BYTE
+  r59 -> BYTE
+
+FP REGS:
+ read: [fr57=1, fr58=1]
+ write: [fr57=1, fr58=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 82 col 9-17]  t(a != b)
+]]></P8SRC><CODE>
+call main.t(v=r56.b)
+loadm.f fr57.f,[main.comparing.a]
+loadm.f fr58.f,[main.comparing.b]
+fcomp.f r59.b,fr57.f,fr58.f
+cmpi.b r59.b,#0.b
+bstne p8_label_gen_17
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r60=1]
+ types:
+  r60 -> BYTE
+]]></REGS><CODE>
+load.b r60.b,#0.b
+jump p8_label_gen_18
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_17"><REGS><![CDATA[
+INT REGS:
+ write: [r60=1]
+ types:
+  r60 -> BYTE
+]]></REGS><CODE>
+load.b r60.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_18"><REGS><![CDATA[
+INT REGS:
+ read: [r60=1, r63=1]
+ write: [r63=1]
+ types:
+  r60 -> BYTE
+  r63 -> BYTE
+
+FP REGS:
+ read: [fr61=1, fr62=1]
+ write: [fr61=1, fr62=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 83 col 9-17]  t(a == 0)
+]]></P8SRC><CODE>
+call main.t(v=r60.b)
+loadm.f fr61.f,[main.comparing.a]
+load.f fr62.f,#0.0.f
+fcomp.f r63.b,fr61.f,fr62.f
+cmpi.b r63.b,#0.b
+bsteq p8_label_gen_19
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r64=1]
+ types:
+  r64 -> BYTE
+]]></REGS><CODE>
+load.b r64.b,#0.b
+jump p8_label_gen_20
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_19"><REGS><![CDATA[
+INT REGS:
+ write: [r64=1]
+ types:
+  r64 -> BYTE
+]]></REGS><CODE>
+load.b r64.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_20"><REGS><![CDATA[
+INT REGS:
+ read: [r64=1, r67=1]
+ write: [r67=1]
+ types:
+  r64 -> BYTE
+  r67 -> BYTE
+
+FP REGS:
+ read: [fr65=1, fr66=1]
+ write: [fr65=1, fr66=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 84 col 9-16]  t(b > 0)
+]]></P8SRC><CODE>
+call main.t(v=r64.b)
+loadm.f fr65.f,[main.comparing.b]
+load.f fr66.f,#0.0.f
+fcomp.f r67.b,fr65.f,fr66.f
+bgts.b r67.b,#0.b,p8_label_gen_21
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r68=1]
+ types:
+  r68 -> BYTE
+]]></REGS><CODE>
+load.b r68.b,#0.b
+jump p8_label_gen_22
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_21"><REGS><![CDATA[
+INT REGS:
+ write: [r68=1]
+ types:
+  r68 -> BYTE
+]]></REGS><CODE>
+load.b r68.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_22"><REGS><![CDATA[
+INT REGS:
+ read: [r68=1, r71=1]
+ write: [r71=1]
+ types:
+  r68 -> BYTE
+  r71 -> BYTE
+
+FP REGS:
+ read: [fr69=1, fr70=1]
+ write: [fr69=1, fr70=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 85 col 9-16]  if a < b
+]]></P8SRC><CODE>
+call main.t(v=r68.b)
+loadm.f fr69.f,[main.comparing.a]
+loadm.f fr70.f,[main.comparing.b]
+fcomp.f r71.b,fr69.f,fr70.f
+bges.b r71.b,#0.b,p8_label_gen_24
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r72=1]
+ write: [r72=1]
+ types:
+  r72 -> WORD
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 86 col 13-16]  u(1)
+]]></P8SRC><CODE>
+load.w r72.w,#1.w
+call main.u(v=r72.w)
+jump p8_label_gen_23
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_24"><REGS><![CDATA[
+INT REGS:
+ read: [r73=1]
+ write: [r73=1]
+ types:
+  r73 -> WORD
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 88 col 13-16]  u(2)
+]]></P8SRC><CODE>
+load.w r73.w,#2.w
+call main.u(v=r73.w)
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_23"><REGS><![CDATA[
+INT REGS:
+ read: [r78=1]
+ write: [r78=1]
+ types:
+  r78 -> BYTE
+
+FP REGS:
+ read: [fr76=1, fr77=1]
+ write: [fr76=1, fr77=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 89 col 9-28]  f(if a > b a else b)
+]]></P8SRC><CODE>
+loadm.f fr76.f,[main.comparing.a]
+loadm.f fr77.f,[main.comparing.b]
+fcomp.f r78.b,fr76.f,fr77.f
+bgts.b r78.b,#0.b,p8_label_gen_27
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ write: [r79=1]
+ types:
+  r79 -> BYTE
+]]></REGS><CODE>
+load.b r79.b,#0.b
+jump p8_label_gen_28
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_27"><REGS><![CDATA[
+INT REGS:
+ write: [r79=1]
+ types:
+  r79 -> BYTE
+]]></REGS><CODE>
+load.b r79.b,#1.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_28"><REGS><![CDATA[
+INT REGS:
+ read: [r79=1]
+ types:
+  r79 -> BYTE
+]]></REGS><CODE>
+cmpi.b r79.b,#0.b
+bsteq p8_label_gen_25
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+FP REGS:
+ write: [fr74=1]
+]]></REGS><CODE>
+loadm.f fr74.f,[main.comparing.a]
+jump p8_label_gen_26
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_25"><REGS><![CDATA[
+FP REGS:
+ read: [fr75=1]
+ write: [fr74=1, fr75=1]
+]]></REGS><CODE>
+loadm.f fr75.f,[main.comparing.b]
+loadr.f fr74.f,fr75.f
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_26"><REGS><![CDATA[
+FP REGS:
+ read: [fr74=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 89 col 9-28]  f(if a > b a else b)
+]]></P8SRC><CODE>
+call main.f(value=fr74.f)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.converting" RETURNS="" POS="[tests/conformance/floating.p8: line 92 col 5-6]">
+<PARAMS>
+ubyte main.converting.ub
+byte main.converting.sb
+uword main.converting.uw
+word main.converting.sw
+float main.converting.x
+</PARAMS>
+<CHUNK LABEL="main.converting"><REGS><![CDATA[
+INT REGS:
+ read: [r80=1, r83=1, r86=1, r89=1, r92=1, r96=1, r97=1, r99=1, r101=1, r103=1, r104=1, r106=1, r108=1, r110=1, r111=1, r112=1, r114=1]
+ write: [r80=1, r83=1, r86=1, r89=1, r92=1, r96=1, r97=1, r99=1, r101=1, r103=1, r104=1, r106=1, r108=1, r110=1, r111=1, r112=1, r114=1]
+ types:
+  r80 -> BYTE
+  r83 -> BYTE
+  r86 -> WORD
+  r89 -> WORD
+  r92 -> BYTE
+  r96 -> BYTE
+  r97 -> WORD
+  r99 -> WORD
+  r101 -> WORD
+  r103 -> BYTE
+  r104 -> WORD
+  r106 -> WORD
+  r108 -> WORD
+  r110 -> BYTE
+  r111 -> WORD
+  r112 -> BYTE
+  r114 -> WORD
+
+FP REGS:
+ read: [fr81=1, fr82=1, fr84=1, fr85=1, fr87=1, fr88=1, fr90=1, fr91=1, fr93=2, fr94=1, fr95=1, fr98=1, fr100=2, fr102=2, fr105=2, fr107=2, fr109=2, fr113=1, fr115=1]
+ write: [fr81=1, fr82=1, fr84=1, fr85=1, fr87=1, fr88=1, fr90=1, fr91=1, fr93=2, fr94=1, fr95=1, fr98=1, fr100=2, fr102=2, fr105=2, fr107=2, fr109=2, fr113=1, fr115=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 93 col 19-29]  float c = ub as float
+[tests/conformance/floating.p8: line 94 col 9-12]  f(c)
+[tests/conformance/floating.p8: line 95 col 9-23]  c = sb as float
+[tests/conformance/floating.p8: line 96 col 9-12]  f(c)
+[tests/conformance/floating.p8: line 97 col 9-23]  c = uw as float
+[tests/conformance/floating.p8: line 98 col 9-12]  f(c)
+[tests/conformance/floating.p8: line 99 col 9-23]  c = sw as float
+[tests/conformance/floating.p8: line 100 col 9-12]  f(c)
+[tests/conformance/floating.p8: line 101 col 9-26]  f(ub as float / 4)
+[tests/conformance/floating.p8: line 102 col 9-21]  u(x as ubyte)
+[tests/conformance/floating.p8: line 103 col 9-21]  u(x as uword)
+[tests/conformance/floating.p8: line 104 col 9-21]  s(-x as word)
+[tests/conformance/floating.p8: line 105 col 9-21]  s(-x as byte)
+[tests/conformance/floating.p8: line 106 col 9-28]  u((x * 10) as uword)
+[tests/conformance/floating.p8: line 107 col 9-29]  u((x * 400) as uword)
+[tests/conformance/floating.p8: line 108 col 9-29]  u((x + 100) as ubyte)
+[tests/conformance/floating.p8: line 109 col 9-13]  f(ub)
+[tests/conformance/floating.p8: line 110 col 9-13]  f(sw)
+]]></P8SRC><CODE>
+loadm.b r80.b,[main.converting.ub]
+ffromub.f fr81.f,r80.b
+storem.f fr81.f,[main.converting.c]
+loadm.f fr82.f,[main.converting.c]
+call main.f(value=fr82.f)
+loadm.b r83.b,[main.converting.sb]
+ffromsb.f fr84.f,r83.b
+storem.f fr84.f,[main.converting.c]
+loadm.f fr85.f,[main.converting.c]
+call main.f(value=fr85.f)
+loadm.w r86.w,[main.converting.uw]
+ffromuw.f fr87.f,r86.w
+storem.f fr87.f,[main.converting.c]
+loadm.f fr88.f,[main.converting.c]
+call main.f(value=fr88.f)
+loadm.w r89.w,[main.converting.sw]
+ffromsw.f fr90.f,r89.w
+storem.f fr90.f,[main.converting.c]
+loadm.f fr91.f,[main.converting.c]
+call main.f(value=fr91.f)
+loadm.b r92.b,[main.converting.ub]
+ffromub.f fr93.f,r92.b
+load.f fr94.f,#4.0.f
+divsr.f fr93.f,fr94.f
+call main.f(value=fr93.f)
+loadm.f fr95.f,[main.converting.x]
+ftoub.f r96.b,fr95.f
+ext.b r97.w,r96.b
+call main.u(v=r97.w)
+loadm.f fr98.f,[main.converting.x]
+ftouw.f r99.w,fr98.f
+call main.u(v=r99.w)
+loadm.f fr100.f,[main.converting.x]
+neg.f fr100.f
+ftosw.f r101.w,fr100.f
+call main.s(v=r101.w)
+loadm.f fr102.f,[main.converting.x]
+neg.f fr102.f
+ftosb.f r103.b,fr102.f
+exts.b r104.w,r103.b
+call main.s(v=r104.w)
+loadm.f fr105.f,[main.converting.x]
+muls.f fr105.f,#10.0.f
+ftouw.f r106.w,fr105.f
+call main.u(v=r106.w)
+loadm.f fr107.f,[main.converting.x]
+muls.f fr107.f,#400.0.f
+ftouw.f r108.w,fr107.f
+call main.u(v=r108.w)
+loadm.f fr109.f,[main.converting.x]
+add.f fr109.f,#100.0.f
+ftoub.f r110.b,fr109.f
+ext.b r111.w,r110.b
+call main.u(v=r111.w)
+loadm.b r112.b,[main.converting.ub]
+ffromub.f fr113.f,r112.b
+call main.f(value=fr113.f)
+loadm.w r114.w,[main.converting.sw]
+ffromsw.f fr115.f,r114.w
+call main.f(value=fr115.f)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.functions" RETURNS="" POS="[tests/conformance/floating.p8: line 113 col 5-6]">
+<PARAMS>
+float main.functions.x
+</PARAMS>
+<CHUNK LABEL="main.functions"><REGS><![CDATA[
+INT REGS:
+ read: [r140=1, r142=1]
+ write: [r140=1, r142=1]
+ types:
+  r140 -> POINTER
+  r142 -> POINTER
+
+FP REGS:
+ read: [fr116=1, fr117=1, fr118=1, fr119=1, fr120=1, fr121=1, fr122=2, fr123=1, fr124=2, fr125=1, fr126=2, fr127=1, fr128=1, fr129=1, fr130=1, fr131=1, fr132=1, fr133=1, fr134=1, fr135=1, fr136=1, fr137=1, fr138=1, fr139=1, fr141=1, fr143=1]
+ write: [fr116=1, fr117=1, fr118=1, fr119=1, fr120=1, fr121=1, fr122=2, fr123=1, fr124=2, fr125=1, fr126=2, fr127=1, fr128=1, fr129=1, fr130=1, fr131=1, fr132=1, fr133=1, fr134=1, fr135=1, fr136=1, fr137=1, fr138=1, fr139=1, fr141=1, fr143=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 114 col 9-26]  f(floats.floor(x))
+[tests/conformance/floating.p8: line 115 col 9-25]  f(floats.ceil(x))
+[tests/conformance/floating.p8: line 116 col 9-26]  f(floats.round(x))
+[tests/conformance/floating.p8: line 117 col 9-27]  f(floats.floor(-x))
+[tests/conformance/floating.p8: line 118 col 9-18]  f(abs(-x))
+[tests/conformance/floating.p8: line 119 col 9-22]  f(sqrt(x * x))
+[tests/conformance/floating.p8: line 120 col 9-32]  f(floats.pow(2.0, 10.0))
+[tests/conformance/floating.p8: line 121 col 9-30]  f(floats.minf(x, 2.0))
+[tests/conformance/floating.p8: line 122 col 9-30]  f(floats.maxf(x, 2.0))
+[tests/conformance/floating.p8: line 123 col 9-37]  f(floats.clampf(x, 0.0, 1.0))
+[tests/conformance/floating.p8: line 124 col 9-32]  f(floats.parse("12.25"))
+[tests/conformance/floating.p8: line 125 col 9-31]  f(floats.parse("-0.5"))
+]]></P8SRC><CODE>
+loadm.f fr116.f,[main.functions.x]
+call floats.floor(value=fr116.f):fr117.f
+call main.f(value=fr117.f)
+loadm.f fr118.f,[main.functions.x]
+call floats.ceil(value=fr118.f):fr119.f
+call main.f(value=fr119.f)
+loadm.f fr120.f,[main.functions.x]
+call floats.round(value=fr120.f):fr121.f
+call main.f(value=fr121.f)
+loadm.f fr122.f,[main.functions.x]
+neg.f fr122.f
+call floats.floor(value=fr122.f):fr123.f
+call main.f(value=fr123.f)
+loadm.f fr124.f,[main.functions.x]
+neg.f fr124.f
+fabs.f fr125.f,fr124.f
+call main.f(value=fr125.f)
+loadm.f fr126.f,[main.functions.x]
+loadm.f fr127.f,[main.functions.x]
+mulsr.f fr126.f,fr127.f
+sqrt.f fr128.f,fr126.f
+call main.f(value=fr128.f)
+load.f fr129.f,#1024.0.f
+call main.f(value=fr129.f)
+loadm.f fr130.f,[main.functions.x]
+load.f fr131.f,#2.0.f
+call floats.minf(f1=fr130.f,f2=fr131.f):fr132.f
+call main.f(value=fr132.f)
+loadm.f fr133.f,[main.functions.x]
+load.f fr134.f,#2.0.f
+call floats.maxf(f1=fr133.f,f2=fr134.f):fr135.f
+call main.f(value=fr135.f)
+loadm.f fr136.f,[main.functions.x]
+load.f fr137.f,#0.0.f
+load.f fr138.f,#1.0.f
+call floats.clampf(value=fr136.f,minimum=fr137.f,maximum=fr138.f):fr139.f
+call main.f(value=fr139.f)
+load.p r140.p,#prog8_interned_strings.string_1
+call floats.parse(value=r140.p):fr141.f
+call main.f(value=fr141.f)
+load.p r142.p,#prog8_interned_strings.string_2
+call floats.parse(value=r142.p):fr143.f
+call main.f(value=fr143.f)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.arrays" RETURNS="" POS="[tests/conformance/floating.p8: line 128 col 5-6]">
+<PARAMS>
+ubyte main.arrays.i
+</PARAMS>
+<CHUNK LABEL="main.arrays"><REGS><![CDATA[
+INT REGS:
+ read: [r146=1, r148=2, r149=1, r153=1, r155=1]
+ write: [r146=1, r148=2, r149=1, r153=1, r155=1]
+ types:
+  r146 -> WORD
+  r148 -> BYTE
+  r149 -> WORD
+  r153 -> WORD
+  r155 -> WORD
+
+FP REGS:
+ read: [fr144=1, fr147=1, fr150=1, fr151=2, fr156=1, fr157=1]
+ write: [fr144=1, fr147=1, fr150=1, fr151=2, fr156=1, fr157=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 129 col 9-19]  f(table[0])
+[tests/conformance/floating.p8: line 130 col 9-19]  f(table[i])
+[tests/conformance/floating.p8: line 131 col 9-23]  f(table[i + 1])
+[tests/conformance/floating.p8: line 132 col 9-31]  table[i] = table[0] * 3
+[tests/conformance/floating.p8: line 133 col 9-21]  table[0] += 1
+[tests/conformance/floating.p8: line 134 col 9-19]  f(table[i])
+[tests/conformance/floating.p8: line 135 col 9-19]  f(table[0])
+[tests/conformance/floating.p8: line 136 col 9-17]  float sum = 0
+[tests/conformance/floating.p8: line 138 col 9-27]  for k in 0 to len(table) - 1
+]]></P8SRC><CODE>
+loadm.f fr144.f,[main.table]
+call main.f(value=fr144.f)
+loadmz.b r146.w,[main.arrays.i]
+loadx.f fr147.f,[main.table+r146.w*8]
+call main.f(value=fr147.f)
+loadm.b r148.b,[main.arrays.i]
+inc.b r148.b
+ext.b r149.w,r148.b
+loadx.f fr150.f,[main.table+r149.w*8]
+call main.f(value=fr150.f)
+loadm.f fr151.f,[main.table]
+muls.f fr151.f,#3.0.f
+loadmz.b r153.w,[main.arrays.i]
+storex.f fr151.f,[main.table+r153.w*8]
+incm.f [main.table]
+loadmz.b r155.w,[main.arrays.i]
+loadx.f fr156.f,[main.table+r155.w*8]
+call main.f(value=fr156.f)
+loadm.f fr157.f,[main.table]
+call main.f(value=fr157.f)
+storezm.f [main.arrays.sum]
+storeim.b #0.b,[main.arrays.k]
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_29"><REGS><![CDATA[
+INT REGS:
+ read: [r158=1, r160=1]
+ write: [r158=1, r160=1]
+ types:
+  r158 -> BYTE
+  r160 -> WORD
+
+FP REGS:
+ read: [fr161=1]
+ write: [fr161=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 139 col 13-27]  sum += table[k]
+]]></P8SRC><CODE>
+loadmz.b r160.w,[main.arrays.k]
+loadx.f fr161.f,[main.table+r160.w*8]
+addm.f fr161.f,[main.arrays.sum]
+incm.b [main.arrays.k]
+loadm.b r158.b,[main.arrays.k]
+cmpi.b r158.b,#3.b
+bstne p8_label_gen_29
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r163=1, r164=1]
+ write: [r163=1, r164=1]
+ types:
+  r163 -> WORD
+  r164 -> WORD
+
+FP REGS:
+ read: [fr162=1]
+ write: [fr162=1]
+]]></REGS><P8SRC><![CDATA[
+[tests/conformance/floating.p8: line 140 col 9-14]  f(sum)
+[tests/conformance/floating.p8: line 141 col 9-21]  u(len(table))
+[tests/conformance/floating.p8: line 142 col 9-32]  u(sizeof(float) * 0 + 3)
+]]></P8SRC><CODE>
+loadm.f fr162.f,[main.arrays.sum]
+call main.f(value=fr162.f)
+load.w r163.w,#3.w
+call main.u(v=r163.w)
+load.w r164.w,#3.w
+call main.u(v=r164.w)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="main.start" RETURNS="" POS="[tests/conformance/floating.p8: line 149 col 5-6]">
+<PARAMS>
+</PARAMS>
+<CHUNK LABEL="main.start"><REGS><![CDATA[
+INT REGS:
+ read: [r173=1, r174=1, r175=1, r176=1, r179=1, r181=1]
+ write: [r173=1, r174=1, r175=1, r176=1, r179=1, r181=1]
+ types:
+  r173 -> BYTE
+  r174 -> BYTE
+  r175 -> WORD
+  r176 -> WORD
+  r179 -> BYTE
+  r181 -> BYTE
+
+FP REGS:
+ read: [fr165=1, fr166=1, fr167=1, fr168=1, fr169=1, fr170=1, fr171=1, fr172=1, fr177=1, fr178=1, fr180=1]
+ write: [fr165=1, fr166=1, fr167=1, fr168=1, fr169=1, fr170=1, fr171=1, fr172=1, fr177=1, fr178=1, fr180=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 44 col 5-16]  chrout('\n')
+[tests/conformance/floating.p8: line 150 col 9-28]  arithmetic(7.5, 2.5)
+[tests/conformance/floating.p8: line 151 col 9-14]  line()
+[tests/conformance/floating.p8: line 152 col 9-30]  arithmetic(-1.25, 0.5)
+[tests/conformance/floating.p8: line 153 col 9-14]  line()
+[tests/conformance/floating.p8: line 154 col 9-27]  comparing(1.5, 2.5)
+[tests/conformance/floating.p8: line 155 col 9-14]  line()
+[tests/conformance/floating.p8: line 156 col 9-29]  comparing(-3.0, -3.0)
+[tests/conformance/floating.p8: line 157 col 9-14]  line()
+[tests/conformance/floating.p8: line 158 col 9-52]  converting(200, -100, 50000, -30000, 123.75)
+[tests/conformance/floating.p8: line 159 col 9-14]  line()
+[tests/conformance/floating.p8: line 160 col 9-23]  functions(3.25)
+[tests/conformance/floating.p8: line 161 col 9-14]  line()
+[tests/conformance/floating.p8: line 162 col 9-17]  arrays(1)
+[tests/conformance/floating.p8: line 163 col 9-29]  f(halve(halve(10.0)))
+]]></P8SRC><CODE>
+load.f fr165.f,#7.5.f
+load.f fr166.f,#2.5.f
+call main.arithmetic(a=fr165.f,b=fr166.f)
+call main.line()
+load.f fr167.f,#-1.25.f
+load.f fr168.f,#0.5.f
+call main.arithmetic(a=fr167.f,b=fr168.f)
+call main.line()
+load.f fr169.f,#1.5.f
+load.f fr170.f,#2.5.f
+call main.comparing(a=fr169.f,b=fr170.f)
+call main.line()
+load.f fr171.f,#-3.0.f
+load.f fr172.f,#-3.0.f
+call main.comparing(a=fr171.f,b=fr172.f)
+call main.line()
+load.b r173.b,#$c8.b
+load.b r174.b,#-$64.b
+load.w r175.w,#$c350.w
+load.w r176.w,#-$7530.w
+load.f fr177.f,#123.75.f
+call main.converting(ub=r173.b,sb=r174.b,uw=r175.w,sw=r176.w,x=fr177.f)
+call main.line()
+load.f fr178.f,#3.25.f
+call main.functions(x=fr178.f)
+call main.line()
+load.b r179.b,#1.b
+call main.arrays(i=r179.b)
+load.f fr180.f,#2.5.f
+call main.f(value=fr180.f)
+load.b r181.b,#10.b
+call txt.chrout(char=r181.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+</BLOCK>
+
+<BLOCK NAME="prog8_interned_strings" ADDRESS="" NOPREFIXING="true" LIBRARY="true" POS="[~dummy~: line 0 col 0-0]">
+</BLOCK>
+
+<BLOCK NAME="txt" ADDRESS="" IGNOREUNUSED="true" LIBRARY="true" POS="[library:/prog8lib/virtual/textio.p8: line 6 col 1-1]">
+<SUB NAME="txt.width" RETURNS="ubyte" POS="[library:/prog8lib/virtual/textio.p8: line 8 col 1-2]">
+<PARAMS>
+</PARAMS>
+<CHUNK LABEL="txt.width"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99100=1]
+ write: [r99000=1, r99100=1]
+ types:
+  r99000 -> WORD
+  r99100 -> BYTE
+]]></REGS><CODE>
+syscall $2e():r99000.w
+lsigb.w r99100.b,r99000.w
+returnr.b r99100.b
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.height" RETURNS="ubyte" POS="[library:/prog8lib/virtual/textio.p8: line 17 col 1-2]">
+<PARAMS>
+</PARAMS>
+<CHUNK LABEL="txt.height"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99100=1]
+ write: [r99000=1, r99100=1]
+ types:
+  r99000 -> WORD
+  r99100 -> BYTE
+]]></REGS><CODE>
+syscall $2e():r99000.w
+msigb.w r99100.b,r99000.w
+returnr.b r99100.b
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.size" RETURNS="ubyte,ubyte" POS="[library:/prog8lib/virtual/textio.p8: line 26 col 1-2]">
+<PARAMS>
+</PARAMS>
+<CHUNK LABEL="txt.size"><REGS><![CDATA[
+INT REGS:
+ read: [r182=1, r183=1]
+ write: [r182=1, r183=1]
+ types:
+  r182 -> BYTE
+  r183 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 28 col 5-28]  return width(), height()
+]]></P8SRC><CODE>
+call txt.height():r182.b
+call txt.width():r183.b
+storehr.b r182.b,s11.b
+storehr.b r183.b,s10.b
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.clear_screen" RETURNS="" POS="[library:/prog8lib/virtual/textio.p8: line 31 col 1-2]">
+<PARAMS>
+</PARAMS>
+<CHUNK LABEL="txt.clear_screen"><REGS><![CDATA[
+INT REGS:
+ read: [r99200=1]
+ write: [r99200=1]
+ types:
+  r99200 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 33 col 5-97]  %ir {{
+]]></P8SRC><CODE>
+load.l r99200.l,#txt.clear_screen.sequence
+syscall 3(r99200.l)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.color" RETURNS="" POS="[library:/prog8lib/virtual/textio.p8: line 79 col 1-2]">
+<PARAMS>
+ubyte txt.color.txtcol
+</PARAMS>
+<CHUNK LABEL="txt.color"><REGS><![CDATA[
+INT REGS:
+ read: [r184=1, r185=2, r186=1]
+ write: [r184=1, r185=2, r186=1]
+ types:
+  r184 -> POINTER
+  r185 -> BYTE
+  r186 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 80 col 5-19]  print("\x1b[3")
+[library:/prog8lib/virtual/textio.p8: line 81 col 5-24]  chrout('0' + txtcol)
+[library:/prog8lib/virtual/textio.p8: line 82 col 5-15]  chrout('m')
+]]></P8SRC><CODE>
+load.p r184.p,#prog8_interned_strings.string_6
+call txt.print(text=r184.p)
+loadm.b r185.b,[txt.color.txtcol]
+add.b r185.b,#$30.b
+call txt.chrout(char=r185.b)
+load.b r186.b,#$6d.b
+call txt.chrout(char=r186.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.chrout" RETURNS="" POS="[library:/prog8lib/virtual/textio.p8: line 86 col 1-2]">
+<PARAMS>
+ubyte txt.chrout.char
+</PARAMS>
+<CHUNK LABEL="txt.chrout"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1]
+ write: [r99100=1]
+ types:
+  r99100 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 87 col 5-89]  %ir {{
+]]></P8SRC><CODE>
+loadm.b r99100.b,[txt.chrout.char]
+syscall 2(r99100.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.print" RETURNS="" POS="[library:/prog8lib/virtual/textio.p8: line 97 col 1-2]">
+<PARAMS>
+pointer txt.print.text
+</PARAMS>
+<CHUNK LABEL="txt.print"><REGS><![CDATA[
+INT REGS:
+ read: [r99200=1]
+ write: [r99200=1]
+ types:
+  r99200 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 98 col 5-88]  %ir {{
+]]></P8SRC><CODE>
+loadm.l r99200.l,[txt.print.text]
+syscall 3(r99200.l)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.print_uw" RETURNS="" POS="[library:/prog8lib/virtual/textio.p8: line 166 col 1-2]">
+<PARAMS>
+uword txt.print_uw.value
+</PARAMS>
+<CHUNK LABEL="txt.print_uw"><REGS><![CDATA[
+INT REGS:
+ read: [r187=1, r188=1]
+ write: [r187=1, r188=1]
+ types:
+  r187 -> WORD
+  r188 -> POINTER
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 168 col 5-29]  print(conv.str_uw(value))
+]]></P8SRC><CODE>
+loadm.w r187.w,[txt.print_uw.value]
+call conv.str_uw(value=r187.w):r188.p
+call txt.print(text=r188.p)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.print_w" RETURNS="" POS="[library:/prog8lib/virtual/textio.p8: line 171 col 1-2]">
+<PARAMS>
+word txt.print_w.value
+</PARAMS>
+<CHUNK LABEL="txt.print_w"><REGS><![CDATA[
+INT REGS:
+ read: [r189=1, r190=1]
+ write: [r189=1, r190=1]
+ types:
+  r189 -> WORD
+  r190 -> POINTER
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 173 col 5-28]  print(conv.str_w(value))
+]]></P8SRC><CODE>
+loadm.w r189.w,[txt.print_w.value]
+call conv.str_w(value=r189.w):r190.p
+call txt.print(text=r190.p)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.print_l" RETURNS="" POS="[library:/prog8lib/virtual/textio.p8: line 176 col 1-2]">
+<PARAMS>
+long txt.print_l.value
+</PARAMS>
+<CHUNK LABEL="txt.print_l"><REGS><![CDATA[
+INT REGS:
+ read: [r99200=1]
+ write: [r99200=1]
+ types:
+  r99200 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 178 col 5-92]  %ir {{
+]]></P8SRC><CODE>
+loadm.l r99200.l,[txt.print_l.value]
+syscall $3b(r99200.l)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.input_chars" RETURNS="ubyte" POS="[library:/prog8lib/virtual/textio.p8: line 192 col 1-2]">
+<PARAMS>
+pointer txt.input_chars.buffer
+</PARAMS>
+<CHUNK LABEL="txt.input_chars"><REGS><![CDATA[
+INT REGS:
+ read: [r191=1, r192=1, r193=1]
+ write: [r191=1, r192=1, r193=1]
+ types:
+  r191 -> POINTER
+  r192 -> BYTE
+  r193 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 196 col 5-20]  eof_flag = false
+[library:/prog8lib/virtual/textio.p8: line 197 col 19-35]  ubyte count = read_line(buffer)
+[library:/prog8lib/virtual/textio.p8: line 198 col 5-21]  if count != 255
+]]></P8SRC><CODE>
+storezm.b [txt.eof_flag]
+loadm.p r191.p,[txt.input_chars.buffer]
+call txt.input_chars.read_line(line=r191.p):r192.b
+storem.b r192.b,[txt.input_chars.count]
+loadm.b r193.b,[txt.input_chars.count]
+cmpi.b r193.b,#$ff.b
+bsteq p8_label_gen_30
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r194=1]
+ write: [r194=1]
+ types:
+  r194 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 199 col 9-20]  return count
+]]></P8SRC><CODE>
+loadm.b r194.b,[txt.input_chars.count]
+returnr.b r194.b
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_30"><REGS><![CDATA[
+INT REGS:
+ read: [r195=1]
+ write: [r195=1]
+ types:
+  r195 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 200 col 5-20]  if eof_exit
+]]></P8SRC><CODE>
+loadm.b r195.b,[txt.eof_exit]
+cmpi.b r195.b,#0.b
+bsteq p8_label_gen_31
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r196=1]
+ write: [r196=1]
+ types:
+  r196 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 201 col 9-19]  sys.exit(1)
+]]></P8SRC><CODE>
+load.b r196.b,#1.b
+call sys.exit(returnvalue=r196.b)
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_31"><REGS><![CDATA[
+INT REGS:
+ read: [r197=1]
+ write: [r197=1]
+ types:
+  r197 -> POINTER
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/textio.p8: line 202 col 5-19]  eof_flag = true
+[library:/prog8lib/virtual/textio.p8: line 203 col 5-17]  buffer[0] = 0
+[library:/prog8lib/virtual/textio.p8: line 204 col 5-12]  return 0
+]]></P8SRC><CODE>
+storeim.b #1.b,[txt.eof_flag]
+loadm.p r197.p,[txt.input_chars.buffer]
+storezi.b [r197.p]
+returni.b #0.b
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="txt.input_chars.read_line" RETURNS="ubyte" POS="[library:/prog8lib/virtual/textio.p8: line 206 col 5-6]">
+<PARAMS>
+pointer txt.input_chars.read_line.line
+</PARAMS>
+<CHUNK LABEL="txt.input_chars.read_line"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1, r99101=1, r99200=1]
+ write: [r99100=1, r99101=1, r99200=1]
+ types:
+  r99100 -> BYTE
+  r99101 -> BYTE
+  r99200 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[txt.input_chars.read_line.line]
+load.b r99100.b,#$50.b
+syscall 6(r99200.l,r99100.b):r99101.b
+returnr.b r99101.b
+</CODE></CHUNK>
+</SUB>
+
+</BLOCK>
+
+<BLOCK NAME="conv" ADDRESS="" IGNOREUNUSED="true" LIBRARY="true" POS="[library:/prog8lib/virtual/conv.p8: line 5 col 1-1]">
+<SUB NAME="conv.str_uw" RETURNS="pointer" POS="[library:/prog8lib/virtual/conv.p8: line 159 col 1-2]">
+<PARAMS>
+uword conv.str_uw.value
+</PARAMS>
+<CHUNK LABEL="conv.str_uw"><REGS><![CDATA[
+INT REGS:
+ read: [r198=1, r199=1, r200=1]
+ write: [r198=1, r199=1, r200=1]
+ types:
+  r198 -> WORD
+  r199 -> POINTER
+  r200 -> POINTER
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 161 col 5-38]  internal_str_uw(value, string_out)
+[library:/prog8lib/virtual/conv.p8: line 162 col 5-21]  return string_out
+]]></P8SRC><CODE>
+loadm.w r198.w,[conv.str_uw.value]
+load.p r199.p,#conv.string_out
+call conv.internal_str_uw(value=r198.w,out_ptr=r199.p)
+load.p r200.p,#conv.string_out
+returnr.p r200.p
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="conv.str_w" RETURNS="pointer" POS="[library:/prog8lib/virtual/conv.p8: line 165 col 1-2]">
+<PARAMS>
+word conv.str_w.value
+</PARAMS>
+<CHUNK LABEL="conv.str_w"><REGS><![CDATA[
+INT REGS:
+ read: [r201=1, r202=1]
+ write: [r201=1, r202=1]
+ types:
+  r201 -> POINTER
+  r202 -> WORD
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 167 col 23-33]  ^^ubyte out_ptr = &string_out
+[library:/prog8lib/virtual/conv.p8: line 168 col 5-6]  if value<0 {
+]]></P8SRC><CODE>
+load.p r201.p,#conv.string_out
+storem.p r201.p,[conv.str_w.out_ptr]
+loadm.w r202.w,[conv.str_w.value]
+bges.w r202.w,#0.w,p8_label_gen_32
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r203=1]
+ write: [r203=1]
+ types:
+  r203 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 169 col 9-24]  @(out_ptr) = '-'
+[library:/prog8lib/virtual/conv.p8: line 170 col 9-17]  out_ptr++
+[library:/prog8lib/virtual/conv.p8: line 171 col 9-22]  value = -value
+]]></P8SRC><CODE>
+load.b r203.b,#$2d.b
+storep_inc.b r203.b,[conv.str_w.out_ptr]
+negm.w [conv.str_w.value]
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_32"><REGS><![CDATA[
+INT REGS:
+ read: [r205=1, r206=1, r207=1]
+ write: [r205=1, r206=1, r207=1]
+ types:
+  r205 -> WORD
+  r206 -> POINTER
+  r207 -> POINTER
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 173 col 5-44]  internal_str_uw(value as uword, out_ptr)
+[library:/prog8lib/virtual/conv.p8: line 174 col 5-21]  return string_out
+]]></P8SRC><CODE>
+loadm.w r205.w,[conv.str_w.value]
+loadm.p r206.p,[conv.str_w.out_ptr]
+call conv.internal_str_uw(value=r205.w,out_ptr=r206.p)
+load.p r207.p,#conv.string_out
+returnr.p r207.p
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="conv.str_l" RETURNS="pointer" POS="[library:/prog8lib/virtual/conv.p8: line 177 col 1-2]">
+<PARAMS>
+long conv.str_l.value
+</PARAMS>
+<CHUNK LABEL="conv.str_l"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99200=1, r99201=1]
+ write: [r99000=1, r99200=1, r99201=1]
+ types:
+  r99000 -> POINTER
+  r99200 -> LONG
+  r99201 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[conv.str_l.value]
+load.l r99201.l,#conv.string_out
+syscall $3c(r99200.l,r99201.l)
+load.p r99000.p,#conv.string_out
+returnr.p r99000.p
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="conv.internal_str_uw" RETURNS="" POS="[library:/prog8lib/virtual/conv.p8: line 188 col 1-42]">
+<PARAMS>
+uword conv.internal_str_uw.value
+pointer conv.internal_str_uw.out_ptr
+</PARAMS>
+<CHUNK LABEL="conv.internal_str_uw"><REGS><![CDATA[
+INT REGS:
+ read: [r208=2, r209=2, r210=2, r211=1, r212=2, r213=2, r214=2, r215=1, r216=2, r217=2, r218=2, r219=1, r220=2, r221=2, r222=2, r223=1, r224=2, r225=2, r226=2, r227=1, r228=1]
+ write: [r208=2, r209=2, r210=2, r211=1, r212=2, r213=2, r214=2, r215=1, r216=2, r217=2, r218=2, r219=1, r220=2, r221=2, r222=2, r223=1, r224=2, r225=2, r226=2, r227=1, r228=1]
+ types:
+  r208 -> WORD
+  r209 -> WORD
+  r210 -> WORD
+  r211 -> BYTE
+  r212 -> WORD
+  r213 -> WORD
+  r214 -> WORD
+  r215 -> BYTE
+  r216 -> WORD
+  r217 -> WORD
+  r218 -> WORD
+  r219 -> BYTE
+  r220 -> WORD
+  r221 -> WORD
+  r222 -> WORD
+  r223 -> BYTE
+  r224 -> WORD
+  r225 -> WORD
+  r226 -> WORD
+  r227 -> BYTE
+  r228 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 189 col 20-27]  uword value2 = value/10
+[library:/prog8lib/virtual/conv.p8: line 190 col 20-43]  ubyte digits = value-value2*10 as ubyte
+[library:/prog8lib/virtual/conv.p8: line 191 col 20-28]  uword value3 = value2/10
+[library:/prog8lib/virtual/conv.p8: line 192 col 18-42]  ubyte tens = value2-value3*10 as ubyte
+[library:/prog8lib/virtual/conv.p8: line 193 col 20-28]  uword value4 = value3/10
+[library:/prog8lib/virtual/conv.p8: line 194 col 22-46]  ubyte hundreds = value3-value4*10 as ubyte
+[library:/prog8lib/virtual/conv.p8: line 195 col 20-28]  uword value5 = value4/10
+[library:/prog8lib/virtual/conv.p8: line 196 col 23-47]  ubyte thousands = value4-value5*10 as ubyte
+[library:/prog8lib/virtual/conv.p8: line 197 col 20-28]  uword value6 = value5/10
+[library:/prog8lib/virtual/conv.p8: line 198 col 26-50]  ubyte tenthousands = value5-value6*10 as ubyte
+[library:/prog8lib/virtual/conv.p8: line 199 col 5-33]  if tenthousands!=0
+]]></P8SRC><CODE>
+loadm.w r208.w,[conv.internal_str_uw.value]
+div.w r208.w,#10.w
+storem.w r208.w,[conv.internal_str_uw.value2]
+loadm.w r209.w,[conv.internal_str_uw.value]
+loadm.w r210.w,[conv.internal_str_uw.value2]
+mul.w r210.w,#10.w
+subr.w r209.w,r210.w
+lsigb.w r211.b,r209.w
+storem.b r211.b,[conv.internal_str_uw.digits]
+loadm.w r212.w,[conv.internal_str_uw.value2]
+div.w r212.w,#10.w
+storem.w r212.w,[conv.internal_str_uw.value3]
+loadm.w r213.w,[conv.internal_str_uw.value2]
+loadm.w r214.w,[conv.internal_str_uw.value3]
+mul.w r214.w,#10.w
+subr.w r213.w,r214.w
+lsigb.w r215.b,r213.w
+storem.b r215.b,[conv.internal_str_uw.tens]
+loadm.w r216.w,[conv.internal_str_uw.value3]
+div.w r216.w,#10.w
+storem.w r216.w,[conv.internal_str_uw.value4]
+loadm.w r217.w,[conv.internal_str_uw.value3]
+loadm.w r218.w,[conv.internal_str_uw.value4]
+mul.w r218.w,#10.w
+subr.w r217.w,r218.w
+lsigb.w r219.b,r217.w
+storem.b r219.b,[conv.internal_str_uw.hundreds]
+loadm.w r220.w,[conv.internal_str_uw.value4]
+div.w r220.w,#10.w
+storem.w r220.w,[conv.internal_str_uw.value5]
+loadm.w r221.w,[conv.internal_str_uw.value4]
+loadm.w r222.w,[conv.internal_str_uw.value5]
+mul.w r222.w,#10.w
+subr.w r221.w,r222.w
+lsigb.w r223.b,r221.w
+storem.b r223.b,[conv.internal_str_uw.thousands]
+loadm.w r224.w,[conv.internal_str_uw.value5]
+div.w r224.w,#10.w
+storem.w r224.w,[conv.internal_str_uw.value6]
+loadm.w r225.w,[conv.internal_str_uw.value5]
+loadm.w r226.w,[conv.internal_str_uw.value6]
+mul.w r226.w,#10.w
+subr.w r225.w,r226.w
+lsigb.w r227.b,r225.w
+storem.b r227.b,[conv.internal_str_uw.tenthousands]
+loadm.b r228.b,[conv.internal_str_uw.tenthousands]
+cmpi.b r228.b,#0.b
+bstne conv.internal_str_uw.output_tenthousands
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r229=1]
+ write: [r229=1]
+ types:
+  r229 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 201 col 5-30]  if thousands!=0
+]]></P8SRC><CODE>
+loadm.b r229.b,[conv.internal_str_uw.thousands]
+cmpi.b r229.b,#0.b
+bstne conv.internal_str_uw.output_thousands
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r230=1]
+ write: [r230=1]
+ types:
+  r230 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 203 col 5-29]  if hundreds!=0
+]]></P8SRC><CODE>
+loadm.b r230.b,[conv.internal_str_uw.hundreds]
+cmpi.b r230.b,#0.b
+bstne conv.internal_str_uw.output_hundreds
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+INT REGS:
+ read: [r231=1]
+ write: [r231=1]
+ types:
+  r231 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 205 col 5-25]  if tens!=0
+]]></P8SRC><CODE>
+loadm.b r231.b,[conv.internal_str_uw.tens]
+cmpi.b r231.b,#0.b
+bstne conv.internal_str_uw.output_tens
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 207 col 5-20]  goto output_ones
+]]></P8SRC><CODE>
+jump conv.internal_str_uw.output_ones
+</CODE></CHUNK>
+<CHUNK LABEL="conv.internal_str_uw.output_tenthousands"><REGS><![CDATA[
+INT REGS:
+ read: [r232=2]
+ write: [r232=2]
+ types:
+  r232 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 208 col 1-20]  output_tenthousands:
+[library:/prog8lib/virtual/conv.p8: line 209 col 5-33]  @(out_ptr) = tenthousands+'0'
+[library:/prog8lib/virtual/conv.p8: line 210 col 5-13]  out_ptr++
+]]></P8SRC><CODE>
+loadm.b r232.b,[conv.internal_str_uw.tenthousands]
+add.b r232.b,#$30.b
+storep_inc.b r232.b,[conv.internal_str_uw.out_ptr]
+</CODE></CHUNK>
+<CHUNK LABEL="conv.internal_str_uw.output_thousands"><REGS><![CDATA[
+INT REGS:
+ read: [r234=2]
+ write: [r234=2]
+ types:
+  r234 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 211 col 1-17]  output_thousands:
+[library:/prog8lib/virtual/conv.p8: line 212 col 5-30]  @(out_ptr) = thousands+'0'
+[library:/prog8lib/virtual/conv.p8: line 213 col 5-13]  out_ptr++
+]]></P8SRC><CODE>
+loadm.b r234.b,[conv.internal_str_uw.thousands]
+add.b r234.b,#$30.b
+storep_inc.b r234.b,[conv.internal_str_uw.out_ptr]
+</CODE></CHUNK>
+<CHUNK LABEL="conv.internal_str_uw.output_hundreds"><REGS><![CDATA[
+INT REGS:
+ read: [r236=2]
+ write: [r236=2]
+ types:
+  r236 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 214 col 1-16]  output_hundreds:
+[library:/prog8lib/virtual/conv.p8: line 215 col 5-29]  @(out_ptr) = hundreds+'0'
+[library:/prog8lib/virtual/conv.p8: line 216 col 5-13]  out_ptr++
+]]></P8SRC><CODE>
+loadm.b r236.b,[conv.internal_str_uw.hundreds]
+add.b r236.b,#$30.b
+storep_inc.b r236.b,[conv.internal_str_uw.out_ptr]
+</CODE></CHUNK>
+<CHUNK LABEL="conv.internal_str_uw.output_tens"><REGS><![CDATA[
+INT REGS:
+ read: [r238=2]
+ write: [r238=2]
+ types:
+  r238 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 217 col 1-12]  output_tens:
+[library:/prog8lib/virtual/conv.p8: line 218 col 5-25]  @(out_ptr) = tens+'0'
+[library:/prog8lib/virtual/conv.p8: line 219 col 5-13]  out_ptr++
+]]></P8SRC><CODE>
+loadm.b r238.b,[conv.internal_str_uw.tens]
+add.b r238.b,#$30.b
+storep_inc.b r238.b,[conv.internal_str_uw.out_ptr]
+</CODE></CHUNK>
+<CHUNK LABEL="conv.internal_str_uw.output_ones"><REGS><![CDATA[
+INT REGS:
+ read: [r240=2, r242=1]
+ write: [r240=2, r242=1]
+ types:
+  r240 -> BYTE
+  r242 -> POINTER
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/conv.p8: line 220 col 1-12]  output_ones:
+[library:/prog8lib/virtual/conv.p8: line 221 col 5-27]  @(out_ptr) = digits+'0'
+[library:/prog8lib/virtual/conv.p8: line 222 col 5-13]  out_ptr++
+[library:/prog8lib/virtual/conv.p8: line 223 col 5-18]  @(out_ptr) = 0
+]]></P8SRC><CODE>
+loadm.b r240.b,[conv.internal_str_uw.digits]
+add.b r240.b,#$30.b
+storep_inc.b r240.b,[conv.internal_str_uw.out_ptr]
+loadm.p r242.p,[conv.internal_str_uw.out_ptr]
+storezi.b [r242.p]
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="conv.str2uword" RETURNS="uword" POS="[library:/prog8lib/virtual/conv.p8: line 243 col 1-2]">
+<PARAMS>
+pointer conv.str2uword.string
+</PARAMS>
+<CHUNK LABEL="conv.str2uword"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99200=1]
+ write: [r99000=1, r99200=1]
+ types:
+  r99000 -> WORD
+  r99200 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[conv.str2uword.string]
+syscall 11(r99200.l):r99000.w
+returnr.w r99000.w
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="conv.str2word" RETURNS="word" POS="[library:/prog8lib/virtual/conv.p8: line 254 col 1-2]">
+<PARAMS>
+pointer conv.str2word.string
+</PARAMS>
+<CHUNK LABEL="conv.str2word"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99200=1]
+ write: [r99000=1, r99200=1]
+ types:
+  r99000 -> WORD
+  r99200 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[conv.str2word.string]
+syscall 12(r99200.l):r99000.w
+returnr.w r99000.w
+</CODE></CHUNK>
+</SUB>
+
+</BLOCK>
+
+<BLOCK NAME="strings" ADDRESS="" IGNOREUNUSED="true" LIBRARY="true" POS="[library:/prog8lib/virtual/strings.p8: line 5 col 1-1]">
+<SUB NAME="strings.copy" RETURNS="ubyte" POS="[library:/prog8lib/virtual/strings.p8: line 130 col 5-6]">
+<PARAMS>
+pointer strings.copy.source
+pointer strings.copy.target
+</PARAMS>
+<CHUNK LABEL="strings.copy"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1, r99101=1, r99200=1, r99201=1]
+ write: [r99100=1, r99101=1, r99200=1, r99201=1]
+ types:
+  r99100 -> BYTE
+  r99101 -> BYTE
+  r99200 -> LONG
+  r99201 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[strings.copy.source]
+loadm.l r99201.l,[strings.copy.target]
+load.b r99100.b,#$ff.b
+syscall $27(r99200.l,r99201.l,r99100.b):r99101.b
+returnr.b r99101.b
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="strings.ncopy" RETURNS="ubyte" POS="[library:/prog8lib/virtual/strings.p8: line 142 col 5-6]">
+<PARAMS>
+pointer strings.ncopy.source
+pointer strings.ncopy.target
+ubyte strings.ncopy.maxlength
+</PARAMS>
+<CHUNK LABEL="strings.ncopy"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1, r99101=1, r99200=1, r99201=1]
+ write: [r99100=1, r99101=1, r99200=1, r99201=1]
+ types:
+  r99100 -> BYTE
+  r99101 -> BYTE
+  r99200 -> LONG
+  r99201 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[strings.ncopy.source]
+loadm.l r99201.l,[strings.ncopy.target]
+loadm.b r99100.b,[strings.ncopy.maxlength]
+syscall $27(r99200.l,r99201.l,r99100.b):r99101.b
+returnr.b r99101.b
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="strings.compare" RETURNS="byte" POS="[library:/prog8lib/virtual/strings.p8: line 171 col 5-6]">
+<PARAMS>
+pointer strings.compare.st1
+pointer strings.compare.st2
+</PARAMS>
+<CHUNK LABEL="strings.compare"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1, r99200=1, r99201=1]
+ write: [r99100=1, r99200=1, r99201=1]
+ types:
+  r99100 -> BYTE
+  r99200 -> LONG
+  r99201 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[strings.compare.st1]
+loadm.l r99201.l,[strings.compare.st2]
+syscall $10(r99200.l,r99201.l):r99100.b
+returnr.b r99100.b
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="strings.compare_nocase" RETURNS="byte" POS="[library:/prog8lib/virtual/strings.p8: line 184 col 5-6]">
+<PARAMS>
+pointer strings.compare_nocase.st1
+pointer strings.compare_nocase.st2
+</PARAMS>
+<CHUNK LABEL="strings.compare_nocase"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1, r99200=1, r99201=1]
+ write: [r99100=1, r99200=1, r99201=1]
+ types:
+  r99100 -> BYTE
+  r99200 -> LONG
+  r99201 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[strings.compare_nocase.st1]
+loadm.l r99201.l,[strings.compare_nocase.st2]
+syscall $3a(r99200.l,r99201.l):r99100.b
+returnr.b r99100.b
+</CODE></CHUNK>
+</SUB>
+
+</BLOCK>
+
+<BLOCK NAME="floats" ADDRESS="" IGNOREUNUSED="true" LIBRARY="true" POS="[library:/prog8lib/virtual/floats.p8: line 26 col 1-1]">
+<SUB NAME="floats.print" RETURNS="" POS="[library:/prog8lib/virtual/floats.p8: line 35 col 1-2]">
+<PARAMS>
+float floats.print.value
+</PARAMS>
+<CHUNK LABEL="floats.print"><REGS><![CDATA[
+FP REGS:
+ read: [fr99000=1]
+ write: [fr99000=1]
+]]></REGS><CODE>
+loadm.f fr99000.f,[floats.print.value]
+syscall 15(fr99000.f)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.tostr" RETURNS="pointer" POS="[library:/prog8lib/virtual/floats.p8: line 44 col 1-2]">
+<PARAMS>
+float floats.tostr.value
+</PARAMS>
+<CHUNK LABEL="floats.tostr"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99200=1]
+ write: [r99000=1, r99200=1]
+ types:
+  r99000 -> POINTER
+  r99200 -> LONG
+
+FP REGS:
+ read: [fr99000=1]
+ write: [fr99000=1]
+]]></REGS><CODE>
+load.l r99200.l,#floats.tostr.buffer
+loadm.f fr99000.f,[floats.tostr.value]
+syscall $22(r99200.l,fr99000.f)
+load.p r99000.p,#floats.tostr.buffer
+returnr.p r99000.p
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.parse" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 56 col 1-2]">
+<PARAMS>
+pointer floats.parse.value
+</PARAMS>
+<CHUNK LABEL="floats.parse"><REGS><![CDATA[
+INT REGS:
+ read: [r99200=1]
+ write: [r99200=1]
+ types:
+  r99200 -> LONG
+
+FP REGS:
+ read: [fr99000=1]
+ write: [fr99000=1]
+]]></REGS><CODE>
+loadm.l r99200.l,[floats.parse.value]
+syscall $20(r99200.l):fr99000.f
+returnr.f fr99000.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.pow" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 65 col 1-2]">
+<PARAMS>
+float floats.pow.value
+float floats.pow.power
+</PARAMS>
+<CHUNK LABEL="floats.pow"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=2, fr1=1]
+ write: [fr0=2, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.pow.value]
+loadm.f fr1.f,[floats.pow.power]
+fpow.f fr0.f,fr1.f
+returnr.f fr0.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.sin" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 74 col 1-2]">
+<PARAMS>
+float floats.sin.angle
+</PARAMS>
+<CHUNK LABEL="floats.sin"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.sin.angle]
+fsin.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.cos" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 82 col 1-2]">
+<PARAMS>
+float floats.cos.angle
+</PARAMS>
+<CHUNK LABEL="floats.cos"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.cos.angle]
+fcos.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.tan" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 90 col 1-2]">
+<PARAMS>
+float floats.tan.value
+</PARAMS>
+<CHUNK LABEL="floats.tan"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.tan.value]
+ftan.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.atan" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 98 col 1-60]">
+<PARAMS>
+float floats.atan.value
+</PARAMS>
+<CHUNK LABEL="floats.atan"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.atan.value]
+fatan.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.ln" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 120 col 1-2]">
+<PARAMS>
+float floats.ln.value
+</PARAMS>
+<CHUNK LABEL="floats.ln"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.ln.value]
+fln.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.log2" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 128 col 1-2]">
+<PARAMS>
+float floats.log2.value
+</PARAMS>
+<CHUNK LABEL="floats.log2"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.log2.value]
+flog.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.round" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 146 col 1-2]">
+<PARAMS>
+float floats.round.value
+</PARAMS>
+<CHUNK LABEL="floats.round"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.round.value]
+fround.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.floor" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 154 col 1-2]">
+<PARAMS>
+float floats.floor.value
+</PARAMS>
+<CHUNK LABEL="floats.floor"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.floor.value]
+ffloor.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.ceil" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 162 col 1-2]">
+<PARAMS>
+float floats.ceil.value
+</PARAMS>
+<CHUNK LABEL="floats.ceil"><REGS><![CDATA[
+FP REGS:
+ read: [fr0=1, fr1=1]
+ write: [fr0=1, fr1=1]
+]]></REGS><CODE>
+loadm.f fr0.f,[floats.ceil.value]
+fceil.f fr1.f,fr0.f
+returnr.f fr1.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.rndseed" RETURNS="" POS="[library:/prog8lib/virtual/floats.p8: line 178 col 1-2]">
+<PARAMS>
+float floats.rndseed.seed
+</PARAMS>
+<CHUNK LABEL="floats.rndseed"><REGS><![CDATA[
+FP REGS:
+ read: [fr99000=1]
+ write: [fr99000=1]
+]]></REGS><CODE>
+loadm.f fr99000.f,[floats.rndseed.seed]
+syscall $13(fr99000.f)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.minf" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 187 col 1-2]">
+<PARAMS>
+float floats.minf.f1
+float floats.minf.f2
+</PARAMS>
+<CHUNK LABEL="floats.minf"><REGS><![CDATA[
+INT REGS:
+ read: [r245=1]
+ write: [r245=1]
+ types:
+  r245 -> BYTE
+
+FP REGS:
+ read: [fr243=1, fr244=1]
+ write: [fr243=1, fr244=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 188 col 5-18]  if f1<f2
+]]></P8SRC><CODE>
+loadm.f fr243.f,[floats.minf.f1]
+loadm.f fr244.f,[floats.minf.f2]
+fcomp.f r245.b,fr243.f,fr244.f
+bges.b r245.b,#0.b,p8_label_gen_33
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+FP REGS:
+ read: [fr246=1]
+ write: [fr246=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 189 col 9-17]  return f1
+]]></P8SRC><CODE>
+loadm.f fr246.f,[floats.minf.f1]
+returnr.f fr246.f
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_33"><REGS><![CDATA[
+FP REGS:
+ read: [fr247=1]
+ write: [fr247=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 190 col 5-13]  return f2
+]]></P8SRC><CODE>
+loadm.f fr247.f,[floats.minf.f2]
+returnr.f fr247.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.maxf" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 194 col 1-2]">
+<PARAMS>
+float floats.maxf.f1
+float floats.maxf.f2
+</PARAMS>
+<CHUNK LABEL="floats.maxf"><REGS><![CDATA[
+INT REGS:
+ read: [r250=1]
+ write: [r250=1]
+ types:
+  r250 -> BYTE
+
+FP REGS:
+ read: [fr248=1, fr249=1]
+ write: [fr248=1, fr249=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 195 col 5-18]  if f1>f2
+]]></P8SRC><CODE>
+loadm.f fr248.f,[floats.maxf.f1]
+loadm.f fr249.f,[floats.maxf.f2]
+fcomp.f r250.b,fr248.f,fr249.f
+bles.b r250.b,#0.b,p8_label_gen_34
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+FP REGS:
+ read: [fr251=1]
+ write: [fr251=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 196 col 9-17]  return f1
+]]></P8SRC><CODE>
+loadm.f fr251.f,[floats.maxf.f1]
+returnr.f fr251.f
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_34"><REGS><![CDATA[
+FP REGS:
+ read: [fr252=1]
+ write: [fr252=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 197 col 5-13]  return f2
+]]></P8SRC><CODE>
+loadm.f fr252.f,[floats.maxf.f2]
+returnr.f fr252.f
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="floats.clampf" RETURNS="float" POS="[library:/prog8lib/virtual/floats.p8: line 201 col 1-2]">
+<PARAMS>
+float floats.clampf.value
+float floats.clampf.minimum
+float floats.clampf.maximum
+</PARAMS>
+<CHUNK LABEL="floats.clampf"><REGS><![CDATA[
+INT REGS:
+ read: [r255=1]
+ write: [r255=1]
+ types:
+  r255 -> BYTE
+
+FP REGS:
+ read: [fr253=1, fr254=1]
+ write: [fr253=1, fr254=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 202 col 5-22]  if value<minimum
+]]></P8SRC><CODE>
+loadm.f fr253.f,[floats.clampf.value]
+loadm.f fr254.f,[floats.clampf.minimum]
+fcomp.f r255.b,fr253.f,fr254.f
+bges.b r255.b,#0.b,p8_label_gen_35
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+FP REGS:
+ read: [fr256=1]
+ write: [fr256=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 203 col 9-21]  value=minimum
+]]></P8SRC><CODE>
+loadm.f fr256.f,[floats.clampf.minimum]
+storem.f fr256.f,[floats.clampf.value]
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_35"><REGS><![CDATA[
+INT REGS:
+ read: [r259=1]
+ write: [r259=1]
+ types:
+  r259 -> BYTE
+
+FP REGS:
+ read: [fr257=1, fr258=1]
+ write: [fr257=1, fr258=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 204 col 5-21]  if value<maximum
+]]></P8SRC><CODE>
+loadm.f fr257.f,[floats.clampf.value]
+loadm.f fr258.f,[floats.clampf.maximum]
+fcomp.f r259.b,fr257.f,fr258.f
+bges.b r259.b,#0.b,p8_label_gen_36
+</CODE></CHUNK>
+<CHUNK><REGS><![CDATA[
+FP REGS:
+ read: [fr260=1]
+ write: [fr260=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 205 col 9-20]  return value
+]]></P8SRC><CODE>
+loadm.f fr260.f,[floats.clampf.value]
+returnr.f fr260.f
+</CODE></CHUNK>
+<CHUNK LABEL="p8_label_gen_36"><REGS><![CDATA[
+FP REGS:
+ read: [fr261=1]
+ write: [fr261=1]
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/floats.p8: line 206 col 5-18]  return maximum
+]]></P8SRC><CODE>
+loadm.f fr261.f,[floats.clampf.maximum]
+returnr.f fr261.f
+</CODE></CHUNK>
+</SUB>
+
+</BLOCK>
+
+<BLOCK NAME="sys" ADDRESS="" IGNOREUNUSED="true" LIBRARY="true" POS="[library:/prog8lib/virtual/syslib.p8: line 5 col 1-1]">
+<SUB NAME="sys.die" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 42 col 5-6]">
+<PARAMS>
+ubyte sys.die.code
+pointer sys.die.message
+</PARAMS>
+<CHUNK LABEL="sys.die"><REGS><![CDATA[
+INT REGS:
+ read: [r262=1, r99100=1, r99200=2]
+ write: [r262=1, r99100=1, r99200=2]
+ types:
+  r262 -> BYTE
+  r99100 -> BYTE
+  r99200 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 53 col 9-18]  exit(code)
+]]></P8SRC><CODE>
+load.l r99200.l,#sys.die.warning
+syscall 3(r99200.l)
+loadm.l r99200.l,[sys.die.message]
+syscall 3(r99200.l)
+load.b r99100.b,#10.b
+syscall 2(r99100.b)
+loadm.b r262.b,[sys.die.code]
+call sys.exit(returnvalue=r262.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.wait" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 56 col 5-6]">
+<PARAMS>
+uword sys.wait.jiffies
+</PARAMS>
+<CHUNK LABEL="sys.wait"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1]
+ write: [r99000=1]
+ types:
+  r99000 -> WORD
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 58 col 9-107]  %ir {{
+]]></P8SRC><CODE>
+loadm.w r99000.w,[sys.wait.jiffies]
+syscall 13(r99000.w)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.memcopy" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 71 col 5-6]">
+<PARAMS>
+long sys.memcopy.source
+long sys.memcopy.tgt
+uword sys.memcopy.count
+</PARAMS>
+<CHUNK LABEL="sys.memcopy"><REGS><![CDATA[
+INT REGS:
+ read: [r99002=1, r99200=1, r99201=1]
+ write: [r99002=1, r99200=1, r99201=1]
+ types:
+  r99002 -> WORD
+  r99200 -> LONG
+  r99201 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 72 col 9-225]  %ir {{
+]]></P8SRC><CODE>
+loadm.l r99200.l,[sys.memcopy.source]
+loadm.l r99201.l,[sys.memcopy.tgt]
+loadm.w r99002.w,[sys.memcopy.count]
+syscall $24(r99200.l,r99201.l,r99002.w)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.memset" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 80 col 5-6]">
+<PARAMS>
+long sys.memset.mem
+uword sys.memset.numbytes
+ubyte sys.memset.value
+</PARAMS>
+<CHUNK LABEL="sys.memset"><REGS><![CDATA[
+INT REGS:
+ read: [r99001=1, r99100=1, r99200=1]
+ write: [r99001=1, r99100=1, r99200=1]
+ types:
+  r99001 -> WORD
+  r99100 -> BYTE
+  r99200 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 81 col 9-224]  %ir {{
+]]></P8SRC><CODE>
+loadm.l r99200.l,[sys.memset.mem]
+loadm.w r99001.w,[sys.memset.numbytes]
+loadm.b r99100.b,[sys.memset.value]
+syscall $25(r99200.l,r99001.w,r99100.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.memsetw" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 89 col 5-6]">
+<PARAMS>
+long sys.memsetw.mem
+uword sys.memsetw.numwords
+uword sys.memsetw.value
+</PARAMS>
+<CHUNK LABEL="sys.memsetw"><REGS><![CDATA[
+INT REGS:
+ read: [r99001=1, r99002=1, r99200=1]
+ write: [r99001=1, r99002=1, r99200=1]
+ types:
+  r99001 -> WORD
+  r99002 -> WORD
+  r99200 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 90 col 9-227]  %ir {{
+]]></P8SRC><CODE>
+loadm.l r99200.l,[sys.memsetw.mem]
+loadm.w r99001.w,[sys.memsetw.numwords]
+loadm.w r99002.w,[sys.memsetw.value]
+syscall $26(r99200.l,r99001.w,r99002.w)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.memcmp" RETURNS="byte" POS="[library:/prog8lib/virtual/syslib.p8: line 98 col 5-6]">
+<PARAMS>
+long sys.memcmp.address1
+long sys.memcmp.address2
+uword sys.memcmp.size
+</PARAMS>
+<CHUNK LABEL="sys.memcmp"><REGS><![CDATA[
+INT REGS:
+ read: [r99002=1, r99100=1, r99200=1, r99201=1]
+ write: [r99002=1, r99100=1, r99200=1, r99201=1]
+ types:
+  r99002 -> WORD
+  r99100 -> BYTE
+  r99200 -> LONG
+  r99201 -> LONG
+]]></REGS><CODE>
+loadm.l r99200.l,[sys.memcmp.address1]
+loadm.l r99201.l,[sys.memcmp.address2]
+loadm.w r99002.w,[sys.memcmp.size]
+syscall $2f(r99200.l,r99201.l,r99002.w):r99100.b
+returnr.b r99100.b
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.exit" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 110 col 5-6]">
+<PARAMS>
+ubyte sys.exit.returnvalue
+</PARAMS>
+<CHUNK LABEL="sys.exit"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1]
+ write: [r99100=1]
+ types:
+  r99100 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 112 col 9-110]  %ir {{
+]]></P8SRC><CODE>
+loadm.b r99100.b,[sys.exit.returnvalue]
+syscall 1(r99100.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.gfx_enable" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 158 col 5-6]">
+<PARAMS>
+ubyte sys.gfx_enable.mode
+</PARAMS>
+<CHUNK LABEL="sys.gfx_enable"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1]
+ write: [r99100=1]
+ types:
+  r99100 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 159 col 9-109]  %ir {{
+]]></P8SRC><CODE>
+loadm.b r99100.b,[sys.gfx_enable.mode]
+syscall 8(r99100.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.gfx_clear" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 165 col 5-6]">
+<PARAMS>
+ubyte sys.gfx_clear.color
+</PARAMS>
+<CHUNK LABEL="sys.gfx_clear"><REGS><![CDATA[
+INT REGS:
+ read: [r99100=1]
+ write: [r99100=1]
+ types:
+  r99100 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 166 col 9-109]  %ir {{
+]]></P8SRC><CODE>
+loadm.b r99100.b,[sys.gfx_clear.color]
+syscall 9(r99100.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.gfx_plot" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 172 col 5-6]">
+<PARAMS>
+uword sys.gfx_plot.xx
+uword sys.gfx_plot.yy
+ubyte sys.gfx_plot.color
+</PARAMS>
+<CHUNK LABEL="sys.gfx_plot"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99001=1, r99100=1]
+ write: [r99000=1, r99001=1, r99100=1]
+ types:
+  r99000 -> WORD
+  r99001 -> WORD
+  r99100 -> BYTE
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 173 col 9-223]  %ir {{
+]]></P8SRC><CODE>
+loadm.w r99000.w,[sys.gfx_plot.xx]
+loadm.w r99001.w,[sys.gfx_plot.yy]
+loadm.b r99100.b,[sys.gfx_plot.color]
+syscall 10(r99000.w,r99001.w,r99100.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.gfx_getpixel" RETURNS="ubyte" POS="[library:/prog8lib/virtual/syslib.p8: line 181 col 5-6]">
+<PARAMS>
+uword sys.gfx_getpixel.xx
+uword sys.gfx_getpixel.yy
+</PARAMS>
+<CHUNK LABEL="sys.gfx_getpixel"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99001=1, r99100=1]
+ write: [r99000=1, r99001=1, r99100=1]
+ types:
+  r99000 -> WORD
+  r99001 -> WORD
+  r99100 -> BYTE
+]]></REGS><CODE>
+loadm.w r99000.w,[sys.gfx_getpixel.xx]
+loadm.w r99001.w,[sys.gfx_getpixel.yy]
+syscall $11(r99000.w,r99001.w):r99100.b
+returnr.b r99100.b
+</CODE></CHUNK>
+</SUB>
+
+<SUB NAME="sys.gfx_text" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 190 col 5-6]">
+<PARAMS>
+uword sys.gfx_text.xx
+uword sys.gfx_text.yy
+pointer sys.gfx_text.textptr
+ubyte sys.gfx_text.color
+</PARAMS>
+<CHUNK LABEL="sys.gfx_text"><REGS><![CDATA[
+INT REGS:
+ read: [r99000=1, r99001=1, r99100=1, r99200=1]
+ write: [r99000=1, r99001=1, r99100=1, r99200=1]
+ types:
+  r99000 -> WORD
+  r99001 -> WORD
+  r99100 -> BYTE
+  r99200 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 191 col 9-285]  %ir {{
+]]></P8SRC><CODE>
+loadm.w r99000.w,[sys.gfx_text.xx]
+loadm.w r99001.w,[sys.gfx_text.yy]
+loadm.l r99200.l,[sys.gfx_text.textptr]
+loadm.b r99100.b,[sys.gfx_text.color]
+syscall $42(r99000.w,r99001.w,r99200.l,r99100.b)
+return
+</CODE></CHUNK>
+</SUB>
+
+</BLOCK>
+
+<BLOCK NAME="cx16" ADDRESS="" IGNOREUNUSED="true" LIBRARY="true" POS="[library:/prog8lib/virtual/syslib.p8: line 238 col 1-1]">
+<SUB NAME="cx16.print_error" RETURNS="" POS="[library:/prog8lib/virtual/syslib.p8: line 434 col 5-6]">
+<PARAMS>
+pointer cx16.print_error.message
+</PARAMS>
+<CHUNK LABEL="cx16.print_error"><REGS><![CDATA[
+INT REGS:
+ read: [r99200=1]
+ write: [r99200=1]
+ types:
+  r99200 -> LONG
+]]></REGS><P8SRC><![CDATA[
+[library:/prog8lib/virtual/syslib.p8: line 435 col 9-114]  %ir {{
+]]></P8SRC><CODE>
+loadm.l r99200.l,[cx16.print_error.message]
+syscall 3(r99200.l)
+return
+</CODE></CHUNK>
+</SUB>
+
+</BLOCK>
+
+<BLOCK NAME="prog8_lib" ADDRESS="" FORCEOUTPUT="true" IGNOREUNUSED="true" LIBRARY="true" POS="[library:/prog8lib/virtual/prog8_lib.p8: line 3 col 1-1]">
+</BLOCK>
+
+</PROGRAM>

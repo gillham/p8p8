@@ -359,6 +359,10 @@ ir {
         bool dirty
         bool noprefix
         bool stacklocal     ; backend use: lives in a stack slot of its subroutine
+        bool plain          ; backend use: every use is of the whole variable
+        bool addressable    ; backend use: an address that is only loaded, stored and added to
+        ubyte hwreg         ; backend use: the CPU register it lives in, or 0
+        long uses           ; backend use: how often the code names it
         bool split          ; one half (_lsb or _msb) of a split word array
     }
 

@@ -1905,6 +1905,7 @@ llvmgen {
             ir.OP_INV, ir.OP_INVM -> {
                 left, lt0 = as_int(left, lt0)
                 res = binop("xor", left, int_const(-1, lt0), lt0)
+                result_type = lt0
             }
             ir.OP_ADD, ir.OP_ADDR, ir.OP_ADDM, ir.OP_ADDIM -> res = arith("add", left, lt0, right, rt)
             ir.OP_SUB, ir.OP_SUBR, ir.OP_SUBM, ir.OP_SUBIM -> res = arith("sub", left, lt0, right, rt)

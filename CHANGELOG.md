@@ -25,15 +25,19 @@
 - A first 68000 code generator: `-target qemu68k -build` (or `-o`, `-run`)
   writes assembly for vasm, links with vlink and runs in QEMU;
   `-target amiga1200` and `amiga500` write an AmigaOS program, with
-  `%option amiga_chipram` blocks in chip memory.  No passes over the code:
-  it is correct on the test programs (`make qemucmp`, `make amigacmp`,
-  `make amigacmp500`), not small or fast.
+  `%option amiga_chipram` blocks in chip memory.  Variables and
+  temporaries live in CPU registers where they can; on six small
+  benchmarks (`tools/bench68k.sh`, an Amiga 500 in Copperline) the programs
+  take between 0.8 and 1.5 times as long as the reference compiler's and
+  are 15 to 20% larger.
 - Fixed, on every target: an element of an array that is a field of a
   struct (`p.values[i]`) was read through the field's first bytes as if they
   were a pointer; `^^Thing t = []` at block level made an empty array where
   an instance belongs; and a `str` parameter compared with a string compared
   the two addresses, not the text.  On the 6502 a struct instance without
   values was not defined at all.
+- Fixed in the LLVM back end: the complement (`~`) of a byte or word right
+  after arithmetic on a wider type was written as invalid LLVM IR.
 - `make coppercmp` compares the screens of upstream's Amiga examples in the
   Copperline emulator, `make amigacmpfloat` the float program on an Amiga
   1200 with an FPU.

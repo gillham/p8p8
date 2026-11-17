@@ -48,7 +48,7 @@ compiler with LLVM targets added.
 |---|---|---|
 | 6502 and 65C02 machines | built in: c64, c128, cx16, pet32; others as custom targets | every machine is a target file, the four built-in ones included; a code generator of p8p8's own |
 | 65816, 45GS02 | no | no (planned) |
-| 68000 (Amiga and others) | yes | a first code generator of p8p8's own, for qemu68k and the two Amigas, new and without any optimization |
+| 68000 (Amiga and others) | yes | a first code generator of p8p8's own, for qemu68k and the two Amigas, new and with little optimization |
 | the virtual machine | yes, with the machine itself | p8p8 writes the IR for it and has no virtual machine: upstream's runs it |
 | the host, through LLVM | in the fork's LLVM branch | yes; it is how p8p8 compiles itself |
 
