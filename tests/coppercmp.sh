@@ -6,6 +6,8 @@
 #
 # A program whose picture depends on time or on random numbers differs from run to
 # run; such a program is found by running upstream's twice, and is not counted.
+# Neither is one whose screen is blank (one colour all over) from upstream's build: it
+# did not come up, and two blank screens are no agreement.
 #
 # COPPERCMP_TARGET=amiga500 (the default) or amiga1200; COPPERCMP_SECONDS (default 15).
 # Usage: tests/coppercmp.sh <p8p8> <file.p8>...
@@ -28,6 +30,11 @@ shot() {
         --screenshot-after "$seconds" "$3" > "$1/copperline.log" 2>&1 < /dev/null
     [ -s "$3" ]
 }
+blank() {
+    # blank <png>: is the picture one colour all over (needs ImageMagick; without it: no)
+    command -v magick > /dev/null 2>&1 || return 1
+    [ "$(magick identify -format '%k' "$1" 2> /dev/null)" = 1 ]
+}
 failed=0
 total=0
 same=0
@@ -49,6 +56,12 @@ for f in "$@"; do
     if ! shot "$work/up" "$name" "$work/up1.png" || ! shot "$work/up" "$name" "$work/up2.png"; then
         echo "skipped (no picture of upstream's program): $f"
         total=$((total - 1))
+        continue
+    fi
+    if blank "$work/up1.png"; then
+        # nothing came up: two blank screens being the same says nothing about the programs
+        echo "cannot tell (upstream's program shows a blank screen: does it run on this ROM?): $f"
+        unsteady=$((unsteady + 1))
         continue
     fi
     if ! cmp -s "$work/up1.png" "$work/up2.png"; then
