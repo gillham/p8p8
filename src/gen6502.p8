@@ -1556,6 +1556,10 @@ gen6502 {
         if not s.reenter
             peep6502.own_scope(s.name)
         cursub = s
+        wide_entry_count = 0
+        wide_stub_count = 0
+        wide_pending = false
+        bool widely = wide_enabled and not s.no_pool
         store_register_params(s)
         if strings.compare(s.name, "p8b_main.p8s_start") == 0 {
             ; (also when something calls main.start without the startup code, as a library does)
@@ -1566,14 +1570,27 @@ gen6502 {
         ^^ir.Chunk c = s.chunks
         while c != 0 {
             ; (the .proc defines the subroutine's own name)
+            ^^ubyte clabel = 0
             if c.label != 0 and strings.compare(c.label, s.name) != 0 and strings.compare(c.label, own) != 0
-                label(c.label)
-            if c.kind == ir.C_ASM
-                asm_text(c.text, c.textlen)
-            else
-                chunk_code(c, s)
+                clabel = c.label
+            if widely and c.kind != ir.C_ASM {
+                ; (the 65816: the chunk writes its own label, by where the code before it left off)
+                fuse_indexed(c)
+                wide_chunk(c, clabel)
+            }
+            else {
+                wide_flush()
+                if clabel != 0
+                    label(clabel)
+                if c.kind == ir.C_ASM
+                    asm_text(c.text, c.textlen)
+                else
+                    chunk_code(c, s)
+            }
             c = c.next
         }
+        wide_flush()
+        wide_write_stubs()
         peep6502.flush()
         cursub = 0
         ; the subroutines nested in this one
@@ -1691,7 +1708,9 @@ gen6502 {
             return
         fuse_indexed(c)
         if wide_enabled and (s == 0 or not s.no_pool) {
-            wide_chunk(c)
+            ; (a subroutine's chunks come by way of subroutine(), which has their labels)
+            wide_chunk(c, 0)
+            wide_flush()
             return
         }
         ^^ir.Instr i = c.first
@@ -1734,6 +1753,7 @@ gen6502 {
     ^^buf.Buf wb = 0                ; the text of the run being tried
     bool wfail = false
     uword wacc = 0                  ; the register whose value the accumulator holds, or 0
+    ^^ir.Instr wmirror = 0          ; the accumulator's value is also in this instruction's memory operand, or 0
     bool w1_used = false
     bool w2_used = false
     ^^ir.Chunk wchunk = 0
@@ -1816,7 +1836,8 @@ gen6502 {
         return t == ir.T_WORD or t == ir.T_POINTER
     }
 
-    ; can the instruction be part of a 16-bit run?  0: no, 1: yes, 2: yes, and the run ends with it
+    ; can the instruction be part of a 16-bit run?  0: no, 1: yes, 2: yes, and the run ends
+    ; with it (a comparison), 3: the same, a comparison that branches itself
     sub wide_ok(^^ir.Instr i) -> ubyte {
         if not is_word(i.type)
             return 0
@@ -1833,6 +1854,8 @@ gen6502 {
                 return 0
             }
             ir.OP_CMP, ir.OP_CMPI -> return 2
+            ir.OP_BGT, ir.OP_BGTR, ir.OP_BLT, ir.OP_BGE, ir.OP_BGER, ir.OP_BLE,
+            ir.OP_BGTS, ir.OP_BGTSR, ir.OP_BLTS, ir.OP_BGES, ir.OP_BGESR, ir.OP_BLES -> return 3
         }
         return 0
     }
@@ -1863,7 +1886,7 @@ gen6502 {
         return whome[r] == here and wfirst[r] >= first and wlast[r] <= last
     }
 
-    sub wide_chunk(^^ir.Chunk c) {
+    sub wide_chunk(^^ir.Chunk c, ^^ubyte lbl) {
         wchunk = c
         ^^ir.Instr i = c.first
         long index = 0
@@ -1905,47 +1928,92 @@ gen6502 {
         }
         i = c.first
         index = 0
+        ; the start of the chunk: its label, and whether what came before is 16 bits wide still
+        long length = 0
+        if i != 0
+            length = wide_length(i, 0)
+        if length != 0 and not wide_try(i, 0, length)
+            length = 0
+        if wide_pending {
+            if length != 0 {
+                ; The run before fell through to here and this chunk begins with a run:
+                ; the accumulator stays as it is.  Whoever else jumps to the label comes
+                ; in 8 bits wide, by a few lines after the subroutine's end.
+                if lbl != 0 {
+                    wide_stub(lbl)
+                    wide_entry_label(lbl)
+                }
+            }
+            else {
+                wide_close(false)
+                if lbl != 0
+                    label(lbl)
+            }
+        }
+        else {
+            if lbl != 0
+                label(lbl)
+            if length != 0 {
+                wide_open()
+                if lbl != 0
+                    wide_entry_label(lbl)
+            }
+        }
+        if length != 0 {
+            length = wide_finish(i, length)
+            repeat length
+                i = i.next
+            index += length
+        }
         while i != 0 {
-            if wide_ok(i) != 0 {
-                ; the longest run from here, then shortened until it is closed
-                long length = 0
-                ^^ir.Instr j = i
-                while j != 0 {
-                    ubyte ok = wide_ok(j)
-                    if ok == 0
-                        break
-                    length++
-                    j = j.next
-                    if ok == 2
-                        break
-                }
-                while length >= 3 {
-                    bool closed = true
-                    j = i
-                    long k
-                    for k in 0 to length - 1 {
-                        if not wide_inside(j.r1, index, index + length - 1) or not wide_inside(j.r2, index, index + length - 1)
-                                or not wide_inside(j.r3, index, index + length - 1) {
-                            closed = false
-                            break
-                        }
-                        j = j.next
-                    }
-                    if closed
-                        break
-                    length--
-                }
-                if length >= 3 and wide_run(i, index, length) {
-                    repeat length
-                        i = i.next
-                    index += length
-                    continue
-                }
+            length = wide_length(i, index)
+            if length != 0 and wide_try(i, index, length) {
+                wide_open()
+                length = wide_finish(i, length)
+                repeat length
+                    i = i.next
+                index += length
+                continue
             }
             instruction(i)
             i = i.next
             index++
         }
+    }
+
+    ; the length of the run that can begin at instruction i (at index of the chunk): at
+    ; least three instructions that name no register which is named outside them, or 0
+    sub wide_length(^^ir.Instr i, long index) -> long {
+        if wide_ok(i) == 0
+            return 0
+        long length = 0
+        ^^ir.Instr j = i
+        while j != 0 {
+            ubyte ok = wide_ok(j)
+            if ok == 0
+                break
+            length++
+            j = j.next
+            if ok >= 2
+                break
+        }
+        while length >= 3 {
+            bool closed = true
+            j = i
+            long k
+            for k in 0 to length - 1 {
+                if not wide_inside(j.r1, index, index + length - 1) or not wide_inside(j.r2, index, index + length - 1)
+                        or not wide_inside(j.r3, index, index + length - 1) {
+                    closed = false
+                    break
+                }
+                j = j.next
+            }
+            if closed
+                return length
+            length--
+        }
+        return 0
     }
 
     ; Where one run ends and the next begins with nothing in between (the label
@@ -1979,6 +2047,7 @@ gen6502 {
 
     ; the memory operand of instruction m
     sub wmem_text(^^ir.Instr m) {
+        wstore_at = -1
         memory_operand(m)
         buf.add_str(wb, mem_symbol)
         if mem_offset > 0 {
@@ -1997,6 +2066,34 @@ gen6502 {
         wmem_text(m)
         buf.add_byte(wb, '\n')
     }
+
+    ; the accumulator into the memory operand of m, which it then equals
+    sub wsta(^^ir.Instr m) {
+        if wstore_at >= 0 and wide_exact(wstore_m, m) {
+            ; nothing has named memory since the last store to this variable: that one goes
+            long from = wstore_at
+            while wb.data[from] != '\n'
+                from++
+            from++
+            long to_ = wstore_at
+            while from < wb.len {
+                wb.data[to_] = wb.data[from]
+                to_++
+                from++
+            }
+            wb.len = to_
+        }
+        long at = wb.len
+        wmem("sta", m)
+        wmirror = m
+        if m.sym != 0 and peep6502.scanned(m.sym).mark & peep6502.K_PLAIN != 0 {
+            wstore_at = at
+            wstore_m = m
+        }
+    }
+
+    long wstore_at = -1             ; where in wb the last store to a plain variable is, while nothing has named memory since
+    ^^ir.Instr wstore_m = 0
 
     ; "    mnemonic  #number"
     sub wimm(str mnemonic, quad value) {
@@ -2077,7 +2174,16 @@ gen6502 {
         if wacc == r
             return
         wide_save(index - 1)
-        wop("lda", r)
+        ^^ir.Instr from = wsrc[r]
+        if wkind[r] == W_ALIAS and wmirror != 0 and wide_exact(from, wmirror) {
+            ; (it is the variable that was just stored from, or loaded into, the accumulator)
+        }
+        else {
+            wop("lda", r)
+            wmirror = 0
+            if wkind[r] == W_ALIAS
+                wmirror = from
+        }
         if wlast[r] <= index
             wide_release(r)
         ; (it keeps its other place as well, as long as it is not changed)
@@ -2088,9 +2194,15 @@ gen6502 {
     sub wide_own(uword r) {
         wide_release(r)
         wkind[r] = W_ACC
+        wmirror = 0
     }
 
-    ; do the two memory operands name the same variable
+    ; are the two memory operands the very same place
+    sub wide_exact(^^ir.Instr a, ^^ir.Instr b) -> bool {
+        return a.sym == b.sym and a.offset == b.offset
+    }
+
+    ; do the two memory operands name the same variable (any part of it)
     sub wide_same(^^ir.Instr a, ^^ir.Instr b) -> bool {
         if a.sym != 0 or b.sym != 0
             return a.sym == b.sym
@@ -2100,6 +2212,8 @@ gen6502 {
     ; instruction m (at index) writes its memory operand: no register that is still
     ; needed may be that variable
     sub wide_written(^^ir.Instr m, long index) {
+        if wmirror != 0 and wide_same(wmirror, m)
+            wmirror = 0
         ubyte k = 0
         while k < walias_count {
             uword r = waliases[k]
@@ -2133,6 +2247,7 @@ gen6502 {
             else {
                 ubyte where = wkind[r2]
                 wop("lda", r1)
+                wmirror = 0
                 when carry {
                     1 -> wl("clc")
                     2 -> wl("sec")
@@ -2177,6 +2292,7 @@ gen6502 {
         else {
             wide_save(index - 1)
             wmem("lda", i)
+            wmirror = 0
             wacc = 0
             when carry {
                 1 -> wl("clc")
@@ -2185,7 +2301,7 @@ gen6502 {
             wop(mnemonic, r)
             if wlast[r] <= index
                 wide_release(r)
-            wmem("sta", i)
+            wsta(i)
             return
         }
         when carry {
@@ -2193,7 +2309,7 @@ gen6502 {
             2 -> wl("sec")
         }
         wmem(mnemonic, i)
-        wmem("sta", i)
+        wsta(i)
         wacc = 0
     }
 
@@ -2213,6 +2329,7 @@ gen6502 {
                     ; (anything else is read now, and once)
                     wide_save(index - 1)
                     wmem("lda", i)
+                    wmirror = 0
                     wkind[r] = W_ACC
                     wacc = r
                 }
@@ -2244,6 +2361,7 @@ gen6502 {
                 else {
                     wide_save(index - 1)
                     wop("lda", from)
+                    wmirror = 0
                     if wlast[from] <= index
                         wide_release(from)
                     wkind[r] = W_ACC
@@ -2253,7 +2371,7 @@ gen6502 {
             ir.OP_STOREM -> {
                 if wkind[r] == W_ALIAS and wacc != r {
                     ^^ir.Instr same = wsrc[r]
-                    if wide_same(same, i)
+                    if wide_exact(same, i)
                         return              ; (the variable into itself)
                 }
                 wide_written(i, index)
@@ -2265,7 +2383,7 @@ gen6502 {
                     }
                 }
                 wide_load(r, index)
-                wmem("sta", i)
+                wsta(i)
             }
             ir.OP_STOREZM -> {
                 wide_written(i, index)
@@ -2278,7 +2396,7 @@ gen6502 {
                 else {
                     wide_save(index - 1)
                     wimm("lda", i.value)
-                    wmem("sta", i)
+                    wsta(i)
                     wacc = 0
                 }
             }
@@ -2329,17 +2447,19 @@ gen6502 {
                 else
                     wide_save(index - 1)
                 wmem("lda", i)
+                wmirror = 0
                 wl("sec")
                 wop("sbc", r)
                 if wlast[r] <= index
                     wide_release(r)
-                wmem("sta", i)
+                wsta(i)
                 wacc = 0
             }
             ir.OP_ADDIM, ir.OP_SUBIM -> {
                 wide_written(i, index)
                 wide_save(index - 1)
                 wmem("lda", i)
+                wmirror = 0
                 if i.op == ir.OP_ADDIM {
                     wl("clc")
                     wimm("adc", i.value)
@@ -2348,7 +2468,7 @@ gen6502 {
                     wl("sec")
                     wimm("sbc", i.value)
                 }
-                wmem("sta", i)
+                wsta(i)
                 wacc = 0
             }
             ir.OP_INCM -> {
@@ -2378,6 +2498,8 @@ gen6502 {
                 wl("dec  a")
             }
             ir.OP_LSL, ir.OP_LSLI -> {
+                if wide_rotation(i, index)
+                    return
                 wide_load(r, index)
                 wide_own(r)
                 k = 1
@@ -2393,6 +2515,8 @@ gen6502 {
                     wl("asl  a")
             }
             ir.OP_LSR, ir.OP_LSRI -> {
+                if wide_rotation(i, index)
+                    return
                 wide_load(r, index)
                 wide_own(r)
                 k = 1
@@ -2436,6 +2560,7 @@ gen6502 {
                         return
                     ubyte kept = wkind[other]
                     wop("lda", r)
+                    wmirror = 0
                     wop("cmp", other)
                     wacc = r
                 }
@@ -2447,16 +2572,178 @@ gen6502 {
                         wop("cmp", other)
                 }
             }
+            ir.OP_BGT, ir.OP_BGTR, ir.OP_BLT, ir.OP_BGE, ir.OP_BGER, ir.OP_BLE -> {
+                ; unsigned: the carry and the zero flag of a comparison say it all
+                if i.mode == ir.M_RIT {
+                    wide_load(r, index)
+                    wimm("cmp", i.value)
+                }
+                else {
+                    uword second = i.r2
+                    if wacc == second and r != second {
+                        wide_spill()
+                        if wfail
+                            return
+                        wop("lda", r)
+                        wmirror = 0
+                        wop("cmp", second)
+                        wacc = r
+                    }
+                    else {
+                        wide_load(r, index)
+                        if r == second
+                            wfail = true
+                        else
+                            wop("cmp", second)
+                    }
+                }
+            }
+            ir.OP_BLTS, ir.OP_BGES, ir.OP_BGESR -> {
+                ; signed: the sign of r1 - x, set right when the subtraction overflows
+                wide_load(r, index)
+                wide_own(r)
+                wl("sec")
+                if i.mode == ir.M_RIT
+                    wimm("sbc", i.value)
+                else if i.r2 == r
+                    wfail = true
+                else
+                    wop("sbc", i.r2)
+                wl("bvc  +")
+                wl("eor  #$8000")
+                buf.add_str(wb, "+\n")
+            }
+            ir.OP_BGTS, ir.OP_BGTSR, ir.OP_BLES -> {
+                ; signed, the other way round: the sign of x - r1
+                if wacc == r {
+                    wide_spill()
+                    if wfail
+                        return
+                    wacc = 0
+                }
+                if i.mode == ir.M_RIT {
+                    wide_save(index - 1)
+                    wimm("lda", i.value)
+                    wmirror = 0
+                    wacc = 0
+                }
+                else {
+                    if i.r2 == r {
+                        wfail = true
+                        return
+                    }
+                    wide_load(i.r2, index)
+                    wide_own(i.r2)
+                }
+                wl("sec")
+                wop("sbc", r)
+                wl("bvc  +")
+                wl("eor  #$8000")
+                buf.add_str(wb, "+\n")
+                wacc = 0
+            }
             else -> wfail = true
         }
     }
 
-    ; Writes the run of length instructions from i (at index of the chunk) for the
-    ; 16-bit accumulator; false when it will not go, and nothing is written then.
-    sub wide_run(^^ir.Instr i, long index, long length) -> bool {
+    long wend = 0                   ; the index of the run's last instruction
+    ubyte wskip = 0                 ; the instructions after this one that it has done as well
+
+    ; by how many bits a shift instruction shifts
+    sub shift_count(^^ir.Instr i) -> long {
+        if i.op == ir.OP_LSLI or i.op == ir.OP_LSRI
+            return i.value as long
+        return 1
+    }
+
+    ; Is the shift i the beginning of a rotation of a variable, (v << n) | (v >> (16 - n)):
+    ;     shift r1 / loadm r2,[v] / the other shift of r2 / orr of the two
+    ; where r1 is v?  Then it is written as a rotation: the bit that an asl pushes out comes
+    ; back in with adc #0, and the like.  Only for the counts where that is the shorter code.
+    sub wide_rotation(^^ir.Instr i, long index) -> bool {
+        uword r = i.r1
+        if wkind[r] != W_ALIAS or index + 3 > wend
+            return false
+        ^^ir.Instr a = i.next
+        ^^ir.Instr b = a.next
+        ^^ir.Instr c = b.next
+        ^^ir.Instr var = wsrc[r]
+        if a.op != ir.OP_LOADM or a.r1 == r or not wide_exact(a, var)
+            return false
+        uword other = a.r1
+        bool left = i.op == ir.OP_LSL or i.op == ir.OP_LSLI
+        if left {
+            if b.op != ir.OP_LSR and b.op != ir.OP_LSRI
+                return false
+        }
+        else if b.op != ir.OP_LSL and b.op != ir.OP_LSLI
+            return false
+        if b.r1 != other or shift_count(i) + shift_count(b) != 16 or c.op != ir.OP_ORR
+            return false
+        uword result = c.r1
+        uword dead = c.r2
+        if not ((result == r and dead == other) or (result == other and dead == r))
+            return false
+        if wlast[dead] > index + 3
+            return false
+        long n = shift_count(i)             ; to the left by n
+        if not left
+            n = 16 - n
+        if n > 4 and n < 12 and n != 8
+            return false
+        wide_load(r, index)
+        wide_own(r)
+        if n == 8
+            wl("xba")
+        else if n <= 4 {
+            repeat n as ubyte {
+                wl("asl  a")
+                wl("adc  #0")
+            }
+        }
+        else {
+            repeat (16 - n) as ubyte {
+                wl("lsr  a")
+                wl("bcc  +")
+                wl("ora  #$8000")
+                buf.add_str(wb, "+\n")
+            }
+        }
+        if result != r {
+            wkind[r] = W_ACC
+            wkind[result] = W_ACC
+            wacc = result
+        }
+        wskip = 3
+        return true
+    }
+
+    ; the branch, or the two, of a comparison that branches: to target
+    sub wide_branches(ubyte opcode, ^^ubyte target) {
+        when opcode {
+            ir.OP_BGE, ir.OP_BGER -> ins("bcs", target)
+            ir.OP_BLT -> ins("bcc", target)
+            ir.OP_BGT, ir.OP_BGTR -> {
+                ins("beq", "+")
+                ins("bcs", target)
+                anon_label("+")
+            }
+            ir.OP_BLE -> {
+                ins("bcc", target)
+                ins("beq", target)
+            }
+            ir.OP_BLTS, ir.OP_BGTS, ir.OP_BGTSR -> ins("bmi", target)
+            else -> ins("bpl", target)
+        }
+    }
+
+    ; Works the run of length instructions from i (at index of the chunk) out for
+    ; the 16-bit accumulator, into wb; false when it will not go.
+    sub wide_try(^^ir.Instr i, long index, long length) -> bool {
         buf.clear(wb)
         wfail = false
         wacc = 0
+        wmirror = 0
         w1_used = false
         w2_used = false
         walias_count = 0
@@ -2470,14 +2757,26 @@ gen6502 {
             j = j.next
         }
         j = i
-        ^^ir.Instr last = i
-        for k in 0 to length - 1 {
+        wstore_at = -1
+        wend = index + length - 1
+        k = 0
+        while k < length {
+            wskip = 0
             wide_instruction(j, index + k)
             if wfail
                 return false
-            last = j
-            j = j.next
+            ; (a rotation is four instructions in one)
+            repeat wskip + 1
+                j = j.next
+            k += wskip + 1
         }
+        return true
+    }
+
+    bool wide_pending = false       ; the code written last left the accumulator 16 bits wide
+
+    ; from 8 bits to 16
+    sub wide_open() {
         if not wide_rest {
             ; (into native mode for the run only)
             raw("    clc")
@@ -2485,12 +2784,15 @@ gen6502 {
         }
         raw("    rep  #$20")
         raw("    .al")
-        buf.add_bytes(w(), wb.data, wb.len)
+    }
+
+    ; and back; with keep, the flags of a comparison survive it for the branch that follows
+    sub wide_close(bool keep) {
+        wide_pending = false
         raw("    sep  #$20")
         raw("    .as")
         if not wide_rest {
-            ; back to emulation mode; a comparison's flags are kept for the branch that follows
-            if wide_ok(last) == 2 {
+            if keep {
                 raw("    php")
                 raw("    sec")
                 raw("    xce")
@@ -2501,7 +2803,122 @@ gen6502 {
                 raw("    xce")
             }
         }
-        return true
+    }
+
+    sub wide_flush() {
+        if wide_pending
+            wide_close(false)
+    }
+
+    ; the 16-bit way into the chunk with this label: a branch from the end of a run
+    ; that is 16 bits wide already (a loop back to here) goes to it
+    sub wide_entry_label(^^ubyte lbl) {
+        label(wide_entry_name(lbl))
+        if wide_entry_count < len(wide_entries) {
+            wide_entries[wide_entry_count] = lbl
+            wide_entry_count++
+        }
+    }
+
+    ; Writes the run that wide_try worked out (the accumulator is 16 bits wide), and what
+    ; follows it; gives the number of IR instructions that are done with.
+    sub wide_finish(^^ir.Instr i, long length) -> long {
+        buf.add_bytes(w(), wb.data, wb.len)
+        ^^ir.Instr last = i
+        repeat length - 1
+            last = last.next
+        ^^ir.Instr after = last.next
+        bool branched = false
+        if wide_ok(last) == 3 {
+            if wide_entry(last.sym) {
+                ; to a 16-bit way in: taken as it is; the path that falls through goes on
+                wide_branches(last.op, wide_entry_name(last.sym))
+                if after == 0 {
+                    wide_pending = true
+                    return length
+                }
+                wide_close(false)
+                return length
+            }
+            ; anywhere else: back to 8 bits first, the flags kept
+            wide_close(true)
+            wide_branches(last.op, last.sym)
+            return length
+        }
+        if wide_ok(last) == 2 and after != 0 and after.sym != 0 and wide_entry(after.sym) {
+            ^^ubyte mnemonic = 0
+            when after.op {
+                ir.OP_BSTEQ -> mnemonic = "beq"
+                ir.OP_BSTNE -> mnemonic = "bne"
+                ir.OP_BSTCC -> mnemonic = "bcc"
+                ir.OP_BSTCS -> mnemonic = "bcs"
+                ir.OP_BSTNEG -> mnemonic = "bmi"
+                ir.OP_BSTPOS -> mnemonic = "bpl"
+            }
+            if mnemonic != 0 {
+                ; the branch that follows goes to a 16-bit way in: it is taken as it is,
+                ; and only the path that falls through goes back to 8 bits
+                ins(mnemonic, wide_entry_name(after.sym))
+                branched = true
+                length++
+                after = after.next
+            }
+        }
+        if after == 0 and (branched or wide_ok(last) != 2) {
+            ; the chunk ends here: the next one may go on 16 bits wide
+            wide_pending = true
+            return length
+        }
+        wide_close(wide_ok(last) == 2 and not branched)
+        return length
+    }
+
+    ; The 8-bit way into a chunk that is entered 16 bits wide from above: written
+    ; after the subroutine, it widens the accumulator and jumps to the 16-bit way in.
+    ^^ubyte[32] wide_stubs
+    ubyte wide_stub_count = 0
+
+    sub wide_stub(^^ubyte lbl) {
+        if wide_stub_count < len(wide_stubs) {
+            wide_stubs[wide_stub_count] = lbl
+            wide_stub_count++
+        }
+        else
+            error("too many chunks that are entered 16 bits wide in one subroutine", lbl)
+    }
+
+    sub wide_write_stubs() {
+        ubyte k = 0
+        while k < wide_stub_count {
+            label(wide_stubs[k])
+            wide_open()
+            ins("jmp", wide_entry_name(wide_stubs[k]))
+            raw("    .as")
+            k++
+        }
+        wide_stub_count = 0
+    }
+
+    ^^ubyte[32] wide_entries        ; the labels of this subroutine's chunks that have a 16-bit way in
+    ubyte wide_entry_count = 0
+
+    sub wide_entry(^^ubyte name) -> bool {
+        ubyte k = 0
+        while k < wide_entry_count {
+            if strings.compare(wide_entries[k], name) == 0
+                return true
+            k++
+        }
+        return false
+    }
+
+    ; "label_w16"
+    sub wide_entry_name(^^ubyte name) -> ^^ubyte {
+        buf.clear(nb)
+        buf.add_str(nb, name)
+        buf.add_str(nb, "_w16")
+        buf.add_byte(nb, 0)
+        return strtab.intern_cstr(nb.data)
     }
 
     ; ---- instructions ----

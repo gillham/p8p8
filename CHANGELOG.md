@@ -42,8 +42,10 @@
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
 - `-cpu 6502|65c02|65816` chooses the CPU of a 6502 machine's program.  For
   the 65816, runs of word arithmetic on variables are done in the 16-bit
-  accumulator: a loop of word arithmetic takes 46 jiffies on a Commander X16
-  where the reference compiler's 65C02 code takes 106.  The programs run on
+  accumulator, comparisons and rotations among them, and a loop of
+  such runs stays 16 bits wide from its start to its end: a loop of word
+  arithmetic takes 26 jiffies on a Commander X16 where the reference
+  compiler's 65C02 code takes 106.  The programs run on
   `x16emu -c816` and VICE's `xscpu64` (`make emucmp816`, `emucmp64816`).
 - Follows Prog8 master at 8f50c2ed1 and the LLVM branch at a7076bf71 (the
   library and the reference material).  A struct field that is a struct is

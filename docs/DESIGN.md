@@ -271,6 +271,21 @@ words is six instructions on a 65C02 and three on a 65816.
   every byte of a register in a cell of its own and the two bytes of a word
   need not be next to each other.  A run that would need more is written as
   8-bit code.  The peephole passes take a run for text.
+- **Within a run.**  After a store the accumulator is that variable still,
+  so a load of it writes nothing; a store that the next store to the same
+  variable overtakes, with no memory named in between, is taken out;
+  `(v << n) | (v >> (16 - n))` is a rotation (`asl a` / `adc #0` for one bit
+  to the left, `xba` for eight); a comparison that branches on greater or
+  less ends a run, unsigned by the carry and signed by the sign of a
+  subtraction that `bvc` / `eor #$8000` corrects.
+- **From run to run.**  A chunk that begins with a run has a second label
+  after its `rep #$20`.  A branch at the end of a run that goes to such a
+  chunk (a loop's way back) is taken 16 bits wide to that label, and a run
+  that ends where its chunk ends, before a chunk that begins with one, falls
+  into it without `sep` and `rep`.  Whatever else jumps to that chunk's own
+  label finds it after the subroutine's code: `rep #$20`, and a jump to the
+  second label.  So a loop of word arithmetic changes the width once on the
+  way in and once on the way out.
 - **Native mode.**  16-bit registers only exist in the 65816's native mode.
   Where the machine's ROM is written for programs in native mode (the
   target's `native65816 = rest`: the Commander X16), the entry code switches
@@ -278,13 +293,15 @@ words is six instructions on a 65C02 and three on a 65816.
   and the library's assembly expect, and a call of `sys.exit` switches back
   first.  On any other machine the program stays in emulation mode and each
   run switches for itself: the C64's BASIC ROM divides floats wrongly when
-  it is called in native mode.  On the word loop of the benchmarks the
-  switching costs 23% (188 against 153 jiffies; the 65C02's code takes 366).
+  it is called in native mode.  Where a loop is all runs the switching is
+  outside it and costs nothing that can be measured (the word loop of the
+  benchmarks: 89 jiffies either way, 366 for the 65C02's code); code that
+  alternates between words and bytes pays for each change.
 - **Interrupts.**  A subroutine that may run from an interrupt has no runs:
   the X16's ROM calls those in emulation mode.
 - Not yet: word arrays (two byte arrays on this CPU family), anything through
-  a pointer, comparisons that branch on greater or less, 16-bit index
-  registers, stack-relative addressing, block moves.
+  a pointer, values that come from outside a run (a call's result), 16-bit
+  index registers, stack-relative addressing, block moves.
 
 ## Machines and the library
 

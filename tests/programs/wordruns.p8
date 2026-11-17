@@ -129,6 +129,83 @@ main {
         txt.nl()
     }
 
+    ; rotations: the two halves of a word shifted apart and put together again
+    sub rotations() {
+        d = a
+        repeat 5
+            d = (d << 1) | (d >> 15)
+        u(d)
+        d = (d >> 1) | (d << 15)
+        u(d)
+        d = (d >> 15) | (d << 1)
+        u(d)
+        e = (c << 8) | (c >> 8)
+        u(e)
+        e = (e << 3) | (e >> 13)
+        u(e)
+        e = (e >> 4) | (e << 12)
+        u(e)
+        e = (e << 6) | (e >> 10)
+        u(e)
+        ; not rotations
+        e = (c << 1) | (a >> 15)
+        u(e)
+        e = (c << 2) | (c >> 15)
+        u(e)
+        txt.nl()
+    }
+
+    ; loops whose tests are comparisons of words, signed ones at the edges where a
+    ; subtraction overflows, and a loop that is entered in its middle
+    sub loops() {
+        d = 0
+        e = a
+        while e > b {
+            e -= 1000
+            d++
+            if e < 2000
+                break
+        }
+        u(d)
+        u(e)
+        word lo = s * 26          ; -32084
+        word hi = t + 32600       ; 32699
+        word n = 0
+        while lo < hi {
+            lo += 4099
+            hi -= 4099
+            n++
+        }
+        txt.print_w(n)
+        txt.spc()
+        txt.print_w(lo)
+        txt.spc()
+        n = 0
+        word v
+        for v in -300 to 300 step 7 {
+            if v >= t
+                n += 2
+            else if v <= s
+                n -= 100
+            else
+                n++
+        }
+        txt.print_w(n)
+        txt.spc()
+        d = 0
+        uword i = 50000
+        repeat {
+            i += 3001
+            if i >= 50000
+                d += i >> 4
+            else
+                break
+        }
+        u(d)
+        u(i)
+        txt.nl()
+    }
+
     sub compares() {
         yn(a + b == 13023)
         yn(a + b != 13023)
@@ -157,6 +234,8 @@ main {
         shifts()
         waiting()
         signed()
+        rotations()
+        loops()
         compares()
     }
 }

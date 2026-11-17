@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -446,6 +446,19 @@ emucmp816:	$(P8P8)
 	@EMUCMP_CPU=65816 EMUCMP_CODEGEN=own tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS)
 emucmp64816:	$(P8P8)
 	@EMUCMP_CPU=65816 EMUCMP_CODEGEN=own EMUCMP_TARGET=c64 tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS64)
+
+# make quick816: a few minutes, for use after every change to the 65816 code.  The
+# programs that have caught mistakes there so far, on both machines; the full suites
+# (emucmp816, emucmp64816, and the 6502 ones) are for a finished piece of work.
+QUICK816=tests/hello.p8 tests/programs/wordruns.p8 tests/programs/constmul.p8 tests/programs/defer.p8 \
+	tests/conformance/arith.p8 tests/conformance/assign.p8 tests/conformance/arrays.p8 tests/conformance/pointers.p8 \
+	tests/conformance/compare.p8 tests/conformance/control.p8 .prog8-reference/compiler/test/arithmetic/minus.p8 \
+	.prog8-reference/compiler/test/comparisons/more_compares.p8
+QUICK816C64=tests/programs/wordruns.p8 tests/conformance/arith.p8 tests/conformance/compare.p8 tests/conformance/floating.p8 \
+	.prog8-reference/compiler/test/arithmetic/div.p8
+quick816:	$(P8P8)
+	@EMUCMP_SECONDS=3 EMUCMP_CPU=65816 EMUCMP_CODEGEN=own tests/emucmp.sh $(P8P8) .prog8-reference $(QUICK816) | grep -v '^ok'
+	@EMUCMP_CPU=65816 EMUCMP_CODEGEN=own EMUCMP_TARGET=c64 tests/emucmp.sh $(P8P8) .prog8-reference $(QUICK816C64) | grep -v '^ok'
 
 # the self-hosting test: stage 2 is p8p8 compiled by itself, stage 3 must be identical to stage 2
 bootstrap:	$(P8P8)
