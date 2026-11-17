@@ -36,6 +36,10 @@
   an instance belongs; and a `str` parameter compared with a string compared
   the two addresses, not the text.  On the 6502 a struct instance without
   values was not defined at all.
+- 6502: a multiplication by a constant with few bits set is shifts and
+  additions in line, not a call of the general routine.  A loop over a word
+  array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
+  reference compiler's code takes 64); `tools/bench65.sh` measures this.
 - `-cpu 6502|65c02|65816` chooses the CPU of a 6502 machine's program.  The
   65816 is only begun: its programs are the 65C02's so far, and run on
   `x16emu -c816` and VICE's `xscpu64` (`make emucmp816`, `emucmp64816`).

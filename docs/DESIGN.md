@@ -179,7 +179,10 @@ The generator knows the 6502 and the 65C02.  On the 65C02 it uses `stz`,
 have them.  The 65816 and the 45GS02 are planned as further CPUs.
 
 Multiplication, division, shifts by a variable and floating point use the
-library's routines, the same ones the reference compiler calls.
+library's routines, the same ones the reference compiler calls.  A
+multiplication by a constant is done in line where that is cheaper: shifts
+for a power of two, and shifts and additions for a constant with few bits
+set (times 37 is five shifts and two additions).
 
 ## The 68000 code generator
 

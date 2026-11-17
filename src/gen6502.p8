@@ -1863,6 +1863,82 @@ gen6502 {
         }
     }
 
+    ; What multiplying by a constant with shifts and additions costs, in cycles,
+    ; roughly: one shift for every bit below the highest, one addition for
+    ; every other bit that is set.  Very large for a constant that will not do.
+    sub shift_add_cost(quad value, ubyte size) -> long {
+        long v = value as long
+        if size == 1
+            v &= 255
+        else
+            v &= $ffff
+        if v < 3
+            return 100000
+        long shifts = 0
+        long adds = 0
+        long top = 0
+        long bit = 1
+        long k
+        for k in 0 to 15 {
+            if v & bit != 0 {
+                top = k
+                adds++
+            }
+            bit <<= 1
+        }
+        shifts = top
+        adds--
+        if size == 1
+            return shifts * 2 + adds * 5
+        return shifts * 7 + adds * 20
+    }
+
+    ; r1 = r1 * value: from the highest bit of the constant down, the result is
+    ; doubled, and the number added for a bit that is set.  A byte in A; a word
+    ; with its low byte in A and its high byte in the scratch word W1, the number
+    ; itself in W2.
+    sub shift_add_multiply(uword r, quad value, ubyte size) {
+        long v = value as long
+        if size == 1
+            v &= 255
+        else
+            v &= $ffff
+        long top = 15
+        long one = 1
+        while top > 0 and v & (one << (top as ubyte)) == 0
+            top--
+        lda_reg(r, 0)
+        ins("sta", "P8ZP_SCRATCH_W2")
+        if size == 2 {
+            ins("ldy", cell(r, 1))
+            ins("sty", "P8ZP_SCRATCH_W2+1")
+            ins("sty", "P8ZP_SCRATCH_W1+1")
+        }
+        long k = top
+        while k > 0 {
+            k--
+            ins("asl", "a")
+            if size == 2
+                ins("rol", "P8ZP_SCRATCH_W1+1")
+            if v & (one << (k as ubyte)) != 0 {
+                ins("clc", 0)
+                ins("adc", "P8ZP_SCRATCH_W2")
+                if size == 2 {
+                    ins("tay", 0)
+                    ins("lda", "P8ZP_SCRATCH_W1+1")
+                    ins("adc", "P8ZP_SCRATCH_W2+1")
+                    ins("sta", "P8ZP_SCRATCH_W1+1")
+                    ins("tya", 0)
+                }
+            }
+        }
+        sta_reg(r, 0)
+        if size == 2 {
+            ins("lda", "P8ZP_SCRATCH_W1+1")
+            sta_reg(r, 1)
+        }
+    }
+
     ; does the library have a routine that multiplies by this constant?
     sub small_multiply(ubyte size, quad value) -> bool {
         if size == 1 {
@@ -2881,6 +2957,11 @@ gen6502 {
                     sta_reg(i.r1, 0)
                     if size == 2
                         ins("sty", cell(i.r1, 1))
+                }
+                else if okind == K_IMM and size <= 2 and shift_add_cost(ovalue, size) <= 180 {
+                    ; times a constant with few bits set: shifts and additions, in place of
+                    ; the general routine (which takes several hundred cycles)
+                    shift_add_multiply(i.r1, ovalue, size)
                 }
                 else if size == 2 and okind == K_REG and oreg <= ir.regcount and reg_zext[oreg] == 1 and reg_uses[oreg] == 2 {
                     ; a word times an unsigned byte (a register that was made from one, and is
