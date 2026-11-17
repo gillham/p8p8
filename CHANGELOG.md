@@ -42,6 +42,9 @@
 - Fixed for the 68000: a float cast to an integer was rounded, not cut off.
 - Fixed in the LLVM back end: the complement (`~`) of a byte or word right
   after arithmetic on a wider type was written as invalid LLVM IR.
+- `tools/benchp8vi.sh` times a command of the editor p8vi on an Amiga 500,
+  built by both compilers: `:%s/5//g` on its sample text takes 2.97 s from
+  p8p8 and 3.56 s from the reference compiler.
 - `make coppercmp` compares the screens of upstream's Amiga examples in the
   Copperline emulator, `make amigacmpfloat` the float program on an Amiga
   1200 with an FPU.

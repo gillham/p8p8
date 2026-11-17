@@ -267,6 +267,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make emucmp`, `make emucmp64` | programs built by both compilers print the same in x16emu and in VICE |
 | `make qemucmp`, `make amigacmp`, `make amigacmp500` | programs built for qemu68k, the Amiga 1200 and the Amiga 500 by both compilers print the same in QEMU and in vamos |
 | `tools/bench68k.sh` | how long small benchmarks take on an Amiga 500 in Copperline, from both compilers |
+| `tools/benchp8vi.sh` | the same for one command of a real program, the editor [p8vi](https://github.com/retrodores/p8vi), which it clones; needs a Kickstart 1.3 ROM (`COPPERCMP_ROM`) |
 | `make coppercmp`, `make amigacmpfloat` | upstream's Amiga examples show the same screen from both compilers in the Copperline emulator; the float program prints the same on an Amiga 1200 with an FPU |
 | `make gfxcmp` | programs built by both compilers draw the same in x16emu |
 | `make programs`, `make roundtrip`, `make corpus` | the front end over the whole reference material |
