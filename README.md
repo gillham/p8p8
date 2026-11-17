@@ -150,13 +150,16 @@ For a 6502 machine the program is built with p8p8's own code generator and
 64tass.  `-codegen upstream` hands p8p8's IR to `prog8c-llvm` instead, and
 `-ir` only writes the IR.
 
-`-target qemu68k -build` (or `-o`, or `-run` to start it in QEMU) builds a
-68000 program with p8p8's 68000 code generator; that needs `vasmm68k_mot`,
-`vlink` and, to run it, `qemu-system-m68k`.  `-target amiga1200 -build`
-(or `amiga500`) writes an AmigaOS program file (vasm alone); `-run` starts it in vamos,
-which only runs programs that use the console (`P8P8_VAMOS` names it when it
-is not in the PATH).  Without one of those options a qemu68k or Amiga
-program is only checked.
+`-target qemu68k` builds a 68000 program with p8p8's 68000 code generator;
+that needs `vasmm68k_mot` and `vlink`, and `qemu-system-m68k` for `-run`.
+`-target amiga1200` (or `amiga500`) writes an AmigaOS program file (vasm
+alone); `-run` starts it in vamos, which only runs programs that use the
+console (`P8P8_VAMOS` names it when it is not in the PATH).
+
+Without an option that says what to do, `p8c` compiles, as `prog8c` does:
+a program for a 6502 or 68000 machine, the LLVM IR (`.ll`) for an llvm
+target, the IR for `-target virtual`.  `-build`, `-run` or `-o <file>` make
+an llvm target's executable; `-check` only checks the program.
 
 A command line written for `prog8c` mostly works as it is: options may
 stand before the source file or after it, and may be

@@ -152,8 +152,9 @@ Options are upstream's where both have them, with one dash or two.
   `-reportnosource` (everything about one run in a directory, to attach to
   a report of a problem), and options that print the compiler's internal
   tables.
-- A 6502 machine is built by default; for an llvm target p8p8 only checks
-  the program unless `-build`, `-run`, `-emu` or `-o <file>` is given.
+- Without an option that says what to do the program is compiled, as by
+  upstream: a program file for a machine, the `.ll` file for an llvm
+  target.  (Up to 0.1.0 p8p8 only checked a program for an llvm target.)
 - `-srcdirs` takes `:` and `;` between directories on every system;
   upstream takes `:` on Unix and `;` on Windows.
 - `-Xcompile` is there for llvm32 only.

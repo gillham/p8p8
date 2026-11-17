@@ -600,7 +600,7 @@ main {
         out.nl()
         out.puts("  -stats         print statistics at the end")
         out.nl()
-        out.puts("  -check         only check the program, like prog8c -check (the default for now)")
+        out.puts("  -check         only check the program, like prog8c -check")
         out.nl()
         out.puts("  -out dir       the directory for the output files (default: the current one)")
         out.nl()
@@ -661,6 +661,8 @@ main {
         prepare_library()
         ; the target: a machine with a configuration file (see target.p8), or one p8p8 knows by itself
         ; (without -target the program is for the machine p8c runs on)
+        if opt_target == 0 and not explicit_mode
+            opt_llvm = true         ; (the machine p8c runs on is an llvm target)
         if opt_target == 0 and sizeof(pointer) == 4
             importer.target = "llvm32"
         if opt_target != 0 {
@@ -678,12 +680,20 @@ main {
             ; A machine with a configuration is compiled like prog8c does it: to a program,
             ; unless an option asks for something else; and by p8p8's own code generator,
             ; unless -codegen upstream asks for prog8c-llvm's back end.
-            if target.loaded and not explicit_mode
-                opt_build = true
+            is_m68k = strings.compare(tname, "qemu68k") == 0 or buf.bytes_equal(tname, "amiga", 5)
+            if not explicit_mode {
+                ; no option says what to do: what prog8c does for the target.  A program for
+                ; a machine, the LLVM IR for an llvm target, the IR for the virtual machine.
+                if target.loaded or is_m68k
+                    opt_build = true
+                else if buf.bytes_equal(tname, "llvm", 4)
+                    opt_llvm = true
+                else if strings.compare(tname, "virtual") == 0
+                    opt_ir = true
+            }
             opt_own = opt_codegen == 1 or (opt_codegen == 0 and target.loaded and opt_build)
             ; a 68000 machine: p8p8's own code generator when a program is asked for
             ; (there is no other way to build one from here yet)
-            is_m68k = strings.compare(tname, "qemu68k") == 0 or buf.bytes_equal(tname, "amiga", 5)
             if is_m68k
                 opt_own = opt_codegen == 1 or (opt_codegen == 0 and opt_build)
             if not target.loaded and (opt_ir or opt_build or not explicit_mode) and not buf.bytes_equal(tname, "llvm", 4)

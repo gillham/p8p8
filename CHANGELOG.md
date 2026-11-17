@@ -36,6 +36,9 @@
   an instance belongs; and a `str` parameter compared with a string compared
   the two addresses, not the text.  On the 6502 a struct instance without
   values was not defined at all.
+- Without `-check`, `-ir` or another option that says what to do, a program
+  for an llvm target is compiled to its `.ll` file, as `prog8c` does it;
+  0.1.0 only checked it.  Programs for 68000 machines are built.
 - Fixed for the 68000: a float cast to an integer was rounded, not cut off.
 - Fixed in the LLVM back end: the complement (`~`) of a byte or word right
   after arithmetic on a wider type was written as invalid LLVM IR.
