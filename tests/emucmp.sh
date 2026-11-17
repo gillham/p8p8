@@ -26,13 +26,24 @@ work=${TMPDIR:-/tmp}/p8p8_emucmp.$$
 seconds=${EMUCMP_SECONDS:-8}
 target=${EMUCMP_TARGET:-cx16}
 codegen=${EMUCMP_CODEGEN:-upstream}
+# EMUCMP_CPU=65816: p8p8 writes code for that CPU (-cpu 65816), and both programs run on
+# it: x16emu -c816, or VICE's xscpu64 (a C64 with a SuperCPU)
+cpu=${EMUCMP_CPU:-}
+cpuopt=
+x16cpu=
+vice=x64sc
+if [ "$cpu" = 65816 ]; then
+    cpuopt="-cpu 65816"
+    x16cpu=-c816
+    vice=xscpu64
+fi
 cycles=${EMUCMP_CYCLES:-200000000}
 mkdir -p "$work/up" "$work/p8"
 failed=0
 total=0
 run_cx16() {
     # the program's output, without the emulator's own lines
-    (cd "$1" && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout "$seconds" x16emu -prg "$2.prg" -run -warp -echo iso 2>&1 < /dev/null) | grep -v '^SMC Power Off' > "$1/$2.out"
+    (cd "$1" && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout "$seconds" x16emu $x16cpu -prg "$2.prg" -run -warp -echo iso 2>&1 < /dev/null) | grep -v '^SMC Power Off' > "$1/$2.out"
 }
 screen_saved() {
     [ -f "$1" ] && [ "$(wc -c < "$1" | tr -d ' ')" = 1000 ]
@@ -44,7 +55,7 @@ run_c64() {
     if [ -n "$exit_address" ]; then
         printf 'break %s\ncommand 1 "bsave \\"screen.bin\\" 0 0400 07e7"\n' "$exit_address" > "$1/mon.txt"
     fi
-    (cd "$1" && exec x64sc -console -warp -limitcycles "$cycles" -exitscreenshot screen.png -moncommands mon.txt \
+    (cd "$1" && exec $vice -console -warp -limitcycles "$cycles" -exitscreenshot screen.png -moncommands mon.txt \
         -autostartprgmode 1 -autostart "$2.prg" > vice.log 2>&1 < /dev/null) &
     emulator=$!
     # the monitor stays open after the breakpoint: wait for the screen, then stop the emulator
@@ -83,7 +94,7 @@ for f in "$@"; do
     rm -f "$work/p8/$name.prg"
     if [ "$codegen" = own ]; then
         # p8p8's own 6502 code generator, and 64tass
-        if ! "$p8p8" -target $target -lib "$lib" -codegen own -out "$work/p8" -build "$f" > "$work/p8.err" 2>&1 || [ ! -f "$work/p8/$name.prg" ]; then
+        if ! "$p8p8" -target $target -lib "$lib" $cpuopt -codegen own -out "$work/p8" -build "$f" > "$work/p8.err" 2>&1 || [ ! -f "$work/p8/$name.prg" ]; then
             echo "failed (p8p8 does not build it): $f"
             sed 's/\x1b\[[0-9;]*m//g' "$work/p8.err" | grep -v '^$' | sort | uniq -c | sort -rn | head -4 | cut -c1-200
             failed=$((failed + 1))

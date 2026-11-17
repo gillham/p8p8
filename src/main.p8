@@ -66,7 +66,7 @@ main {
     ; the options that are followed by a value
     sub takes_value(^^ubyte arg) -> bool {
         return strings.compare(arg, "-srcdirs") == 0 or strings.compare(arg, "-lib") == 0
-            or strings.compare(arg, "-target") == 0 or strings.compare(arg, "-codegen") == 0
+            or strings.compare(arg, "-target") == 0 or strings.compare(arg, "-codegen") == 0 or strings.compare(arg, "-cpu") == 0
             or strings.compare(arg, "-triple") == 0 or strings.compare(arg, "-Xcompile") == 0 or strings.compare(arg, "-encoding") == 0
             or strings.compare(arg, "-varshigh") == 0 or strings.compare(arg, "-varsaddress") == 0
             or strings.compare(arg, "-out") == 0 or strings.compare(arg, "-o") == 0
@@ -162,6 +162,17 @@ main {
                 opt_version = true
             else if strings.compare(arg, "-target") == 0 and value != 0 {
                 opt_target = value
+                i++
+            }
+            else if strings.compare(arg, "-cpu") == 0 and value != 0 {
+                ; the CPU to write 6502 code for, whatever the target's file says: 6502, 65c02, 65816
+                long ck = 0
+                while value[ck] != 0 {
+                    if value[ck] >= 'A' and value[ck] <= 'Z'
+                        value[ck] += 32
+                    ck++
+                }
+                gen6502.cpu_option = value
                 i++
             }
             else if strings.compare(arg, "-codegen") == 0 and value != 0 {
@@ -621,6 +632,8 @@ main {
         out.puts("  -codegen own|upstream   for a 6502 machine: p8p8's own code generator and 64tass (the default), or prog8c-llvm's back end")
         out.nl()
         out.puts("                          (the same choice for the 68000 machines, with vasm and vlink)")
+        out.nl()
+        out.puts("  -cpu 6502|65c02|65816   for a 6502 machine: the CPU to write code for, in place of the one in the target's file")
         out.nl()
         out.puts("  -asmlist       the assembler writes a listing (name.list)")
         out.nl()

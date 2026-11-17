@@ -47,7 +47,8 @@ compiler with LLVM targets added.
 | | upstream | p8p8 |
 |---|---|---|
 | 6502 and 65C02 machines | built in: c64, c128, cx16, pet32; others as custom targets | every machine is a target file, the four built-in ones included; a code generator of p8p8's own |
-| 65816, 45GS02 | no | no (planned) |
+| 65816 | no | begun: `-cpu 65816` selects it and the programs run on it, with the 65C02's code so far |
+| 45GS02 | no | no (planned) |
 | 68000 (Amiga and others) | yes | a first code generator of p8p8's own, for qemu68k and the two Amigas, new and with little optimization |
 | the virtual machine | yes, with the machine itself | p8p8 writes the IR for it and has no virtual machine: upstream's runs it |
 | the host, through LLVM | in the fork's LLVM branch | yes; it is how p8p8 compiles itself |
@@ -162,6 +163,8 @@ Options are upstream's where both have them, with one dash or two.
   upstream takes `:` on Unix and `;` on Windows.
 - `-codegen upstream` is p8p8's: the program is built from p8p8's IR by
   `prog8c-llvm`'s back end, for the 6502 and the 68000 machines.
+- `-cpu 6502|65c02|65816` is p8p8's: the CPU to write 6502 code for, in
+  place of the one the target's file names.
 - `-Xcompile` is there for llvm32 only.
 - `-triple` for llvm32 reads the LLVM branch's profile files, but only the
   keys of the hosted 32-bit platforms ([TARGETS.md](TARGETS.md)); for llvm64

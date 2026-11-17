@@ -36,6 +36,9 @@
   an instance belongs; and a `str` parameter compared with a string compared
   the two addresses, not the text.  On the 6502 a struct instance without
   values was not defined at all.
+- `-cpu 6502|65c02|65816` chooses the CPU of a 6502 machine's program.  The
+  65816 is only begun: its programs are the 65C02's so far, and run on
+  `x16emu -c816` and VICE's `xscpu64` (`make emucmp816`, `emucmp64816`).
 - Follows Prog8 master at 8f50c2ed1 and the LLVM branch at a7076bf71 (the
   library and the reference material).  A struct field that is a struct is
   refused with upstream's new message.

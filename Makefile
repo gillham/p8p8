@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
 
 all: $(OUT) $(P8P8)
 
@@ -439,6 +439,13 @@ EMUTESTS64=$(filter-out %/swirl-float.p8 %/numbergame.p8 %/maze.p8 %/bitshift.p8
 	$(addprefix .prog8-reference/examples/c64/,banking.p8 charset.p8)
 emucmp64:	$(P8P8)
 	@EMUCMP_TARGET=c64 tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS64)
+
+# the 65816: p8p8's code for that CPU (-cpu 65816) on x16emu -c816 and on VICE's SuperCPU C64 (xscpu64),
+# against the reference compiler's 65C02 and 6502 programs on the same machines
+emucmp816:	$(P8P8)
+	@EMUCMP_CPU=65816 EMUCMP_CODEGEN=own tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS)
+emucmp64816:	$(P8P8)
+	@EMUCMP_CPU=65816 EMUCMP_CODEGEN=own EMUCMP_TARGET=c64 tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS64)
 
 # the self-hosting test: stage 2 is p8p8 compiled by itself, stage 3 must be identical to stage 2
 bootstrap:	$(P8P8)

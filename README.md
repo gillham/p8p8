@@ -161,6 +161,10 @@ a program for a 6502 or 68000 machine, the LLVM IR (`.ll`) for an llvm
 target, the IR for `-target virtual`.  `-build`, `-run` or `-o <file>` make
 an llvm target's executable; `-check` only checks the program.
 
+`-cpu 65816` writes code for that CPU on any 6502 machine (`-target cx16
+-cpu 65816`, for a Commander X16 that has one; `-target c64 -cpu 65816` for
+a C64 with a SuperCPU).  This is new: so far the code is the 65C02's.
+
 A command line written for `prog8c` mostly works as it is: options may
 stand before the source file or after it, and may be
 written with two dashes, `-emu` is `-run`, and the options of `prog8c` that
