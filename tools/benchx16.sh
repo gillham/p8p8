@@ -27,6 +27,8 @@ for d in up c02 816; do
         sleep 2
         waited=$((waited + 2))
     done
+    # (x16emu may be a script that starts the emulator: that one first)
+    pkill -P $emu 2> /dev/null
     kill $emu 2> /dev/null
     wait $emu 2> /dev/null
     tr -d '\000' < "$work/$d/echo.txt" | sed -n '/^SCORE BENCHMARK/,/^TOTAL SCORE/p' | grep -v '^SCORE' | grep '[0-9]' > "$work/$d/scores.txt"

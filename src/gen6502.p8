@@ -1155,6 +1155,7 @@ gen6502 {
         prog = p
         o = output
         errors = 0
+        fconst_count = 0
         float_errors = 0
         if nb == 0
             nb = buf.new(256)
@@ -1682,6 +1683,7 @@ gen6502 {
     }
 
     sub fuse_indexed(^^ir.Chunk c) {
+        fuse_floats(c)
         ^^ir.Instr a = c.first
         while a != 0 {
             ^^ir.Instr b = a.next
@@ -1740,6 +1742,18 @@ gen6502 {
                 if a.scale == 255
                     b.scale = 253
                 a.op = ir.OP_NOP
+            }
+            if b != 0 and b.next != 0 and a.op == ir.OP_LOADM and b.op == ir.OP_LOADM and type_size(a.type) == 2 and type_size(b.type) == 2
+                    and a.sym == b.sym and a.offset == b.offset and a.value == b.value and a.r1 != b.r1
+                    and b.r1 <= ir.regcount and reg_uses[b.r1] == 2 {
+                ; a word variable times itself
+                ^^ir.Instr sq = b.next
+                if (sq.op == ir.OP_MULR or sq.op == ir.OP_MULSR) and sq.mode == ir.M_RR and sq.r1 == a.r1 and sq.r2 == b.r1
+                        and type_size(sq.type) == 2 {
+                    b.op = ir.OP_NOP
+                    sq.r2 = 0
+                    sq.scale = 250
+                }
             }
             if b != 0 and b.next != 0 and a.op == ir.OP_LOAD and a.sym == 0 and a.r1 != 0 and a.r1 <= ir.regcount
                     and (b.op == ir.OP_LOADMZ or b.op == ir.OP_LOADM) and b.r1 != a.r1 and b.r1 <= ir.regcount and reg_uses[b.r1] == 2 {
@@ -2232,6 +2246,7 @@ gen6502 {
     ; The 8-bit code before a run: the values that come into it, from the cells of their
     ; registers into the scratch words and (last) both halves of the accumulator.
     sub wide_enter() {
+        fac_reg = 0
         ubyte n
         for n in 0 to 2 {
             if n < win_count and win_kind[n] != W_ACC {
@@ -3959,6 +3974,134 @@ gen6502 {
         ins("jsr", "floats.MOVMF")
     }
 
+    ; ---- floats: what is in FAC1, and operands that are taken from where they are ----
+    ;
+    ; The ROM's routines work on FAC1 and a number in memory.  fac_reg is the register
+    ; whose value FAC1 holds after the instruction before this one (0: not known).  A
+    ; result is only put into its register's cell when the instruction that follows does
+    ; not take it from FAC1; a variable or a constant that is loaded only to be the
+    ; second operand is used where it is (fuse_floats: scale 249 and 248).
+    uword fac_reg = 0               ; set by the instruction that is being written
+    uword fac_prev = 0              ; what the one before it left
+    ^^ir.Chunk fchunk = 0
+    ^^ir.Instr fwait = 0            ; a load of a variable that the next instruction does: its first operand
+    ^^ir.Instr fwait_prev = 0
+    float[64] fconsts               ; the constants that are operands, in the data as p8_fconst_N
+    ubyte fconst_count = 0
+
+    sub float_op(^^ir.Instr i) -> bool {
+        when i.op {
+            ir.OP_ADDR, ir.OP_SUBR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_DIVSR -> return i.type == ir.T_FLOAT and i.mode == ir.M_RR
+        }
+        return false
+    }
+
+    sub float_commutes(^^ir.Instr i) -> bool {
+        return i.op == ir.OP_ADDR or i.op == ir.OP_MULR or i.op == ir.OP_MULSR
+    }
+
+    sub names_register(^^ir.Instr i, uword r) -> ubyte {
+        ubyte count = 0
+        if i.r1 == r
+            count++
+        if i.r2 == r
+            count++
+        if i.r3 == r
+            count++
+        ^^ir.Arg a = i.args
+        while a != 0 {
+            if a.reg == r
+                count++
+            a = a.next
+        }
+        a = i.results
+        while a != 0 {
+            if a.reg == r
+                count++
+            a = a.next
+        }
+        return count
+    }
+
+    ; is register r named nowhere after instruction n (in this chunk, and in no other)
+    sub dies_at(uword r, ^^ir.Instr n) -> bool {
+        if r == 0 or r > ir.regcount or fchunk == 0 or reg_uses[r] == 255
+            return false
+        uword count = 0
+        ^^ir.Instr j = fchunk.first
+        bool after = false
+        while j != 0 {
+            ubyte here = names_register(j, r)
+            if after and here != 0
+                return false
+            count += here
+            if j == n
+                after = true
+            j = j.next
+        }
+        return count == reg_uses[r]
+    }
+
+    ; does the instruction after i take register r's new value from FAC1
+    sub fac_consumer(uword r, ^^ir.Instr i) -> bool {
+        ^^ir.Instr n = i.next
+        while n != 0 and n.op == ir.OP_NOP
+            n = n.next
+        if n == 0
+            return false
+        if float_op(n) {
+            if float_commutes(n)
+                return n.r1 == r and n.r2 != r
+            return n.r2 == r and n.r1 != r and n.scale < 248 and dies_at(r, n)
+        }
+        if n.op == ir.OP_STOREM and n.type == ir.T_FLOAT
+            return n.r1 == r and dies_at(r, n)
+        if n.op == ir.OP_FCOMP
+            return n.r2 == r and n.r3 != r and n.r1 != r and dies_at(r, n)
+        return false
+    }
+
+    ; FAC1 holds register r's new value: into its cell, unless the next instruction takes it
+    sub fac_result(uword r, ^^ir.Instr i) {
+        if not fac_consumer(r, i)
+            fac1_store(r)
+        fac_reg = r
+    }
+
+    sub fconst_name(float value) -> ^^ubyte {
+        ubyte k = 0
+        while k < fconst_count {
+            if fconsts[k] == value
+                break
+            k++
+        }
+        if k == fconst_count {
+            fconsts[k] = value
+            fconst_count++
+        }
+        buf.clear(nb)
+        buf.add_str(nb, "p8_fconst_")
+        buf.add_long(nb, k)
+        buf.add_byte(nb, 0)
+        return strtab.intern_cstr(nb.data)
+    }
+
+    ; the address of the second operand of a float operation in A and Y (or X and Y)
+    sub second_address(^^ir.Instr i, str low) {
+        if i.scale == 249 {
+            memory_operand(i)
+            ins_half(low, '<', mem_symbol, mem_offset)
+            ins_half("ldy", '>', mem_symbol, mem_offset)
+        }
+        else if i.scale == 248 {
+            ^^ubyte name = fconst_name(i.fvalue)
+            ins_half(low, '<', name, 0)
+            ins_half("ldy", '>', name, 0)
+        }
+        else
+            cell_address(i.r2, low)
+    }
+
     ; r1 = r1 op r2 with a routine that works on FAC1 and the float at A and Y
     ; (for the two that are not symmetric, FSUB and FDIV, FAC1 is the second operand)
     sub float_arithmetic(^^ir.Instr i, str routine) {
@@ -3966,10 +4109,77 @@ gen6502 {
             error("this form of float arithmetic is not supported yet", 0)
             return
         }
-        fac1_load(i.r2)
-        cell_address(i.r1, "lda")
-        ins("jsr", routine)
-        fac1_store(i.r1)
+        if float_commutes(i) and fac_prev == i.r1 and (i.scale >= 248 or i.r2 != i.r1) {
+            ; (the first operand is in FAC1 already)
+            second_address(i, "lda")
+            ins("jsr", routine)
+        }
+        else if i.scale < 248 and fac_prev == i.r2 and i.r2 != i.r1 {
+            ; (the second one is)
+            cell_address(i.r1, "lda")
+            ins("jsr", routine)
+        }
+        else {
+            second_address(i, "lda")
+            ins("jsr", "floats.MOVFM")
+            if fwait_prev != 0 and fwait_prev.r1 == i.r1 {
+                ; (the first operand is a variable, used where it is)
+                memory_operand(fwait_prev)
+                ins_half("lda", '<', mem_symbol, mem_offset)
+                ins_half("ldy", '>', mem_symbol, mem_offset)
+            }
+            else
+                cell_address(i.r1, "lda")
+            ins("jsr", routine)
+        }
+        fac_result(i.r1, i)
+    }
+
+    ; A variable or a constant that is loaded to be the second operand of the operation
+    ; right after it, and for nothing else: the operation takes it from where it is.
+    sub fuse_floats(^^ir.Chunk c) {
+        fchunk = c
+        fac_reg = 0
+        ^^ir.Instr a = c.first
+        while a != 0 {
+            ^^ir.Instr b = a.next
+            if b != 0 and a.type == ir.T_FLOAT and (a.op == ir.OP_LOADM or a.op == ir.OP_LOAD) and a.r1 != 0 and a.r1 <= ir.regcount
+                    and reg_uses[a.r1] == 2 and float_op(b) and b.r2 == a.r1 and b.r1 != a.r1 and b.scale < 248 {
+                if a.op == ir.OP_LOADM {
+                    b.sym = a.sym
+                    b.offset = a.offset
+                    b.value = a.value
+                    b.scale = 249
+                    b.r2 = 0
+                    a.op = ir.OP_NOP
+                }
+                else if a.sym == 0 and fconst_count < len(fconsts) - 1 {
+                    b.fvalue = a.fvalue
+                    b.scale = 248
+                    b.r2 = 0
+                    a.op = ir.OP_NOP
+                }
+            }
+            else if b != 0 and a.type == ir.T_FLOAT and (a.op == ir.OP_LOADM or a.op == ir.OP_LOAD) and a.r1 != 0 and a.r1 <= ir.regcount
+                    and reg_uses[a.r1] == 2 and b.op == ir.OP_FCOMP and b.r3 == a.r1 and b.r2 != a.r1 and b.r1 != a.r1 and b.scale < 248 {
+                ; (the same for what a number is compared with)
+                if a.op == ir.OP_LOADM {
+                    b.sym = a.sym
+                    b.offset = a.offset
+                    b.value = a.value
+                    b.scale = 249
+                    b.r3 = 0
+                    a.op = ir.OP_NOP
+                }
+                else if a.sym == 0 and fconst_count < len(fconsts) - 1 {
+                    b.fvalue = a.fvalue
+                    b.scale = 248
+                    b.r3 = 0
+                    a.op = ir.OP_NOP
+                }
+            }
+            a = a.next
+        }
     }
 
     ; Translates a float instruction; false when it is one that the code for integers
@@ -3977,7 +4187,38 @@ gen6502 {
     sub float_instruction(^^ir.Instr i) -> bool {
         ubyte k
         when i.op {
-            ir.OP_LOADM, ir.OP_STOREM, ir.OP_LOADR, ir.OP_LOADX, ir.OP_STOREX, ir.OP_LOADI, ir.OP_STOREI,
+            ir.OP_NOP -> {
+            }
+            ir.OP_LOADM -> {
+                if i.type != ir.T_FLOAT
+                    return false
+                ^^ir.Instr user = i.next
+                while user != 0 and user.op == ir.OP_NOP
+                    user = user.next
+                if user != 0 and float_op(user) and not float_commutes(user) and user.r1 == i.r1 and (user.scale >= 248 or user.r2 != i.r1) {
+                    ; the first operand of a subtraction or a division: that takes it from the variable
+                    fwait = i
+                    return true
+                }
+                if not fac_consumer(i.r1, i)
+                    return false
+                ; (only to be worked on: straight into FAC1)
+                memory_operand(i)
+                ins_half("lda", '<', mem_symbol, mem_offset)
+                ins_half("ldy", '>', mem_symbol, mem_offset)
+                ins("jsr", "floats.MOVFM")
+                fac_reg = i.r1
+            }
+            ir.OP_STOREM -> {
+                if i.type != ir.T_FLOAT or fac_prev != i.r1 or not dies_at(i.r1, i)
+                    return false
+                ; (the result is in FAC1, and wanted nowhere else)
+                memory_operand(i)
+                ins_half("ldx", '<', mem_symbol, mem_offset)
+                ins_half("ldy", '>', mem_symbol, mem_offset)
+                ins("jsr", "floats.MOVMF")
+            }
+            ir.OP_LOADR, ir.OP_LOADX, ir.OP_STOREX, ir.OP_LOADI, ir.OP_STOREI,
             ir.OP_STOREZM, ir.OP_STOREZX, ir.OP_STOREZI, ir.OP_CALL, ir.OP_CALLI, ir.OP_CALLFAR, ir.OP_CALLFARVB, ir.OP_SYSCALL,
             ir.OP_PUSH, ir.OP_POP -> return false
             ir.OP_LOAD -> {
@@ -4078,8 +4319,12 @@ gen6502 {
             }
             ir.OP_FCOMP -> {
                 ; 0, 1 when the first is greater, 255 when it is less
-                fac1_load(i.r2)
-                cell_address(i.r3, "lda")
+                if fac_prev != i.r2
+                    fac1_load(i.r2)
+                if i.scale >= 248
+                    second_address(i, "lda")
+                else
+                    cell_address(i.r3, "lda")
                 ins("jsr", "floats.FCOMP")
                 sta_reg(i.r1, 0)
             }
@@ -4153,6 +4398,13 @@ gen6502 {
     }
 
     sub instruction(^^ir.Instr i) {
+        if i.op != ir.OP_NOP {
+            ; (what FAC1 holds is only known from one instruction to the next)
+            fac_prev = fac_reg
+            fac_reg = 0
+            fwait_prev = fwait
+            fwait = 0
+        }
         if i.scale == 252
             return                  ; (written with the head of its chain)
         if i.scale == 251 {
@@ -4614,6 +4866,16 @@ gen6502 {
                 }
             }
             ir.OP_MUL, ir.OP_MULR, ir.OP_MULS, ir.OP_MULSR -> {
+                if i.scale == 250 {
+                    ; a word times itself (fuse_indexed): the library's square, which is much
+                    ; faster than a multiplication for numbers of a byte's size
+                    lda_reg(i.r1, 0)
+                    ins("ldy", cell(i.r1, 1))
+                    ins("jsr", "prog8_math.square")
+                    sta_reg(i.r1, 0)
+                    ins("sty", cell(i.r1, 1))
+                    return
+                }
                 ; (the low part of a product is the same for signed numbers)
                 second_operand(i)
                 byte mshift = -1
@@ -5556,6 +5818,22 @@ gen6502 {
     long data_size = 1          ; the size of the elements that put_value writes
 
     sub data() {
+        ubyte fk = 0
+        while fk < fconst_count {
+            ; (the float constants that are operands where they are)
+            float_bytes(fconsts[fk])
+            put("p8_fconst_")
+            putn(fk)
+            put("  .byte  ")
+            ubyte fb
+            for fb in 0 to 4 {
+                if fb != 0
+                    put(", ")
+                putn(fbytes[fb])
+            }
+            nl()
+            fk++
+        }
         raw("; variables with initial values")
         ^^ir.Var v = prog.vars
         while v != 0 {

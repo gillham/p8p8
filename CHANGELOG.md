@@ -44,8 +44,11 @@
   upstream does: a call in it was made twice.
 - Faster 6502 code for bytes through a pointer with a byte index, sums of
   such bytes, words that bytes are added to, and a constant times a variable.
-  On upstream's benchmark program p8p8's code scores 5044 where the
-  reference compiler's scores 5203 (it was 4516).
+- Float expressions on the 6502 keep their result in the ROM's FAC1 from
+  one operation to the next and take variables and constants from where
+  they are; a word times itself uses the library's square routine.
+- On upstream's benchmark program p8p8's 65C02 code now scores 5242 where
+  the reference compiler's scores 5203 (it was 4516); for the 65816, 5288.
 - A variable may be declared in an `unroll` loop, as upstream allows.
 - `tools/benchx16.sh` runs upstream's benchmark program on a Commander X16
   built by the reference compiler and by p8p8.
