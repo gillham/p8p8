@@ -47,6 +47,7 @@ compiler with LLVM targets added.
 | | upstream | p8p8 |
 |---|---|---|
 | 6502 and 65C02 machines | built in: c64, c128, cx16, pet32; others as custom targets | every machine is a target file, the four built-in ones included; a code generator of p8p8's own |
+| `%option romable` | checks that the variables are moved to RAM; warns about some constructs | the same check, and the assembler refuses any instruction that writes into the program, the library's included (upstream builds a ROM that calls `math.rnd()`, which changes its own code; p8p8 does not) |
 | `@requirezp` on an array or string with initial values | placed in the zero page | an error: the 6502 code generator does not copy values into the zero page at the start (without values, and for every other kind of variable, the tags work as upstream's) |
 | 65816 | no | `-cpu 65816`: the 65C02's code, with runs of word arithmetic in the 16-bit accumulator |
 | 45GS02 | no | no (planned) |

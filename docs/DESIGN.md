@@ -178,6 +178,22 @@ program clears; an array or string with values does not (its values would
 have to be copied in), which is an error for `@requirezp`.  Which zero page
 bytes are free is the target file's business.
 
+### Programs for ROM
+
+With `%option romable` nothing that is written may be in the program.  A
+scalar with an initial value lives with the uninitialized variables and gets
+its value from code at the start; the variables have to be somewhere else
+(`-varsgolden`, `-varshigh`, `-varsaddress`, `%varsaddress` or the target's
+`vars_address`), which is checked as upstream checks it.  What nobody can
+check by reading the generator is that none of its code, none of its
+peephole passes and no routine of the library writes into the program after
+all.  So the assembler checks: `rom_guard` goes over the finished assembly
+text and puts, after every instruction that writes to a named or numbered
+address, a `.cerror` that fails when that address is inside the program.  A
+write to an array with values, a library routine that changes its own code,
+a variable that was left in the program: each stops the build with the
+instruction named.  A write through a pointer is not seen.
+
 ### CPUs
 
 The generator knows the 6502 and the 65C02.  On the 65C02 it uses `stz`,

@@ -1409,6 +1409,8 @@ irgen {
         }
         buf.add_byte(pb, 0)
         ^^source.File f = source.load(pb.data)
+        if f == 0
+            f = source.load(name)       ; (not beside the source: as it is written, as upstream)
         if f == 0 {
             error(d, "cannot read the included assembly file")
             return
@@ -1427,6 +1429,10 @@ irgen {
         ^^buf.Buf pb = buf.new(256)
         if buf.bytes_equal(name, "library:", 8)
             importer.library_file(name + 8, pb)
+        else if io_platform.file_size(name) >= 0 {
+            ; (as it is written, from where the compiler runs: upstream looks there first)
+            buf.add_str(pb, name)
+        }
         else {
             ^^ubyte from = module.file.name
             long slash = buf.cstr_len(from)

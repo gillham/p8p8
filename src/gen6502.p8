@@ -243,10 +243,25 @@ gen6502 {
         return 2
     }
 
+    ^^ubyte reg_fixed = 0           ; per register: its cell is used by address and keeps its place
+
     ; gives every register that the program uses a cell
     sub assign_cells() {
         cell_cap = (ir.regcount as long) + 2
         cell_of = mem.alloc(cell_cap * 2)
+        reg_fixed = mem.alloc(cell_cap)
+        sys.memset(reg_fixed, cell_cap as uword, 0)
+        fixed_longs_in(prog.initglobals)
+        ^^ir.Block fb = prog.blocks
+        while fb != 0 {
+            fixed_longs_in(fb.chunks)
+            ^^ir.Sub fs = fb.subs
+            while fs != 0 {
+                fixed_longs_in(fs.chunks)
+                fs = fs.next
+            }
+            fb = fb.next
+        }
         regfile_size = 0
         ; the floats first: their cells are used by address and keep their place, the
         ; others are placed again when it is known which of them the code still names
@@ -256,12 +271,17 @@ gen6502 {
                 cell_of[r] = regfile_size as uword
                 regfile_size += 5
             }
+            else if reg_fixed[r] != 0 {
+                ; (a long whose address goes to a float routine: the same)
+                cell_of[r] = regfile_size as uword
+                regfile_size += 4
+            }
             r++
         }
         float_cells = regfile_size
         r = 1
         while r <= ir.regcount {
-            if ir.regtypes[r] != ir.T_FLOAT {
+            if ir.regtypes[r] != ir.T_FLOAT and reg_fixed[r] == 0 {
                 cell_of[r] = regfile_size as uword
                 regfile_size += type_size(ir.regtypes[r])
             }
@@ -1230,6 +1250,13 @@ gen6502 {
                 peep6502.opaque_cells(cell_of[fr], 5)
             fr++
         }
+        ; (and so does that of a long that is converted to or from a float)
+        fr = 1
+        while fr <= ir.regcount {
+            if reg_fixed[fr] != 0
+                peep6502.opaque_cells(cell_of[fr], 4)
+            fr++
+        }
         ^^ir.Var v = p.vars
         while v != 0 {
             if v.kind == ir.V_MEMVAR and v.init != 0 and strings.compare(v.name, "cx16.r0") == 0 {
@@ -1291,6 +1318,109 @@ gen6502 {
         buf.add_bytes(o, codebuf.data, codebuf.len)
         data()
         bss()
+        if romable {
+            rom_requirements()
+            rom_guard(output)
+        }
+    }
+
+    sub fixed_longs_in(^^ir.Chunk c) {
+        while c != 0 {
+            if c.kind != ir.C_ASM {
+                ^^ir.Instr i = c.first
+                while i != 0 {
+                    if i.op == ir.OP_FFROMSL and i.r2 != 0 and i.r2 <= ir.regcount
+                        reg_fixed[i.r2] = 1
+                    if i.op == ir.OP_FTOSL and i.r1 != 0 and i.r1 <= ir.regcount
+                        reg_fixed[i.r1] = 1
+                    i = i.next
+                }
+            }
+            c = c.next
+        }
+    }
+
+    ; ---- programs for ROM (%option romable) ----
+
+    ; what upstream asks of such a program, in its words
+    sub rom_requirements() {
+        if prog.floats
+            error("When ROMable code is selected, floating point support is not available", 0)
+        if vars_address < 0 and not vars_golden and vars_high_bank < 0 and target.text("vars_address") == 0
+            error("When ROMable code is selected, variables and memory slabs should be moved to a RAM memory region using either -varsgolden, -varshigh or -varsaddress option or %varsaddress directive", 0)
+    }
+
+    ; Nothing in a program for ROM may be written to.  After every instruction of the
+    ; finished program that writes to memory (this generator's and the library's
+    ; assembly alike) comes a line that makes the assembler stop when the address is
+    ; inside the program: a variable that was left there, an array with values, code
+    ; that changes itself.  The assembler knows every address; the generator does not.
+    sub rom_guard(^^buf.Buf text) {
+        ^^buf.Buf guarded = buf.new(text.len + text.len / 4 + 1024)
+        long at = 0
+        while at < text.len {
+            long stop = at
+            while stop < text.len and text.data[stop] != '\n'
+                stop++
+            buf.add_bytes(guarded, text.data + at, stop - at)
+            buf.add_byte(guarded, '\n')
+            long k = at
+            while k < stop and (text.data[k] == ' ' or text.data[k] == '\t')
+                k++
+            ; (an instruction is indented; a label, a directive, a comment is not one)
+            if k > at and k + 4 < stop and rom_writer(text.data + k) and (text.data[k + 3] == ' ' or text.data[k + 3] == '\t') {
+                long first = k + 3
+                while first < stop and (text.data[first] == ' ' or text.data[first] == '\t')
+                    first++
+                long last = first
+                bool plain = true
+                while last < stop and text.data[last] != ';' {
+                    if text.data[last] == '"' or text.data[last] == '\\' or text.data[last] == '(' or text.data[last] == '#'
+                        plain = false
+                    last++
+                }
+                while last > first and (text.data[last - 1] == ' ' or text.data[last - 1] == '\t')
+                    last--
+                ; (indexed: the address the index is added to)
+                if last - first > 2 and text.data[last - 2] == ',' and (text.data[last - 1] | 32 == 'x' or text.data[last - 1] | 32 == 'y')
+                    last -= 2
+                while last > first and (text.data[last - 1] == ' ' or text.data[last - 1] == '\t')
+                    last--
+                bool register = last - first == 1 and text.data[first] | 32 == 'a'
+                bool anonymous = last > first and (text.data[first] == '+' or text.data[first] == '-')
+                if plain and last > first and not register and not anonymous {
+                    buf.add_str(guarded, "    .cerror ((")
+                    buf.add_bytes(guarded, text.data + first, last - first)
+                    buf.add_str(guarded, ") >= prog8_program_start) && ((")
+                    buf.add_bytes(guarded, text.data + first, last - first)
+                    buf.add_str(guarded, ") < prog8_program_end), \"ROMable code: this writes into the program: ")
+                    buf.add_bytes(guarded, text.data + k, 3)
+                    buf.add_byte(guarded, ' ')
+                    buf.add_bytes(guarded, text.data + first, last - first)
+                    buf.add_str(guarded, "\"\n")
+                }
+            }
+            at = stop + 1
+        }
+        buf.clear(text)
+        buf.add_bytes(text, guarded.data, guarded.len)
+    }
+
+    ; is this the mnemonic of an instruction that writes to its operand
+    sub rom_writer(^^ubyte m) -> bool {
+        ubyte a = m[0] | 32
+        ubyte b = m[1] | 32
+        ubyte c = m[2] | 32
+        when a {
+            's' -> return b == 't' and (c == 'a' or c == 'x' or c == 'y' or c == 'z')
+            'i' -> return b == 'n' and c == 'c'
+            'd' -> return b == 'e' and c == 'c'
+            'a' -> return b == 's' and c == 'l'
+            'l' -> return b == 's' and c == 'r'
+            'r' -> return b == 'o' and (c == 'l' or c == 'r')
+            't' -> return (b == 'r' or b == 's') and c == 'b'
+        }
+        return false
     }
 
     ^^buf.Buf codebuf = 0
@@ -1534,10 +1664,9 @@ gen6502 {
     }
 
     sub code() {
-        bool library = strings.compare(output_type, "LIBRARY") == 0
-        ; (in a library the blocks come first: its jump table has a fixed place)
-        if not library
-            global_inits_code()
+        ; The blocks come first, main before the others, right after the startup code as
+        ; upstream has them: a library's jump table has its fixed place there, and a
+        ; cartridge's main block sets the assembler's address around its header.
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
             if bl.address != 0 {
@@ -1575,8 +1704,7 @@ gen6502 {
             raw("")
             bl = bl.next
         }
-        if library
-            global_inits_code()
+        global_inits_code()
     }
 
     sub asm_text(^^ubyte text, long length) {
@@ -4411,6 +4539,31 @@ gen6502 {
                 lda_reg(i.r2, 0)
                 ins("jsr", "floats.FREADSA")
                 fac1_store(i.r1)
+            }
+            ir.OP_FFROMSL -> {
+                ; a long: the library's routine takes its address
+                cell_address(i.r2, "lda")
+                ins("jsr", "floats.internal_long_AY_to_FAC")
+                fac1_store(i.r1)
+            }
+            ir.OP_FTOSL -> {
+                ; (the float at cx16.r0 into the long at A and Y)
+                cell_address(i.r2, "lda")
+                ins("sta", "cx16.r0")
+                ins("sty", "cx16.r0+1")
+                cell_address(i.r1, "lda")
+                ins("jsr", "floats.cast_as_long")
+            }
+            ir.OP_LOADHR -> {
+                ; a float that a subroutine returns next to other values is in FAC1
+                if i.type != ir.T_FLOAT
+                    return false
+                fac1_store(i.r1)
+            }
+            ir.OP_STOREHR -> {
+                if i.type != ir.T_FLOAT
+                    return false
+                fac1_load(i.r1)
             }
             ir.OP_FFROMUW, ir.OP_FFROMSW -> {
                 ins("ldy", cell(i.r2, 1))

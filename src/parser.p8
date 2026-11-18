@@ -780,10 +780,7 @@ parser {
             if n.a == 0
                 n.a = f
             tail = ast.link(tail, f)
-            if kind() != token.T_EOL and kind() != token.T_RBRACE {
-                error("end of line expected after the field")
-                sync()
-            }
+            ; (the next field may be on the same line: upstream's grammar asks for no line end)
         }
         void expect(token.T_RBRACE, "'}' at the end of the struct")
         return n

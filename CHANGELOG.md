@@ -40,6 +40,17 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- Programs for ROM (`%option romable`): the variables have to be moved to
+  RAM and floats are not available, as upstream requires, and the assembler
+  now stops when anything in the program, the library's assembly included,
+  writes to an address inside the program.
+- The blocks of a program come right after its startup code, `main` first,
+  as upstream lays a program out; the code for the variables' initial
+  values was in between, where a cartridge's header lines wrote over it.
+- `%asmbinary` and `%asminclude` find a file by its path as it is written,
+  from where the compiler runs, as well as beside the source.
+- Struct fields may share a line.  The 6502 code generator converts longs
+  to floats and back, and returns a float next to other values.
 - Directives that p8p8's 6502 code generator took no notice of now work as
   upstream's: `%zpallowed`, `%zpreserved`, `%varsaddress`, `%jmptable` and
   `%breakpoint` (the breakpoints are listed for VICE's monitor).  `%assert`

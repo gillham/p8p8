@@ -87,6 +87,9 @@ def first_error(output):
             line = re.sub(r'^.*\.p8:(\d+):\d+:\s*(error:\s*)?', r'\1: ', line.strip())
             line = re.sub(r'^\S*/([^/\s]+\.asm)', r'\1', line)      # (the assembler's: without the directory)
             return re.sub(r'^ERROR\s*', '', line)[:140]
+    for line in plain(output).split('\n'):
+        if line.strip():
+            return line.strip()[:140]       # (a code generator's message has no "error" in it)
     return '(failed without a message)'
 
 

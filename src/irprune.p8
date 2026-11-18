@@ -61,6 +61,7 @@ irprune {
         ; (the conversions to a float that are asmsubs)
         if strings.compare(name, "floats.FREADUY") == 0 or strings.compare(name, "floats.FREADSA") == 0
                 or strings.compare(name, "floats.GIVUAYFAY") == 0 or strings.compare(name, "floats.GIVAYFAY") == 0
+                or strings.compare(name, "floats.internal_long_AY_to_FAC") == 0
             return true
         long length = buf.cstr_len(name)
         return length > 10 and strings.compare(name + length - 10, ".x16jsrfar") == 0

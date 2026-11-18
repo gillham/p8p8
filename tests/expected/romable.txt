@@ -1,0 +1,14 @@
+-- without a place for the variables
+When ROMable code is selected, variables and memory slabs should be moved to a RAM memory region usi
+-- an ordinary program, 65c02
+built, its writes checked
+-- an ordinary program, 65816
+built, its writes checked
+-- the library's routines for ROM
+-- a write to an array with values
+ROMable code: this writes into the program: sta p8b_main.p8v_table
+-- a library routine that changes its own code
+ROMable code: this writes into the program: inc x1
+-- a cartridge
+startup code 8009, payload 8017 to 801f, main.start 801f
+the code for the initial values comes after the main block
