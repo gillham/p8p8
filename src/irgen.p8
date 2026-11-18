@@ -532,7 +532,8 @@ irgen {
     }
 
     sub apply_tags(^^ir.Var var, ^^ast.Node d) {
-        if d.kind != ast.N_VARDECL
+        ; (a parameter has its tags in the same place)
+        if d.kind != ast.N_VARDECL and d.kind != ast.N_PARAM
             return
         ^^ast.Node tag = d.d
         while tag != 0 {

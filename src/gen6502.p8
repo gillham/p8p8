@@ -1755,6 +1755,47 @@ gen6502 {
                     sq.scale = 250
                 }
             }
+            if b != 0 and b.next != 0 and b.next.next != 0 and a.op == ir.OP_LOADX and b.op == ir.OP_LOADX
+                    and type_size(a.type) == 1 and type_size(b.type) == 1 and a.r1 != b.r1 and a.r1 <= ir.regcount and b.r1 <= ir.regcount
+                    and reg_uses[a.r1] == 2 and reg_uses[b.r1] == 2 and a.r2 != a.r1 and b.r2 != a.r1 {
+                ; A word from a split array that is only stored in a variable:
+                ;     loadx high / loadx low / concat word,high,low / storem word
+                ; Each half goes straight to its place.
+                ^^ir.Instr cc = b.next
+                ^^ir.Instr st = cc.next
+                if cc.op == ir.OP_CONCAT and cc.r2 == a.r1 and cc.r3 == b.r1 and cc.r1 <= ir.regcount and reg_uses[cc.r1] == 2
+                        and st.op == ir.OP_STOREM and st.r1 == cc.r1 and type_size(st.type) == 2 and st.scale < 250 {
+                    ; (cc becomes the load of the low half, b and st the two stores)
+                    cc.op = b.op
+                    cc.type = b.type
+                    cc.t1 = b.t1
+                    cc.t2 = b.t2
+                    cc.t3 = b.t3
+                    cc.mode = b.mode
+                    cc.scale = b.scale
+                    cc.sym = b.sym
+                    cc.offset = b.offset
+                    cc.value = b.value
+                    cc.r1 = b.r1
+                    cc.r2 = b.r2
+                    cc.r3 = b.r3
+                    b.op = ir.OP_STOREM
+                    b.type = ir.T_BYTE
+                    b.t1 = st.t1
+                    b.t2 = st.t2
+                    b.t3 = st.t3
+                    b.mode = st.mode
+                    b.scale = st.scale
+                    b.sym = st.sym
+                    b.offset = st.offset + 1
+                    b.value = st.value
+                    b.r1 = a.r1
+                    b.r2 = 0
+                    b.r3 = 0
+                    st.type = ir.T_BYTE
+                    st.r1 = cc.r1
+                }
+            }
             if b != 0 and b.next != 0 and a.op == ir.OP_LOAD and a.sym == 0 and a.r1 != 0 and a.r1 <= ir.regcount
                     and (b.op == ir.OP_LOADMZ or b.op == ir.OP_LOADM) and b.r1 != a.r1 and b.r1 <= ir.regcount and reg_uses[b.r1] == 2 {
                 ; constant * variable, the constant first: the variable times the constant,
@@ -3641,10 +3682,14 @@ gen6502 {
     sub equal_compare(uword r, ubyte size) {
         ubyte k
         if okind == K_IMM and ovalue == 0 and size > 1 {
-            ; with zero: all its bytes together
-            lda_reg(r, 0)
-            for k in 1 to size - 1
+            ; with zero: all its bytes together (from the last one, which is the one that
+            ; was written last and is in A more often than not)
+            lda_reg(r, size - 1)
+            k = size - 1
+            while k != 0 {
+                k--
                 ins("ora", cell(r, k))
+            }
             return
         }
         for k in 0 to size - 1 {
@@ -3742,6 +3787,18 @@ gen6502 {
     ; ---- pointers and indexes ----
 
     ; the pointer in a register into the scratch pair, to be followed with (zp),y
+    ^^ir.Instr prev_instr = 0       ; the instruction written before this one, in the same chunk
+    ^^ir.Instr this_instr = 0
+
+    ; Is a word store better done high byte first?  When the instruction before it left
+    ; that byte in A: a load through a pointer.  Only for a plain variable: the order of
+    ; writes to anything else may matter.
+    sub high_first(^^ir.Instr i) -> bool {
+        if prev_instr == 0 or prev_instr.op != ir.OP_LOADI or prev_instr.r1 != i.r1 or type_size(prev_instr.type) != 2
+            return false
+        return i.sym != 0 and peep6502.scanned(i.sym).mark & peep6502.K_PLAIN != 0
+    }
+
     ; A word that is loaded from a variable, has bytes added to it or subtracted from it,
     ; and is stored (fuse_indexed marked the chain): the low byte stays in A and the high
     ; byte in Y, which only moves on a carry.
@@ -4140,6 +4197,7 @@ gen6502 {
     sub fuse_floats(^^ir.Chunk c) {
         fchunk = c
         fac_reg = 0
+        this_instr = 0
         ^^ir.Instr a = c.first
         while a != 0 {
             ^^ir.Instr b = a.next
@@ -4399,6 +4457,8 @@ gen6502 {
 
     sub instruction(^^ir.Instr i) {
         if i.op != ir.OP_NOP {
+            prev_instr = this_instr
+            this_instr = i
             ; (what FAC1 holds is only known from one instruction to the next)
             fac_prev = fac_reg
             fac_reg = 0
@@ -4512,6 +4572,14 @@ gen6502 {
             }
             ir.OP_STOREM -> {
                 memory_operand(i)
+                if size == 2 and high_first(i) {
+                    ; (the high byte is in A still)
+                    lda_reg(i.r1, 1)
+                    ins_at("sta", mem_symbol, mem_offset + 1)
+                    lda_reg(i.r1, 0)
+                    ins_at("sta", mem_symbol, mem_offset)
+                    return
+                }
                 for k in 0 to size - 1 {
                     lda_reg(i.r1, k)
                     ins_at("sta", mem_symbol, mem_offset + k)
