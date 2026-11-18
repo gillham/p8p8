@@ -626,6 +626,17 @@ typer {
             check_array_init(n.b, s.type)
             return
         }
+        if n.b.kind == ast.N_TUPLE {
+            ; ubyte x, y, z = 1, 2, 3: every name has its own value
+            ^^ast.Node tv = n.b.a
+            if ast.list_length(tv) != ast.list_length(n.c)
+                error(n.b, "number of initialization values does not match number of variables")
+            while tv != 0 {
+                check_assign(tv, tv.type, s.type)
+                tv = tv.next
+            }
+            return
+        }
         check_assign(n.b, vt, s.type)
     }
 
@@ -700,6 +711,12 @@ typer {
             if types.is_pointer(tt) and types.elem_of(tt) == types.T_UBYTE and types.elem_of(vt) == types.T_BOOL
                 return
         }
+        ; a string goes where an array of bytes is expected (a parameter), by its address
+        if vt == types.T_STR and types.is_array(tt) and types.elem_of(tt) == types.T_UBYTE
+            return
+        ; a pointer to bytes takes a pointer to pointers
+        if types.is_pointer(tt) and types.is_pointer(vt) and types.elem_of(tt) == types.T_UBYTE and types.is_pointer(types.elem_of(vt))
+            return
         ; the untyped address type takes any pointer or address-sized integer
         if tt == types.ADDRESS_TYPE and (types.is_pointer(vt) or vt == types.T_UWORD or vt == types.T_LONG)
             return
@@ -745,6 +762,9 @@ typer {
             uword tt = infer(target)
             if target.kind == ast.N_INDEX and types.is_integer(vt) and types.is_integer(tt) and types.size_of(vt) == types.size_of(tt)
                 return          ; upstream lets an integer of the same size into an array element
+            ; (a signed byte's number goes into memory as it is: @(address) = -100)
+            if target.kind == ast.N_MEMREAD and value.kind == ast.N_INT and value.value < 0 and value.value >= -128
+                return
             if target.kind != ast.N_VOID
                 check_assign(value, vt, tt)
             return
@@ -1501,6 +1521,23 @@ typer {
                 }
                 if basetype == 0
                     return 0
+                if e.b != 0 and e.b.next == 0 {
+                    ; a constant index below zero counts from the end of an array
+                    bool nok
+                    quad nidx
+                    nok, nidx = const_eval(e.b)
+                    if nok and nidx < 0 {
+                        long nlen = known_length(e.a)
+                        if nlen != 0 and -nidx <= nlen {
+                            e.b.kind = ast.N_INT
+                            e.b.value = nlen + nidx
+                            e.b.a = 0
+                            e.b.b = 0
+                            e.b.type = 0
+                            void infer(e.b)
+                        }
+                    }
+                }
                 uword elem = types.index_elem(basetype)
                 if elem == 0 and types.is_integer(basetype)
                     elem = types.T_UBYTE        ; an integer used as an address: the byte there
@@ -1510,6 +1547,16 @@ typer {
                 uword pt = infer(e.a)
                 if types.is_pointer(pt)
                     return types.elem_of(pt)
+                if pt != 0 and e.a.kind == ast.N_INDEX {
+                    ^^types.Type indexed = types.get(pt)
+                    if indexed.base == types.T_STRUCT {
+                        ; pointer[i]^^: the element is the struct already, the ^^ says no more
+                        ^^ast.Node after = e.next
+                        mem.copy(e.a, e, sizeof(ast.Node))
+                        e.next = after
+                        return pt
+                    }
+                }
                 if pt == types.ADDRESS_TYPE or pt == types.T_UWORD
                     return types.T_UBYTE
                 if pt != 0

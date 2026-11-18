@@ -259,6 +259,8 @@ resolver {
             scope = al.scope
             ^^symtab.Sym s = lookup_name(target.name, node)
             scope = saved
+            if s != 0 and node.op == R_FIELDREF and node.kind == ast.N_IDENT
+                node.name = target.name     ; (a field by an alias: the code generator follows the real path)
             return s
         }
         buf.clear(parser.scratch)
@@ -274,6 +276,8 @@ resolver {
         scope = al.scope
         ^^symtab.Sym s3 = lookup_name(combined, node)
         scope = saved2
+        if s3 != 0 and node.op == R_FIELDREF and node.kind == ast.N_IDENT
+            node.name = combined
         return s3
     }
 

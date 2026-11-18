@@ -574,6 +574,8 @@ checker {
                 error(n, "strings cannot be made const they are always potentially mutable")
             else if t != 0 and not types.is_numeric_or_bool(t) and not types.is_pointer(t)
                 error(n, "const can only be used on numbers, booleans and pointers")
+            else if t != 0 and types.is_pointer(t) and types.size_of(types.elem_of(t)) > 1
+                error(n, "due to internal compiler complexity, currently pointer variables with data type size > 1 cannot be const")
             else if init != 0 and not is_tuple and t != types.T_FLOAT {
                 ok, v = typer.constlike_eval(init)
                 ; (an address that the assembler knows is constant as well: a block of
@@ -679,7 +681,11 @@ checker {
             f = f.next
         }
         long given = ast.list_length(value.a)
-        if given != 0 and given != fields {
+        ; (by name, any of the fields may be given: the others are 0)
+        bool named = value.a != 0 and value.a.kind == ast.N_NAMEDFIELD
+        if named
+            mismatch = false
+        if given != 0 and given != fields and not (named and given < fields) {
             begin_message("invalid number of arguments: expected ")
             buf.add_long(parser.scratch, fields)
             buf.add_str(parser.scratch, " or 0 but got ")
@@ -1773,7 +1779,9 @@ checker {
         long length = typer.known_length(e.a)
         checks++
         if idx < 0 {
-            error(e.b, "index out of bounds")
+            ; (below zero counts from the end; the typer has put the index there when it could)
+            if length == 0 or -idx > length
+                error(e.b, "index out of bounds")
             return
         }
         if length == 0

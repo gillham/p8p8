@@ -5967,7 +5967,7 @@ gen6502 {
                 ins("bne", "-")
                 anon_label("+")
                 ins("lda", "#0")
-                ins("beq", "+++")
+                ins("beq", "++")
                 anon_label("+")
                 ins("lda", "#1")
                 anon_label("+")

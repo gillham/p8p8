@@ -817,6 +817,10 @@ irgen {
                     ir.text = ab
                     ir.add_number(v)
                 }
+                else if address_symbol(e) != 0 {
+                    buf.add_byte(ab, '@')
+                    buf.add_str(ab, address_symbol(e))
+                }
                 else {
                     unsupported(e, "non-constant array element")
                     buf.add_byte(ab, '0')
@@ -893,6 +897,66 @@ irgen {
                     }
                     else if v != 0
                         v = v.next
+                    if types.is_array(f.type) {
+                        ; an array in the struct: its elements one by one, as upstream lists
+                        ; them; those without a value are 0
+                        ^^types.Type at = types.get(f.type)
+                        uword et = types.elem_of(f.type)
+                        ^^ast.Node ev = 0
+                        ^^ubyte text = 0
+                        long textlen = 0
+                        if fv != 0 and fv.kind == ast.N_ARRAYLIT
+                            ev = fv.a
+                        else if fv != 0 and fv.kind == ast.N_STR and types.size_of(et) == 1 {
+                            ; a string fills an array of bytes (its zero too, where there is room)
+                            typer.decode_literal(fv)
+                            text = fv.extra
+                            textlen = fv.value as long
+                            if textlen > at.length {
+                                buf.clear(nb)
+                                buf.add_str(nb, "string literal (")
+                                buf.add_long(nb, textlen)
+                                buf.add_str(nb, " bytes) does not fit in ubyte array field '")
+                                buf.add_str(nb, f.name)
+                                buf.add_str(nb, "' of size ")
+                                buf.add_long(nb, at.length)
+                                buf.add_byte(nb, 0)
+                                error(fv, strtab.intern_cstr(nb.data))
+                                textlen = at.length
+                            }
+                        }
+                        else if fv != 0
+                            unsupported(fv, "this value for an array in a struct")
+                        long n
+                        for n in 0 to at.length - 1 {
+                            if not first
+                                buf.add_byte(vb, ',')
+                            first = false
+                            field_type_into(vb, et)
+                            buf.add_byte(vb, ':')
+                            if text != 0 {
+                                ir.text = vb
+                                if n < textlen
+                                    ir.add_number(text[n])
+                                else
+                                    ir.add_number(0)
+                            }
+                            else {
+                                if ev != 0 {
+                                    bool eok
+                                    quad evalue
+                                    eok, evalue = typer.const_eval(ev)
+                                    if eok and not typer.literal_fits(evalue, et)
+                                        error(ev, "invalid assignment value")
+                                }
+                                field_value_into(vb, ev, et)
+                            }
+                            if ev != 0
+                                ev = ev.next
+                        }
+                        f = f.next
+                        continue
+                    }
                     if not first
                         buf.add_byte(vb, ',')
                     first = false
@@ -945,6 +1009,56 @@ irgen {
         basic_type_into(b, tt.base)
     }
 
+    ; memory("name", size, align): the block's name for the assembler; it is declared when
+    ; it is first named
+    sub slab_of(^^ast.Node mcall) -> ^^ubyte {
+        ^^ast.Node a = mcall.b
+        ; (the name as written, not its bytes in the target's encoding)
+        buf.clear(nb)
+        buf.add_str(nb, "prog8_slabs.memory_")
+        long sk = 0
+        while a.name != 0 and a.name[sk] != 0 {
+            ubyte sc = a.name[sk]
+            if (sc >= 'a' and sc <= 'z') or (sc >= 'A' and sc <= 'Z') or (sc >= '0' and sc <= '9')
+                buf.add_byte(nb, sc)
+            else
+                buf.add_byte(nb, '_')
+            sk++
+        }
+        ^^ubyte slabname = intern_nb()
+        bool sok
+        quad ssize
+        quad salign
+        sok, ssize = typer.const_eval(a.next)
+        if not sok
+            ssize = 0
+        sok, salign = typer.const_eval(a.next.next)
+        if not sok
+            salign = 0
+        if find_var(slabname) == 0 {
+            ^^ir.Var slab = ir.add_var(prog, ir.V_SLAB, slabname, "", 0)
+            slab.size = ssize as long
+            slab.align = salign as long
+        }
+        return slabname
+    }
+
+    ; The assembler's name for a value that is an address it works out: a call of
+    ; memory(), or a constant that is one.  0 for anything else.
+    sub address_symbol(^^ast.Node e) -> ^^ubyte {
+        if e == 0
+            return 0
+        if e.kind == ast.N_CALL and e.a != 0 and e.a.kind == ast.N_IDENT and e.a.name != 0 and strings.compare(e.a.name, "memory") == 0
+                and e.b != 0 and e.b.kind == ast.N_STR and e.b.next != 0 and e.b.next.next != 0
+            return slab_of(e)
+        if e.kind == ast.N_IDENT and e.extra != 0 {
+            ^^symtab.Sym s = e.extra
+            if s.kind == symtab.K_CONST and s.decl != 0 and s.decl.kind == ast.N_VARDECL and s.decl.b != 0 and s.decl.b.kind == ast.N_CALL
+                return address_symbol(s.decl.b)
+        }
+        return 0
+    }
+
     sub field_value_into(^^buf.Buf b, ^^ast.Node fv, uword ftype) {
         if fv == 0 {
             buf.add_byte(b, '0')
@@ -983,6 +1097,12 @@ irgen {
         quad cv
         ok, cv = typer.const_eval(fv)
         if not ok {
+            ^^ubyte known = address_symbol(fv)
+            if known != 0 {
+                buf.add_byte(b, '@')
+                buf.add_str(b, known)
+                return
+            }
             unsupported(fv, "non-constant struct field value")
             cv = 0
         }
@@ -992,7 +1112,7 @@ irgen {
 
     sub is_address_name(^^ast.Node e) -> bool {
         ^^symtab.Sym s = e.extra
-        if s.kind == symtab.K_SUB or s.kind == symtab.K_LABEL
+        if s.kind == symtab.K_SUB or s.kind == symtab.K_LABEL or s.kind == symtab.K_BLOCK
             return true
         if s.kind == symtab.K_VAR and s.type != 0
             return types.is_array(s.type) or s.type == types.T_STR
@@ -2471,6 +2591,26 @@ irgen {
                     store(target.next, rem, dt, false)
                 return
             }
+            if strings.compare(cs.name, "lmh") == 0 {
+                ; the low, the middle and the high byte of a long
+                uword lv
+                ubyte lvt
+                lv, lvt = expression(callnode.b)
+                lv = convert(lv, lvt, ir.T_LONG, types.is_signed(callnode.b.type))
+                ubyte part = 0
+                while target != 0 and part < 3 {
+                    if target.kind != ast.N_VOID {
+                        uword shifted = ir.new_reg(ir.T_LONG)
+                        void ir.emit_rr(chunk, ir.OP_LOADR, ir.T_LONG, shifted, lv)
+                        if part != 0
+                            void ir.emit_ri(chunk, ir.OP_LSRI, ir.T_LONG, shifted, part * 8)
+                        store(target, convert(shifted, ir.T_LONG, ir.T_BYTE, false), ir.T_BYTE, false)
+                    }
+                    target = target.next
+                    part++
+                }
+                return
+            }
             unsupported(callnode, "builtin with several results")
             return
         }
@@ -3726,6 +3866,29 @@ irgen {
             et = lvt
             elemsize = irt_size(lvt)
         }
+        else if (it == types.T_STR or (types.is_pointer(it) and elemsize == 1)) and iter.kind == ast.N_IDENT {
+            ; a string by its address (a str parameter, a pointer to bytes): from where it
+            ; points up to the zero
+            uword pr
+            ubyte pt
+            pr, pt = expression(iter)
+            uword walker = ir.new_reg(ir.T_POINTER)
+            void ir.emit_rr(chunk, ir.OP_LOADR, ir.T_POINTER, walker, convert(pr, pt, ir.T_POINTER, false))
+            label(top)
+            uword ch = ir.new_reg(ir.T_BYTE)
+            void ir.emit_rp(chunk, ir.OP_LOADI, ir.T_BYTE, ch, walker, 0)
+            void ir.emit_ri(chunk, ir.OP_CMPI, ir.T_BYTE, ch, 0)
+            void ir.emit_t(chunk, ir.OP_BSTEQ, done)
+            void ir.emit_rm(chunk, ir.OP_STOREM, lvt, convert(ch, ir.T_BYTE, lvt, false), lvname, lvoff)
+            push_loop(done, next)
+            statements(n.c)
+            pop_loop()
+            label(next)
+            void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, walker, 1)
+            jump(top)
+            label(done)
+            return
+        }
         else {
             unsupported(iter, "for loop over this iterable")
             return
@@ -4598,6 +4761,22 @@ irgen {
             ast.N_IFEXPR -> {
                 rr, rt = ifexpr(e)
                 return rr, rt
+            }
+            ast.N_BRANCHEXPR -> {
+                ; if_cs a else b: one of two values by a flag of the CPU's status
+                ubyte bt = irt(e.type)
+                uword br = ir.new_reg(bt)
+                ^^ubyte belse = new_label()
+                ^^ubyte bdone = new_label()
+                void ir.emit_t(chunk, status_branch(e.op, true), belse)
+                rr, rt = expression(e.b)
+                void ir.emit_rr(chunk, ir.OP_LOADR, bt, br, convert(rr, rt, bt, types.is_signed(e.b.type)))
+                jump(bdone)
+                label(belse)
+                rr, rt = expression(e.c)
+                void ir.emit_rr(chunk, ir.OP_LOADR, bt, br, convert(rr, rt, bt, types.is_signed(e.c.type)))
+                label(bdone)
+                return br, bt
             }
             ast.N_FLOAT -> {
                 unsupported(e, "float literal value")
@@ -5558,16 +5737,23 @@ irgen {
         if r == 0 or (r[0] != 'R' and r[0] != 'r') or r[1] == 0
             return 0
         long k = 1
-        while r[k] != 0 {
-            if r[k] < '0' or r[k] > '9'
-                return 0
+        while r[k] >= '0' and r[k] <= '9'
             k++
-        }
-        if k > 3
+        if k == 1 or k > 3
             return 0
+        if r[k] != 0 {
+            ; a pair for a long, "R0R1": it begins in the first of the two
+            if r[k] != 'R' and r[k] != 'r'
+                return 0
+            long second = k + 1
+            while r[second] >= '0' and r[second] <= '9'
+                second++
+            if second == k + 1 or r[second] != 0
+                return 0
+        }
         buf.clear(nb)
         buf.add_str(nb, "cx16.r")
-        buf.add_str(nb, r + 1)
+        buf.add_bytes(nb, r + 1, k - 1)
         return intern_nb()
     }
 
@@ -6158,7 +6344,8 @@ irgen {
             return r, t
         }
         if strings.compare(name, "peek") == 0 or strings.compare(name, "peekw") == 0 or strings.compare(name, "peekl") == 0
-            or strings.compare(name, "peekbool") == 0 or strings.compare(name, "peekp") == 0 or strings.compare(name, "peekq") == 0 {
+            or strings.compare(name, "peekbool") == 0 or strings.compare(name, "peekp") == 0 or strings.compare(name, "peekq") == 0
+            or strings.compare(name, "peekf") == 0 {
             r, at = expression(a)
             r = convert(r, at, ir.T_POINTER, false)
             uword pr = ir.new_reg(t)
@@ -6166,7 +6353,8 @@ irgen {
             return pr, t
         }
         if strings.compare(name, "poke") == 0 or strings.compare(name, "pokew") == 0 or strings.compare(name, "pokel") == 0
-            or strings.compare(name, "pokebool") == 0 or strings.compare(name, "pokep") == 0 or strings.compare(name, "pokeq") == 0 {
+            or strings.compare(name, "pokebool") == 0 or strings.compare(name, "pokep") == 0 or strings.compare(name, "pokeq") == 0
+            or strings.compare(name, "pokef") == 0 {
             r, at = expression(a)
             r = convert(r, at, ir.T_POINTER, false)
             r2, at2 = expression(a.next)
@@ -6179,6 +6367,8 @@ irgen {
                 vt = ir.T_QUAD
             else if name[4] == 'p'
                 vt = ir.T_POINTER
+            else if name[4] == 'f'
+                vt = ir.T_FLOAT
             void ir.emit_rp(chunk, ir.OP_STOREI, vt, convert(r2, at2, vt, false), r, 0)
             return 0, ir.T_BYTE
         }
@@ -6273,33 +6463,7 @@ irgen {
                 unsupported(e, "memory() with a non-literal name")
                 return ir.new_reg(ir.T_POINTER), ir.T_POINTER
             }
-            ; (the name as written, not its bytes in the target's encoding)
-            buf.clear(nb)
-            buf.add_str(nb, "prog8_slabs.memory_")
-            long sk = 0
-            while a.name != 0 and a.name[sk] != 0 {
-                ubyte sc = a.name[sk]
-                if (sc >= 'a' and sc <= 'z') or (sc >= 'A' and sc <= 'Z') or (sc >= '0' and sc <= '9')
-                    buf.add_byte(nb, sc)
-                else
-                    buf.add_byte(nb, '_')
-                sk++
-            }
-            ^^ubyte slabname = intern_nb()
-            bool sok
-            quad ssize
-            quad salign
-            sok, ssize = typer.const_eval(a.next)
-            if not sok
-                ssize = 0
-            sok, salign = typer.const_eval(a.next.next)
-            if not sok
-                salign = 0
-            if find_var(slabname) == 0 {
-                ^^ir.Var slab = ir.add_var(prog, ir.V_SLAB, slabname, "", 0)
-                slab.size = ssize as long
-                slab.align = salign as long
-            }
+            ^^ubyte slabname = slab_of(e)
             uword slr = ir.new_reg(ir.T_POINTER)
             void ir.emit_rsym(chunk, ir.OP_LOAD, ir.T_POINTER, slr, slabname, 0)
             return slr, ir.T_POINTER

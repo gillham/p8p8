@@ -235,8 +235,12 @@ irprune {
     }
 
     sub mark_cstr(^^ubyte name) {
-        if name != 0
-            mark(find(name, buf.cstr_len(name)))
+        if name == 0
+            return
+        ^^Entry e = find(name, buf.cstr_len(name))
+        if e == 0
+            e = owner(name, buf.cstr_len(name))     ; (a label inside a subroutine: the subroutine)
+        mark(e)
     }
 
     ; what is kept whatever refers to it

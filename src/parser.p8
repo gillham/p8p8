@@ -598,6 +598,13 @@ parser {
         while kind() != token.T_RPAREN and kind() != token.T_EOF {
             ^^ast.Node p = node(ast.N_PARAM)
             p.a = parse_type()
+            if p.a != 0 and p.a.flags & ast.F_EMPTYARRAY != 0 and p.a.flags & ast.F_POINTER == 0
+                    and (p.a.op == token.T_KW_UBYTE or p.a.op == token.T_KW_BYTE or p.a.op == token.T_KW_BOOL) {
+                ; "ubyte[] name": an array is passed by its address; the parameter is a
+                ; pointer to its elements
+                p.a.flags = (p.a.flags & ~ast.F_EMPTYARRAY) | ast.F_POINTER
+                p.a.a = 0
+            }
             ^^ast.Node tagtail = 0
             while kind() == token.T_TAG {
                 ^^ast.Node tag = node(ast.N_TAG)
@@ -1379,7 +1386,36 @@ parser {
             skip_eol()
             void accept(token.T_KW_THEN)
             skip_eol()
-            n.b = parse_expression()
+            if kind() == token.T_KW_ELSE and n.a != 0 and n.a.kind == ast.N_BINARY {
+                ; "if a < b -1 else 1": without "then", the condition took the value's
+                ; sign for a subtraction.  The last + or - on its right side is the sign.
+                ^^ast.Node parent = 0
+                ^^ast.Node last = n.a
+                ^^ast.Node cut = 0
+                ^^ast.Node cutparent = 0
+                while last != 0 and last.kind == ast.N_BINARY {
+                    if last.op == token.T_MINUS or last.op == token.T_PLUS {
+                        cut = last
+                        cutparent = parent
+                    }
+                    parent = last
+                    last = last.b
+                }
+                if cut != 0 {
+                    ^^ast.Node value = node(ast.N_UNARY)
+                    value.op = cut.op
+                    value.a = cut.b
+                    if cutparent == 0
+                        n.a = cut.a
+                    else
+                        cutparent.b = cut.a
+                    n.b = value
+                }
+                else
+                    n.b = parse_expression()
+            }
+            else
+                n.b = parse_expression()
             skip_eol()
             void expect(token.T_KW_ELSE, "'else' in the if expression")
             skip_eol()
