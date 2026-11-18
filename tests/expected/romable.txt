@@ -10,5 +10,5 @@ ROMable code: this writes into the program: sta p8b_main.p8v_table
 -- a library routine that changes its own code
 ROMable code: this writes into the program: inc x1
 -- a cartridge
-startup code 8009, payload 8017 to 801f, main.start 801f
+startup code 8009, payload 804c to 8054, main.start 8017
 the code for the initial values comes after the main block

@@ -780,7 +780,9 @@ typer {
         while v != 0 {
             uword vt = infer(v)
             if r == 0 {
-                if current_sub != 0
+                ; ("return other()" where neither returns anything is a call and a return)
+                bool call_of_nothing = v.kind == ast.N_CALL and v == n.a and v.next == 0 and (vt == 0 or vt == types.T_VOID)
+                if current_sub != 0 and not call_of_nothing
                     error(v, "too many return values")
             }
             else {
@@ -963,13 +965,42 @@ typer {
             ast.N_INT -> return true, e.value
             ast.N_BOOL -> return true, e.value
             ast.N_ADDROF -> {
-                ; the address of a memory-mapped variable is its constant
-                if e.op != token.T_AMP or e.b != 0 or e.a.kind != ast.N_IDENT
+                ; The address of a memory-mapped variable is its constant; a constant that is
+                ; indexed is an address itself.  With a constant index, the element's address.
+                if e.op != token.T_AMP
                     return false, 0
-                ^^symtab.Sym ms = e.a.extra
-                if ms == 0 or ms.kind != symtab.K_MEMVAR or ms.decl.b == 0
+                bool aok = false
+                quad base = 0
+                quad esize = 1
+                if e.a.kind == ast.N_IDENT {
+                    ^^symtab.Sym ms = e.a.extra
+                    if ms == 0
+                        return false, 0
+                    if ms.kind == symtab.K_MEMVAR and ms.decl.b != 0 {
+                        aok, base = const_eval(ms.decl.b)
+                        if types.is_array(ms.type)
+                            esize = types.size_of(types.index_elem(ms.type))
+                    }
+                    else if ms.kind == symtab.K_CONST and e.b != 0 {
+                        aok, base = const_eval(e.a)
+                        if types.is_pointer(ms.type)
+                            esize = types.size_of(types.index_elem(ms.type))
+                    }
+                }
+                else if e.b != 0
+                    aok, base = const_eval(e.a)
+                if not aok
                     return false, 0
-                return const_eval(ms.decl.b)
+                if e.b == 0
+                    return true, base
+                bool iok
+                quad index
+                iok, index = const_eval(e.b)
+                if not iok
+                    return false, 0
+                if esize == 0
+                    esize = 1
+                return true, base + index * esize
             }
             ast.N_CHAR -> {
                 decode_literal(e)
@@ -1050,11 +1081,38 @@ typer {
             }
             ast.N_CAST -> {
                 ok, a = const_eval(e.a)
-                if not ok
+                if not ok {
+                    ; a constant float made an integer: its whole part
+                    uword into = from_type(e.b)
+                    if into != types.T_FLOAT and types.is_integer(into) and (e.a.kind == ast.N_FLOAT or e.a.type == types.T_FLOAT) and float_eval(e.a) {
+                        if float_value < 0.0
+                            a = 0 - ((0.0 - float_value) as quad)
+                        else
+                            a = float_value as quad
+                        return true, truncate(a, into)
+                    }
                     return false, 0
+                }
                 return true, truncate(a, from_type(e.b))
             }
             ast.N_SIZEOF -> {
+                if e.op == 1 {
+                    ; offsetof: the sizes of the fields before this one (none in a union)
+                    ^^symtab.Sym field = e.a.extra
+                    if field == 0
+                        return false, 0
+                    ^^symtab.Scope fsc = field.scope
+                    if fsc.owner != 0 and fsc.owner.kind == ast.N_UNION
+                        return true, 0
+                    quad before = 0
+                    ^^symtab.Sym fs = fsc.syms
+                    while fs != 0 and fs != field {
+                        if fs.type != 0
+                            before += types.size_of(fs.type)
+                        fs = fs.next
+                    }
+                    return true, before
+                }
                 if e.a.kind == ast.N_TYPE
                     return true, types.size_of(from_type(e.a))
                 if e.a.kind == ast.N_ADDROF
@@ -1505,6 +1563,11 @@ typer {
                 }
                 if e.op == token.T_AMPLT or e.op == token.T_AMPGT
                     return types.T_UWORD
+                if e.b != 0 and vt == types.T_UWORD {
+                    ; &word[i]: the word is an address (a variable or a constant), and so is
+                    ; the element's, a word like it
+                    return types.T_UWORD
+                }
                 return types.ADDRESS_TYPE
             }
             ast.N_MEMREAD -> {
@@ -1512,7 +1575,7 @@ typer {
                 return types.T_UBYTE
             }
             ast.N_SIZEOF -> {
-                if e.a.kind != ast.N_TYPE
+                if e.a.kind != ast.N_TYPE and e.op != 1
                     void infer(e.a)
                 return types.T_UBYTE
             }

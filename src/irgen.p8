@@ -4671,6 +4671,18 @@ irgen {
                 void ir.emit_rsym(chunk, ir.OP_LOAD, ir.T_POINTER, ar, sym_name(s), 0)
                 return ar, ir.T_POINTER
             }
+            symtab.K_CONST -> {
+                ; a constant that is an address the assembler works out (memory(), a string,
+                ; &something): its initializer, wherever the name is used
+                if s.decl != 0 and s.decl.kind == ast.N_VARDECL and s.decl.b != 0 {
+                    uword cr
+                    ubyte ct2
+                    cr, ct2 = expression(s.decl.b)
+                    return convert(cr, ct2, t, false), t
+                }
+                unsupported(e, "identifier kind")
+                return ir.new_reg(t), t
+            }
             else -> {
                 unsupported(e, "identifier kind")
                 return ir.new_reg(t), t
@@ -4683,12 +4695,66 @@ irgen {
         ^^ast.Node target = e.a
         if target.kind == ast.N_IDENT and target.op != resolver.R_FIELDREF and target.extra != 0 {
             ^^symtab.Sym s = target.extra
+            if s.kind == symtab.K_CONST and e.b != 0 {
+                ; &constant[i]: the constant is an address (a number, or a pointer with a type)
+                bool cok
+                quad cbase
+                cok, cbase = typer.const_eval(target)
+                if cok {
+                    long csize = 1
+                    if types.is_pointer(s.type) {
+                        csize = types.size_of(types.index_elem(s.type))
+                        if csize == 0
+                            csize = 1
+                    }
+                    void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_POINTER, r, cbase)
+                    bool iok
+                    quad ci0
+                    iok, ci0 = typer.const_eval(e.b)
+                    if iok {
+                        if ci0 != 0
+                            void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, r, ci0 * csize)
+                    }
+                    else {
+                        uword cxr
+                        ubyte cxt
+                        cxr, cxt = expression(e.b)
+                        cxr = convert(cxr, cxt, ir.T_POINTER, types.is_signed(e.b.type))
+                        if csize > 1
+                            void ir.emit_ri(chunk, scale_op(), address_irt, cxr, csize)
+                        void ir.emit_rr(chunk, ir.OP_ADDR, ir.T_POINTER, r, cxr)
+                    }
+                    return r, ir.T_POINTER
+                }
+            }
             if s.kind == symtab.K_MEMVAR {
                 bool ok
                 quad addr
                 ok, addr = typer.const_eval(s.decl.b)
                 if ok {
                     void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_POINTER, r, addr)
+                    if e.b != 0 {
+                        ; an element of a memory mapped array
+                        long msize = types.size_of(types.index_elem(s.type))
+                        if msize == 0
+                            msize = 1
+                        bool mok
+                        quad mci
+                        mok, mci = typer.const_eval(e.b)
+                        if mok {
+                            if mci != 0
+                                void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, r, mci * msize)
+                        }
+                        else {
+                            uword mxr
+                            ubyte mxt
+                            mxr, mxt = expression(e.b)
+                            mxr = convert(mxr, mxt, ir.T_POINTER, types.is_signed(e.b.type))
+                            if msize > 1
+                                void ir.emit_ri(chunk, scale_op(), address_irt, mxr, msize)
+                            void ir.emit_rr(chunk, ir.OP_ADDR, ir.T_POINTER, r, mxr)
+                        }
+                    }
                     return r, ir.T_POINTER
                 }
             }
@@ -4795,6 +4861,21 @@ irgen {
             if foff != 0
                 void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, pr, foff)
             return pr, ir.T_POINTER
+        }
+        if e.b != 0 {
+            ; &number[i] (a constant that the front end has put its value for)
+            bool nok
+            quad nbase
+            nok, nbase = typer.const_eval(target)
+            if nok {
+                void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_POINTER, r, nbase)
+                uword nxr
+                ubyte nxt
+                nxr, nxt = expression(e.b)
+                nxr = convert(nxr, nxt, ir.T_POINTER, types.is_signed(e.b.type))
+                void ir.emit_rr(chunk, ir.OP_ADDR, ir.T_POINTER, r, nxr)
+                return r, ir.T_POINTER
+            }
         }
         unsupported(e, "address-of operand")
         return r, ir.T_POINTER

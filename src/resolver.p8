@@ -145,11 +145,50 @@ resolver {
     sub lookup(^^ast.Node node) -> ^^symtab.Sym {
         ^^symtab.Sym s = lookup_name(node.name, node)
         if s == 0
+            s = enum_member(node)
+        if s == 0
             error(node, "undefined symbol: ", node.name)
         else
             s.marks |= 1
         node.extra = s
         return s
+    }
+
+    ; offsetof(Struct.field): the struct by all of the name but its last part, the field
+    ; in it by the last
+    sub offsetof_field(^^ast.Node id) {
+        ^^ubyte name = id.name
+        long length = buf.cstr_len(name)
+        long dot = length
+        while dot > 0 and name[dot - 1] != '.'
+            dot--
+        ^^symtab.Sym field = 0
+        if dot > 1 {
+            symtab.prefer_struct = true
+            ^^symtab.Sym st = lookup_name(strtab.intern(name, (dot - 1) as uword), id)
+            symtab.prefer_struct = false
+            if st != 0 and st.kind == symtab.K_STRUCT and st.inner != 0
+                field = symtab.find_in(st.inner, strtab.intern(name + dot, (length - dot) as uword))
+        }
+        if field == 0
+            error(id, "undefined symbol: ", name)
+        id.extra = field
+    }
+
+    ; "name::MEMBER" where name is not the enum's own name in this scope (that is a symbol
+    ; of its own): an alias of an enum, or a path to one
+    sub enum_member(^^ast.Node node) -> ^^symtab.Sym {
+        ^^ubyte name = node.name
+        long length = buf.cstr_len(name)
+        long at = 0
+        while at + 2 < length and not (name[at] == ':' and name[at + 1] == ':')
+            at++
+        if at + 2 >= length or at == 0
+            return 0
+        ^^symtab.Sym owner = lookup_name(strtab.intern(name, at as uword), node)
+        if owner == 0 or owner.kind != symtab.K_ENUM or owner.inner == 0
+            return 0
+        return symtab.find_in(owner.inner, strtab.intern(name + at + 2, (length - at - 2) as uword))
     }
 
     sub lookup_name(^^ubyte name, ^^ast.Node node) -> ^^symtab.Sym {
@@ -488,7 +527,9 @@ resolver {
                 expression(e.b)
             }
             ast.N_SIZEOF -> {
-                if e.a.kind == ast.N_TYPE
+                if e.op == 1
+                    offsetof_field(e.a)
+                else if e.a.kind == ast.N_TYPE
                     type(e.a)
                 else
                     expression(e.a)

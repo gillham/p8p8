@@ -40,6 +40,16 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- A block's assembly, labels, included files and subroutines are written in
+  the order of the source (the block's own chunks used to come first).
+- From upstream's unit tests (`tools/kttests.py`): `offsetof(Struct.field)`;
+  struct types are defined for the assembler (`#size(p8t_Node)`,
+  `#p8t_Node.p8v_value`); `Name::MEMBER` through an alias of an enum; the
+  address of an element of a constant address, of a word that holds one and
+  of a memory mapped array (the last gave the array's address, without the
+  index); constants that are a block of `memory()` or a string;
+  `return other()` between subroutines that return nothing; a constant
+  float cast to an integer is worked out by the compiler.
 - Programs for ROM (`%option romable`): the variables have to be moved to
   RAM and floats are not available, as upstream requires, and the assembler
   now stops when anything in the program, the library's assembly included,

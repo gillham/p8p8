@@ -1350,6 +1350,18 @@ parser {
             void expect(token.T_RPAREN, "')' after the sizeof argument")
             return n
         }
+        if k == token.T_IDENT and kind_at(1) == token.T_LPAREN and strings.compare(cur().text, "offsetof") == 0 {
+            ; offsetof(Struct.field): a sizeof node with op 1; its argument is a path, not an expression
+            n = node(ast.N_SIZEOF)
+            n.op = 1
+            advance()
+            advance()
+            ^^ast.Node field = node(ast.N_IDENT)
+            field.name = take_dotted("struct field")
+            n.a = field
+            void expect(token.T_RPAREN, "')' after the offsetof argument")
+            return n
+        }
         if k >= token.T_AMP and k <= token.T_AMPLT
             return parse_addressof()
         if k == token.T_AT {

@@ -1653,6 +1653,118 @@ gen6502 {
         return name + i
     }
 
+    ; The struct types, for assembly code that asks for a struct's size or a field's
+    ; offset ("#size(p8t_Node)", "#p8t_Node.p8v_value"): as upstream defines them.
+    sub struct_definitions() {
+        ^^ir.Var v = prog.vars
+        bool any = false
+        while v != 0 {
+            if v.kind == ir.V_STRUCT and v.typestr != 0 {
+                if not any
+                    raw("; struct types")
+                any = true
+                ^^ubyte f = v.typestr
+                ; the parameters: one for every field that is not an array
+                put(v.name)
+                put("    .struct ")
+                long at = 0
+                long number = 0
+                while f[at] != 0 {
+                    long stop = at
+                    bool array = false
+                    while f[stop] != 0 and f[stop] != ';' {
+                        if f[stop] == '['
+                            array = true
+                        stop++
+                    }
+                    if not array {
+                        if number != 0
+                            put(",")
+                        put("f")
+                        putn(number)
+                        number++
+                    }
+                    at = stop
+                    if f[at] == ';'
+                        at++
+                }
+                nl()
+                at = 0
+                number = 0
+                while f[at] != 0 {
+                    ; "type name" or "type[n] name"
+                    long space = at
+                    while f[space] != 0 and f[space] != ' ' and f[space] != ';'
+                        space++
+                    long bracket = at
+                    while bracket < space and f[bracket] != '['
+                        bracket++
+                    long fend = space
+                    while f[fend] != 0 and f[fend] != ';'
+                        fend++
+                    put("p8v_")
+                    if f[space] == ' '
+                        buf.add_bytes(w(), f + space + 1, fend - space - 1)
+                    ^^ubyte directive = ".byte"
+                    long size = 1
+                    if buf.bytes_equal(f + at, "byte", 4) {
+                        directive = ".char"
+                    }
+                    else if buf.bytes_equal(f + at, "uword", 5) or buf.bytes_equal(f + at, "pointer", 7) {
+                        directive = ".word"
+                        size = 2
+                    }
+                    else if buf.bytes_equal(f + at, "word", 4) {
+                        directive = ".sint"
+                        size = 2
+                    }
+                    else if buf.bytes_equal(f + at, "long", 4) {
+                        directive = ".dint"
+                        size = 4
+                    }
+                    else if buf.bytes_equal(f + at, "float", 5) {
+                        directive = 0
+                        size = 5
+                    }
+                    if bracket < space {
+                        ; an array: so many bytes, with no value
+                        long count = 0
+                        long d = bracket + 1
+                        while f[d] >= '0' and f[d] <= '9' {
+                            count = count * 10 + (f[d] - '0')
+                            d++
+                        }
+                        put("  .fill ")
+                        putn(count * size)
+                    }
+                    else {
+                        if directive == 0
+                            put("  .fill 5, \\f")
+                        else {
+                            put("  ")
+                            put(directive)
+                            put("  \\f")
+                        }
+                        putn(number)
+                        number++
+                    }
+                    nl()
+                    at = fend
+                    if f[at] == ';'
+                        at++
+                }
+                raw("    .endstruct")
+                put(v.name)
+                put("_size=")
+                putn(v.size)
+                nl()
+            }
+            v = v.next
+        }
+        if any
+            raw("")
+    }
+
     sub global_inits_code() {
         raw("run_global_inits:")
         peep6502.begin(o)
@@ -1679,23 +1791,30 @@ gen6502 {
                 raw("  .block")
             else
                 raw("  .proc")
+            ; the block's own chunks (assembly, labels, included files) and its subroutines,
+            ; in the order of the source: a layout may count on it
             ^^ir.Chunk c = bl.chunks
-            peep6502.begin(o)
-            while c != 0 {
-                if c.label != 0
-                    label(c.label)
-                if c.kind == ir.C_ASM
-                    asm_text(c.text, c.textlen)
-                else
-                    chunk_code(c, 0)
-                c = c.next
-            }
-            peep6502.flush()
             ^^ir.Sub s = bl.subs
-            while s != 0 {
-                if parent_of(bl, s) == 0
+            repeat {
+                while s != 0 and parent_of(bl, s) != 0
+                    s = s.next          ; (a nested one is written with its parent)
+                if c == 0 and s == 0
+                    break
+                if s == 0 or (c != 0 and c.order < s.order) {
+                    peep6502.begin(o)
+                    if c.label != 0
+                        label(c.label)
+                    if c.kind == ir.C_ASM
+                        asm_text(c.text, c.textlen)
+                    else
+                        chunk_code(c, 0)
+                    peep6502.flush()
+                    c = c.next
+                }
+                else {
                     subroutine(bl, s, false)
-                s = s.next
+                    s = s.next
+                }
             }
             if bl.force_output
                 raw("  .bend")
@@ -6124,6 +6243,7 @@ gen6502 {
             nl()
             fk++
         }
+        struct_definitions()
         raw("; variables with initial values")
         ^^ir.Var v = prog.vars
         while v != 0 {

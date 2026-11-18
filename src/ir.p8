@@ -286,6 +286,7 @@ ir {
         ^^Instr last
         ^^ubyte text        ; inline text (C_ASM)
         long textlen
+        long order          ; a block's chunk: its place among the block's chunks and subroutines
         ubyte kind
         bool is_ir          ; inline text is IR, not native assembly
     }
@@ -302,6 +303,7 @@ ir {
     struct Sub {
         ^^Sub next
         ^^ubyte name        ; scoped name
+        long order          ; its place among its block's chunks and subroutines
         ^^Param params
         ^^ubyte returns     ; comma separated IR type strings, or empty
         ^^Chunk chunks
@@ -327,6 +329,7 @@ ir {
         ^^Sub lastsub
         ^^Chunk chunks      ; block level chunks (labels, inline asm)
         ^^Chunk lastchunk
+        long members        ; how many chunks and subroutines it has been given (their order numbers)
         ^^ubyte pos
         ^^ubyte address     ; text or 0
         bool library
@@ -454,6 +457,8 @@ ir {
         s.name = name
         s.pos = pos
         s.returns = ""
+        s.order = b.members
+        b.members++
         if b.lastsub == 0
             b.subs = s
         else
@@ -502,6 +507,8 @@ ir {
     sub add_block_chunk(^^Block b, ^^ubyte label) -> ^^Chunk {
         ^^Chunk c = mem.alloc(sizeof(Chunk))
         c.label = label
+        c.order = b.members
+        b.members++
         if b.lastchunk == 0
             b.chunks = c
         else

@@ -576,7 +576,11 @@ checker {
                 error(n, "const can only be used on numbers, booleans and pointers")
             else if init != 0 and not is_tuple and t != types.T_FLOAT {
                 ok, v = typer.constlike_eval(init)
-                if not ok
+                ; (an address that the assembler knows is constant as well: a block of
+                ; memory() or a string; not &variable, which upstream does not take either)
+                bool address = init.kind == ast.N_STR
+                    or (init.kind == ast.N_CALL and init.a != 0 and init.a.kind == ast.N_IDENT and init.a.name != 0 and strings.compare(init.a.name, "memory") == 0)
+                if not ok and not address
                     error(init, "const declaration needs a compile-time constant initializer value")
             }
         }
