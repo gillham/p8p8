@@ -9,7 +9,7 @@ VARIANT_MARK = 77
 ; the variant's own first lines
     lda  #VARIANT_MARK
 variant_exit:
-p8b_main.p8v_counter = 98
+p8b_main.p8v_counter = 97
 p8b_main.p8v_total = 104
-p8b_main.p8v_wanted = 97
+p8b_main.p8v_wanted = 96
     .cerror prog8_program_end >= $9000, "Program too long by ", prog8_program_end - $8fff, " bytes, memtop=$9000"

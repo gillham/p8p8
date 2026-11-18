@@ -40,6 +40,10 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- `@zp` and `@requirezp` are told apart, as upstream does: what `@requirezp`
+  names is placed first and is an error when it does not fit ("no more
+  free space in ZP"), what `@zp` names is placed when there is room.  Both
+  work for longs, floats and arrays without values, and on parameters.
 - An in-place operation on `@(address)` works the address out once, as
   upstream does: a call in it was made twice.
 - Faster 6502 code for bytes through a pointer with a byte index, sums of

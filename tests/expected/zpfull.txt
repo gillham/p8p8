@@ -1,0 +1,4 @@
+6502 code generator: no more free space in ZP to allocate 80 sequential bytes: p8b_main.p8v_many
+6502 code generator: no more free space in ZP to allocate 80 sequential bytes: p8b_main.p8v_more
+6502 code generator: no more free space in ZP to allocate 4 sequential bytes: p8b_main.p8v_words_lsb
+6502 code generator: no more free space in ZP to allocate 4 sequential bytes: p8b_main.p8v_words_msb

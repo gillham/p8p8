@@ -275,6 +275,7 @@ suites need 64tass, x16emu and VICE as well.
 | `tools/bench68k.sh` | how long small benchmarks take on an Amiga 500 in Copperline, from both compilers |
 | `tools/bench65.sh` | the same benchmarks on a Commander X16 (`x16emu -c816`), from the reference compiler and from p8p8 for the 65C02 and the 65816 |
 | `tools/benchx16.sh` | upstream's benchmark program (ten workloads) on a Commander X16, built by the reference compiler and by p8p8 for the 65C02 and the 65816 |
+| `tools/kttests.py` | the Prog8 programs inside upstream's Kotlin unit tests (`PROG8_SRC` names the checkout), compiled by the reference compiler and by p8p8: where one accepts what the other rejects |
 | `tools/benchp8vi.sh` | the same for one command of a real program, the editor [p8vi](https://github.com/retrodores/p8vi), which it clones; needs a Kickstart 1.3 ROM (`COPPERCMP_ROM`) |
 | `make coppercmp`, `make amigacmpfloat` | upstream's Amiga examples show the same screen from both compilers in the Copperline emulator; the float program prints the same on an Amiga 1200 with an FPU |
 | `make gfxcmp` | programs built by both compilers draw the same in x16emu |

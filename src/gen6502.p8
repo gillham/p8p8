@@ -540,10 +540,24 @@ gen6502 {
 
     ; can this variable live in the zero page, and how large is it?  (0: no)
     sub zp_candidate(^^ir.Var v, bool asked) -> long {
-        if v.kind != ir.V_VAR or v.split or v.zpaddr != 0 or v.align > 1
+        if v.kind != ir.V_VAR or v.zpaddr != 0 or v.align > 1
             return 0
         if v.zp != 0 and strings.compare(v.zp, "NOT_IN_ZEROPAGE") == 0
             return 0
+        if v.split and not asked
+            return 0
+        if asked {
+            ; what the program asks for (@zp, @requirezp): anything whose first value the
+            ; code at the start can give it.  An array without values is cleared there.
+            if starts_with(v.typestr, "str")
+                return 0
+            if array_length(v.typestr) != 0 {
+                if v.init != 0 or var_size(v) > 255
+                    return 0
+                return var_size(v)
+            }
+            return element_size(v.typestr)
+        }
         if array_length(v.typestr) != 0
             return 0
         if v.init != 0 and (v.init[0] == '@' or starts_with(v.typestr, "float"))
@@ -933,6 +947,36 @@ gen6502 {
         ^^ir.Var v = prog.vars
         ^^strtab.Sym s
         long size
+        ; Those that the program wants there come first: what @requirezp names must be
+        ; there (an error when it cannot), what @zp names is there when there is room.
+        ubyte round
+        for round in 0 to 1 {
+            v = prog.vars
+            while v != 0 {
+                bool required = v.zp != 0 and strings.compare(v.zp, "REQUIRE_ZEROPAGE") == 0
+                if zp_wanted(v) and required == (round == 0) and v.zpaddr == 0 and v.kind == ir.V_VAR {
+                    size = zp_candidate(v, true)
+                    if size != 0 {
+                        v.zpaddr = zp_take(size)
+                        if v.zpaddr != 0
+                            zp_count++
+                        else if required {
+                            ; (upstream's words)
+                            buf.clear(nb)
+                            buf.add_str(nb, "no more free space in ZP to allocate ")
+                            buf.add_long(nb, size)
+                            buf.add_str(nb, " sequential bytes")
+                            buf.add_byte(nb, 0)
+                            error(strtab.intern_cstr(nb.data), v.name)
+                        }
+                    }
+                    else if required
+                        error("@requirezp is not supported by this code generator for a variable of this kind (an array or string with values, an aligned one)", v.name)
+                }
+                v = v.next
+            }
+        }
+        v = prog.vars
         ; a few bytes for the temporaries that share them (peep6502.share_cells): each
         ; serves every subroutine, which is more than any variable does
         pool_count = 0
@@ -956,18 +1000,6 @@ gen6502 {
         peep6502.pool_size = pool_count
         interrupt_subroutines()
         own_variables()
-        ; those that ask
-        while v != 0 {
-            if zp_wanted(v) {
-                size = zp_candidate(v, true)
-                if size != 0 {
-                    v.zpaddr = zp_take(size)
-                    if v.zpaddr != 0
-                        zp_count++
-                }
-            }
-            v = v.next
-        }
         ; how often each of the others is named
         v = prog.vars
         while v != 0 {
@@ -1110,6 +1142,16 @@ gen6502 {
     sub zp_initial_values() {
         ^^ir.Var v = prog.vars
         while v != 0 {
+            if v.init == 0 and v.zpaddr != 0 and array_length(v.typestr) != 0 {
+                ; an array in the zero page: cleared, like the ones in the BSS
+                long bytes = var_size(v)
+                ins_imm("ldy", bytes)
+                ins("lda", "#0")
+                anon_label("-")
+                ins("dey", 0)
+                ins_indexed("sta", v.name, 0, 'y')
+                ins("bne", "-")
+            }
             if v.init != 0 and (v.zpaddr != 0 or ram_initialized(v)) {
                 long size = element_size(v.typestr)
                 long k

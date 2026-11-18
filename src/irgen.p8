@@ -539,8 +539,13 @@ irgen {
         while tag != 0 {
             if strings.compare(tag.name, "shared") == 0
                 var.shared = true
-            else if strings.compare(tag.name, "zp") == 0 or strings.compare(tag.name, "requirezp") == 0
+            else if strings.compare(tag.name, "requirezp") == 0
                 var.zp = "REQUIRE_ZEROPAGE"
+            else if strings.compare(tag.name, "zp") == 0 {
+                ; (a wish; @requirezp with it wins)
+                if var.zp == 0 or strings.compare(var.zp, "REQUIRE_ZEROPAGE") != 0
+                    var.zp = "PREFER_ZEROPAGE"
+            }
             else if strings.compare(tag.name, "nozp") == 0
                 var.zp = "NOT_IN_ZEROPAGE"
             else if strings.compare(tag.name, "dirty") == 0

@@ -3,9 +3,10 @@
 # from source, and by p8p8 to IR which prog8c-llvm then turns into a
 # program.  Both run headless in an emulator and what they print is compared.
 #
-# cx16 (the default): x16emu with the KERNAL output echoed.  A program that
-# does not power the machine off is stopped after a few seconds, which is
-# fine as long as both builds were given the same time.
+# cx16 (the default): x16emu with the KERNAL output echoed.  The emulator is
+# stopped when the program has come back to BASIC; a program that never does
+# is stopped after a few seconds, which is fine as long as both builds were
+# given the same time.
 #
 # c64 (EMUCMP_TARGET=c64): VICE's x64sc.  A breakpoint at the exit routine of
 # the program saves the text screen, and those 1000 bytes are compared.  A
@@ -42,8 +43,27 @@ mkdir -p "$work/up" "$work/p8"
 failed=0
 total=0
 run_cx16() {
-    # the program's output, without the emulator's own lines
-    (cd "$1" && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout "$seconds" x16emu $x16cpu -prg "$2.prg" -run -warp -echo iso 2>&1 < /dev/null) | grep -v '^SMC Power Off' > "$1/$2.out"
+    # The program's output, without the emulator's own lines.  The emulator does not end
+    # when the program does: it is stopped when BASIC has said READY. again, or after
+    # the seconds a program gets that never comes back.  (EMUCMP_WAIT=1: always the
+    # full time, as it was.)
+    : > "$1/$2.echo"
+    (cd "$1" && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy exec x16emu $x16cpu -prg "$2.prg" -run -warp -echo iso \
+        > "$2.echo" 2>&1 < /dev/null) &
+    emulator=$!
+    ticks=0
+    while kill -0 $emulator 2> /dev/null && [ $ticks -lt $((seconds * 5)) ]; do
+        if [ -z "$EMUCMP_WAIT" ] && [ "$(tr -d '\000\r' < "$1/$2.echo" | grep -v '^$' | tail -1)" = "READY." ]; then
+            break
+        fi
+        sleep 0.2
+        ticks=$((ticks + 1))
+    done
+    # (x16emu may be a script that starts the emulator: that one first)
+    pkill -P $emulator 2> /dev/null
+    kill $emulator 2> /dev/null
+    wait $emulator 2> /dev/null
+    grep -v '^SMC Power Off' "$1/$2.echo" > "$1/$2.out"
 }
 screen_saved() {
     [ -f "$1" ] && [ "$(wc -c < "$1" | tr -d ' ')" = 1000 ]

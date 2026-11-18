@@ -166,10 +166,16 @@ cells that are not in use at the same time share storage:
 A cell's lifetime is its first line to its last, stretched over a loop it
 is in, unless every use is known to come after its first store.
 
-The rest of the free zero page goes to the variables that gain most:
-those asked for with `@zp`, then by how often they are named, with more
-weight for a pointer that is followed (in the zero page it needs no copy).
-Which zero page bytes are free is the target file's business.
+The zero page is given out in this order: what `@requirezp` names (it is an
+error, in upstream's words, when one does not fit), what `@zp` names (as
+long as there is room), the pool's cells, and then the other variables by
+how often they are named, with more weight for a pointer that is followed
+(in the zero page it needs no copy).  `@nozp` keeps a variable out, and a
+parameter's tags count like a variable's.  Asked for, a variable of any
+size goes there, and an array without values, which the start of the
+program clears; an array or string with values does not (its values would
+have to be copied in), which is an error for `@requirezp`.  Which zero page
+bytes are free is the target file's business.
 
 ### CPUs
 
