@@ -266,8 +266,11 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -check -warnall tests/warnings.p8 2>&1 | diff -u tests/expected/$(TARGET)_warnings.txt -
 	@$(P8P8) -lib lib -check tests/warnings.p8 2>&1 | diff -u /dev/null -
 	@$(P8P8) -lib lib -target c64 -out $(OUT) tests/zpfull.p8 2>&1 | diff -u tests/expected/zpfull.txt -
-	@tests/directivecheck.sh $(P8P8) $(OUT) | diff -u tests/expected/directives.txt -
-	@tests/romcheck.sh $(P8P8) $(OUT) | diff -u tests/expected/romable.txt -
+	@# (these two assemble programs: only where the assembler is)
+	@if command -v 64tass > /dev/null 2>&1; then \
+		tests/directivecheck.sh $(P8P8) $(OUT) | diff -u tests/expected/directives.txt - && \
+		tests/romcheck.sh $(P8P8) $(OUT) | diff -u tests/expected/romable.txt -; \
+	else echo "(no 64tass here: the directive and ROM checks are left out)"; fi
 	@echo "test literals encoding_option"
 	@$(P8P8) -target c64 -encoding iso -types -ast -nopos -nolib tests/encoding_option.p8 | diff -u tests/expected/$(TARGET)_literals_encoding_option.txt -
 	@echo "test option order"

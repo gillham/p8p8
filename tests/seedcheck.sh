@@ -34,6 +34,10 @@ echo "both compile $main" &&
                 "$work/seed/p8c" -lib "${P8P8_LIB:-lib}" -target $target -codegen own -ir -out "$work/a" "$f" > /dev/null 2>&1
                 "$work/ref/p8c" -lib "${P8P8_LIB:-lib}" -target $target -codegen own -ir -out "$work/b" "$f" > /dev/null 2>&1
                 programs=$((programs + 1))
+                # (a program that is not for this machine, its zero page say, is refused by both)
+                if [ ! -f "$work/a/$n.asm" ] && [ ! -f "$work/b/$n.asm" ]; then
+                    continue
+                fi
                 if [ ! -f "$work/a/$n.asm" ] || ! cmp -s "$work/a/$n.asm" "$work/b/$n.asm"; then
                     echo "seed check FAILED: the two compilers write different assembly for $f ($target)"
                     status=1
