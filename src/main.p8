@@ -1234,6 +1234,60 @@ main {
     ^^buf.Buf cmd = 0
 
     ; "dir/name" of the output files, quoted for the shell, into cmd
+    ; %breakpoint: after the labels in the file for VICE's monitor come the commands that
+    ; set a breakpoint at each p8_breakpoint_N, as upstream writes them
+    sub breakpoint_list(^^ubyte name) {
+        ^^buf.Buf path = buf.new(256)
+        if outdir != 0 {
+            buf.add_str(path, outdir)
+            buf.add_byte(path, '/')
+        }
+        buf.add_str(path, name)
+        buf.add_str(path, ".vice-mon-list")
+        buf.add_byte(path, 0)
+        long capacity = 4 * 1024 * 1024
+        ^^ubyte text = mem.alloc(capacity)
+        long length = io_platform.read_file(path.data, text, capacity - 4096)
+        if length <= 0
+            return
+        ^^buf.Buf list = buf.new(1024)
+        buf.add_str(list, "; breakpoint list now follows\n; ")
+        buf.add_long(list, gen6502.breakpoints)
+        buf.add_str(list, " breakpoints have been defined\ndel\n")
+        ; a label's line is "al <address> .<name>"
+        long at = 0
+        while at < length {
+            long stop = at
+            while stop < length and text[stop] != '\n'
+                stop++
+            long k = at
+            bool found = false
+            while k + 14 <= stop {
+                if buf.bytes_equal(text + k, "p8_breakpoint_", 14) {
+                    found = true
+                    break
+                }
+                k++
+            }
+            if found and stop - at > 4 and text[at] == 'a' and text[at + 1] == 'l' and text[at + 2] == ' ' {
+                buf.add_str(list, "break $")
+                k = at + 3
+                while k < stop and text[k] != ' ' {
+                    buf.add_byte(list, text[k])
+                    k++
+                }
+                buf.add_byte(list, '\n')
+            }
+            at = stop + 1
+        }
+        if length + list.len < capacity {
+            long n
+            for n in 0 to list.len - 1
+                text[length + n] = list.data[n]
+            void io_platform.write_file(path.data, text, length + list.len)
+        }
+    }
+
     sub add_output(^^ubyte name, ^^ubyte extension) {
         buf.add_byte(cmd, '"')
         if outdir != 0 {
@@ -1476,6 +1530,8 @@ main {
         }
         run_cmd("building the program")
         built_ext = extension
+        if opt_own and not is_llvm and gen6502.breakpoints != 0
+            breakpoint_list(name)
         if not opt_run
             return
         buf.clear(cmd)

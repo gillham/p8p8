@@ -376,6 +376,7 @@ ir {
         ^^ubyte target
         bool floats
         ^^ubyte options     ; the <OPTIONS> lines after compTarget (output type, launcher, zero page, addresses), or 0 for the defaults
+        long vars_address   ; %varsaddress: where the variables without an initial value go, or -1
     }
 
     ; register types, indexed by register number
@@ -392,6 +393,7 @@ ir {
         p.name = name
         p.target = target
         p.initglobals = mem.alloc(sizeof(Chunk))
+        p.vars_address = -1
         regcount = 0
         instr_count = 0
         chunk_count = 0

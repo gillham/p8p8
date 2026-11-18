@@ -1198,6 +1198,7 @@ gen6502 {
         o = output
         errors = 0
         fconst_count = 0
+        breakpoints = 0
         float_errors = 0
         if nb == 0
             nb = buf.new(256)
@@ -1370,6 +1371,13 @@ gen6502 {
             nl()
             raw("prog8_program_start:")
         }
+        if strings.compare(output_type, "LIBRARY") == 0 {
+            ; A library is not started: whoever loads it calls into it.  It begins with a
+            ; jump to main.start, and main's code (its %jmptable first) comes right after.
+            ins("jmp", "p8b_main.p8s_start")
+            raw("")
+            return
+        }
         ; the startup sequence
         if target.text("startup_code") != 0
             raw(target.text("startup_code"))
@@ -1515,7 +1523,7 @@ gen6502 {
         return name + i
     }
 
-    sub code() {
+    sub global_inits_code() {
         raw("run_global_inits:")
         peep6502.begin(o)
         zp_initial_values()
@@ -1523,6 +1531,13 @@ gen6502 {
         ins("rts", 0)
         peep6502.flush()
         raw("")
+    }
+
+    sub code() {
+        bool library = strings.compare(output_type, "LIBRARY") == 0
+        ; (in a library the blocks come first: its jump table has a fixed place)
+        if not library
+            global_inits_code()
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
             if bl.address != 0 {
@@ -1560,6 +1575,8 @@ gen6502 {
             raw("")
             bl = bl.next
         }
+        if library
+            global_inits_code()
     }
 
     sub asm_text(^^ubyte text, long length) {
@@ -4080,6 +4097,7 @@ gen6502 {
     ; result is only put into its register's cell when the instruction that follows does
     ; not take it from FAC1; a variable or a constant that is loaded only to be the
     ; second operand is used where it is (fuse_floats: scale 249 and 248).
+    long breakpoints = 0            ; the %breakpoint labels written (p8_breakpoint_N)
     uword fac_reg = 0               ; set by the instruction that is being written
     uword fac_prev = 0              ; what the one before it left
     ^^ir.Chunk fchunk = 0
@@ -5207,6 +5225,15 @@ gen6502 {
             ir.OP_POPST -> ins("plp", 0)
             ir.OP_CLC -> ins("clc", 0)
             ir.OP_SEC -> ins("sec", 0)
+            ir.OP_BREAKPOINT -> {
+                ; %breakpoint: a label here, which the driver lists for VICE's monitor
+                breakpoints++
+                buf.clear(nb)
+                buf.add_str(nb, "p8_breakpoint_")
+                buf.add_long(nb, breakpoints)
+                buf.add_byte(nb, 0)
+                label(strtab.intern_cstr(nb.data))
+            }
             ir.OP_SEI -> ins("sei", 0)
             ir.OP_CLI -> ins("cli", 0)
             else -> {
@@ -6114,6 +6141,8 @@ gen6502 {
         ; of their own, which leaves that much more for the program.
         long vars_start = -1
         long vars_end = 0
+        if vars_address < 0
+            vars_address = prog.vars_address        ; (%varsaddress; the command line's goes first)
         if vars_address >= 0 {
             vars_start = vars_address
             vars_end = $ffff

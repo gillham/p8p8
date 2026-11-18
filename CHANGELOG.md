@@ -40,6 +40,13 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- Directives that p8p8's 6502 code generator took no notice of now work as
+  upstream's: `%zpallowed`, `%zpreserved`, `%varsaddress`, `%jmptable` and
+  `%breakpoint` (the breakpoints are listed for VICE's monitor).  `%assert`
+  took any expression with a name in it for not constant.
+- A library (`%output library`) begins with a jump to `main.start`, with
+  `main` and its jump table right after it; it had a program's startup code
+  there.
 - `@zp` and `@requirezp` are told apart, as upstream does: what `@requirezp`
   names is placed first and is an error when it does not fit ("no more
   free space in ZP"), what `@zp` names is placed when there is room.  Both

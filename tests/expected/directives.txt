@@ -1,0 +1,20 @@
+-- the zero page variables, and where the others begin
+p8b_main.p8v_pointer1 = 72
+p8b_main.p8v_pointer2 = 74
+  * = $400
+-- the breakpoint, for VICE's monitor (its address left out)
+; breakpoint list now follows
+; 1 breakpoints have been defined
+del
+break $ADDRESS
+-- a library begins with a jump to main.start, and main with its jump table
+prog8_program_start:
+    jmp  p8b_main.p8s_start
+p8b_main  .proc
+    ; jumptable
+    jmp  p8b_main.p8s_one
+    jmp  p8b_main.p8s_two
+    ; end jumptable
+-- assertions that do not hold
+tests/assertfail.p8:6:5: error: assertion failed: the limit is too low
+tests/assertfail.p8:8:9: error: assertion failed

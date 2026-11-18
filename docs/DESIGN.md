@@ -170,7 +170,8 @@ The zero page is given out in this order: what `@requirezp` names (it is an
 error, in upstream's words, when one does not fit), what `@zp` names (as
 long as there is room), the pool's cells, and then the other variables by
 how often they are named, with more weight for a pointer that is followed
-(in the zero page it needs no copy).  `@nozp` keeps a variable out, and a
+(in the zero page it needs no copy).  `%zpreserved` and `%zpallowed` (the main module's) take bytes out of
+what is free before any of that.  `@nozp` keeps a variable out, and a
 parameter's tags count like a variable's.  Asked for, a variable of any
 size goes there, and an array without values, which the start of the
 program clears; an array or string with values does not (its values would

@@ -1225,6 +1225,11 @@ irgen {
         bool floats = false
         bool no_sysinit = false
         bool romable = false
+        long allowed_first = 0
+        long allowed_last = 255
+        ^^buf.Buf reserved = buf.new(64)
+        bool ok2
+        quad v2
         ^^ubyte opt_floats = strtab.intern_cstr("enable_floats")
         ^^ubyte opt_nosysinit = strtab.intern_cstr("no_sysinit")
         ^^ubyte opt_romable = strtab.intern_cstr("romable")
@@ -1256,6 +1261,28 @@ irgen {
                             if ok
                                 loadaddress = v as long
                         }
+                        else if strings.compare(d.name, "varsaddress") == 0 {
+                            ok, v = typer.const_eval(d.a)
+                            if ok
+                                prog.vars_address = v as long
+                        }
+                        else if (strings.compare(d.name, "zpallowed") == 0 or strings.compare(d.name, "zpreserved") == 0) and d.a.next != 0 {
+                            ; a range of the zero page: the only one the variables may use, or one they may not
+                            ok, v = typer.const_eval(d.a)
+                            ok2, v2 = typer.const_eval(d.a.next)
+                            if ok and ok2 {
+                                if d.name[2] == 'a' {
+                                    allowed_first = v as long
+                                    allowed_last = v2 as long
+                                }
+                                else {
+                                    buf.add_str(reserved, "\nzpReserved=")
+                                    buf.add_long(reserved, v as long)
+                                    buf.add_byte(reserved, ',')
+                                    buf.add_long(reserved, v2 as long)
+                                }
+                            }
+                        }
                         else if strings.compare(d.name, "memtop") == 0 {
                             ok, v = typer.const_eval(d.a)
                             if ok
@@ -1285,7 +1312,12 @@ irgen {
         buf.add_str(ob, launcher)
         buf.add_str(ob, "\nzeropage=")
         buf.add_str(ob, zeropage)
-        buf.add_str(ob, "\nzpAllowed=0,255\nloadAddress=")
+        buf.add_bytes(ob, reserved.data, reserved.len)
+        buf.add_str(ob, "\nzpAllowed=")
+        buf.add_long(ob, allowed_first)
+        buf.add_byte(ob, ',')
+        buf.add_long(ob, allowed_last)
+        buf.add_str(ob, "\nloadAddress=")
         buf.add_str(ob, number_text(loadaddress))
         buf.add_str(ob, "\nmemtop=")
         buf.add_str(ob, number_text(memtop))
@@ -1475,7 +1507,31 @@ irgen {
                         void ir.add_block_chunk(block, sym_name(ls))
                 }
                 ast.N_DIRECTIVE -> {
-                    if strings.compare(s.name, "asminclude") == 0 and s.a != 0 and s.a.kind == ast.N_STR
+                    if strings.compare(s.name, "jmptable") == 0 {
+                        ; %jmptable (a, b, ...): a jump to each of the subroutines, where the directive
+                        ; is.  As assembly text: a table is not code to be improved.
+                        ^^buf.Buf jt = buf.new(128)
+                        buf.add_str(jt, "    ; jumptable\n")
+                        ^^ast.Node entry = s.a
+                        while entry != 0 {
+                            ^^symtab.Sym target_sub = entry.extra
+                            if entry.kind == ast.N_IDENT and target_sub != 0 and target_sub.kind == symtab.K_SUB {
+                                buf.add_str(jt, "    jmp  ")
+                                buf.add_str(jt, sym_name(target_sub))
+                                buf.add_byte(jt, '\n')
+                            }
+                            else
+                                error(entry, "jmptable entry must be a subroutine name")
+                            entry = entry.next
+                        }
+                        buf.add_str(jt, "    ; end jumptable\n")
+                        ^^ir.Chunk jc = ir.add_block_chunk(block, 0)
+                        jc.kind = ir.C_ASM
+                        jc.text = jt.data
+                        jc.textlen = jt.len
+                        jc.is_ir = false
+                    }
+                    else if strings.compare(s.name, "asminclude") == 0 and s.a != 0 and s.a.kind == ast.N_STR
                         include_assembly(s)
                     else if strings.compare(s.name, "asmbinary") == 0 and s.a != 0 and s.a.kind == ast.N_STR
                         include_binary(s)
@@ -2095,7 +2151,11 @@ irgen {
                 ^^ir.Chunk ac = ir.add_asm_chunk(cursub, 0, n.extra, n.value as long, n.name == n_ir)
                 chunk = ir.add_chunk(cursub, 0)
             }
-            ast.N_SUB, ast.N_ASMSUB, ast.N_EXTSUB, ast.N_DIRECTIVE, ast.N_STRUCT, ast.N_UNION, ast.N_ENUM, ast.N_ALIAS -> {
+            ast.N_DIRECTIVE -> {
+                if strings.compare(n.name, "breakpoint") == 0
+                    void ir.emit(chunk, ir.OP_BREAKPOINT, ir.T_NONE, ir.M_NONE)
+            }
+            ast.N_SUB, ast.N_ASMSUB, ast.N_EXTSUB, ast.N_STRUCT, ast.N_UNION, ast.N_ENUM, ast.N_ALIAS -> {
             }
             ast.N_BRANCH -> branchstmt(n)
             ast.N_UNROLL -> unrollstmt(n)

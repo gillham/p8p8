@@ -317,6 +317,17 @@ resolver {
 
     sub statement(^^ast.Node n) {
         when n.kind {
+            ast.N_DIRECTIVE -> {
+                ; the directives whose arguments are expressions with names in them
+                if strings.compare(n.name, "assert") == 0 or strings.compare(n.name, "jmptable") == 0 {
+                    ^^ast.Node da = n.a
+                    while da != 0 {
+                        if da.kind != ast.N_STR
+                            expression(da)
+                        da = da.next
+                    }
+                }
+            }
             ast.N_VARDECL -> {
                 type(n.a)
                 expression(n.b)
