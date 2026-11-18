@@ -40,6 +40,18 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- Found by reading upstream's documentation against p8p8, and put right:
+  `ubyte a, b, c = 42` gave the value to `a` only; `pointer^^.field`
+  followed the pointer twice; the difference of two pointers was in bytes,
+  not elements; an array of two-byte structs was split like a word array;
+  `for x in array step -1` ran forwards; a subroutine with several values
+  that ended without a `return` gave the last call's; enum members above 255
+  were cut to a byte; `value as bool` looked at the low byte only;
+  `sizeof()` of a string variable was a pointer's; a constant without a
+  type is a long.
+- `@alignword`, `@align64` and `@alignpage` were checked and then ignored.
+- The names of structs, blocks, aliases, enums and fields cannot be keywords;
+  an enum needs a member; `%option amiga_chipram` is for the Amigas.
 - A block's assembly, labels, included files and subroutines are written in
   the order of the source (the block's own chunks used to come first).
 - From upstream's unit tests (`tools/kttests.py`): `offsetof(Struct.field)`;

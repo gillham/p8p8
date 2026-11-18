@@ -230,6 +230,8 @@ checker {
                     error(d, "invalid option directive argument(s)")
                 else if level == L_BLOCK and not name_in(arg.name, &block_options, len(block_options))
                     error(d, "using an option that is not valid for blocks")
+                else if strings.compare(arg.name, "amiga_chipram") == 0 and not buf.bytes_equal(target_name, "amiga", 5)
+                    error(d, "amiga_chipram option is only valid on amiga targets")
                 else if level == L_SUB and strings.compare(arg.name, "noframe") != 0
                     error(d, "using an option that is not valid for subroutines")
                 else if level == L_MODULE and not name_in(arg.name, &module_options, len(module_options))
@@ -317,6 +319,7 @@ checker {
 
     sub block(^^ast.Node b) {
         check_name(b, b.name)
+        keyword_name(b, b.name, "block name cannot be a keyword")
         if b.b != 0 and llvm_target {
             begin_message("specific block addresses are not available on the hosted ")
             buf.add_str(parser.scratch, target_name)
@@ -369,8 +372,33 @@ checker {
         loop_depth--
     }
 
+    ; the words of the language (upstream: every lower case word of its grammar)
+    str[] reserved_words = ["alias", "and", "as", "asmsub", "bool", "break", "byte", "call", "clobbers", "const", "continue",
+        "defer", "do", "downto", "else", "enum", "extsub", "false", "float", "for", "goto", "if", "if_cc", "if_cs", "if_eq",
+        "if_mi", "if_ne", "if_neg", "if_nz", "if_pl", "if_pos", "if_vc", "if_vs", "if_z", "in", "inline", "long", "not", "on",
+        "or", "pointer", "private", "public", "quad", "repeat", "return", "sizeof", "step", "str", "struct", "sub", "swap",
+        "then", "to", "true", "ubyte", "union", "unroll", "until", "uquad", "uword", "via", "void", "when", "while", "word", "xor"]
+
+    ; (the grammar lets a few of them be names; upstream then takes those as the name of an
+    ; alias, an enum or a field, and not as the name of a struct or a block)
+    str[] name_words = ["on", "call", "inline", "private", "step"]
+
+    sub keyword_name(^^ast.Node at, ^^ubyte name, str message) {
+        if name != 0 and name_in(name, &reserved_words, len(reserved_words)) {
+            bool strict = message[0] == 'b' or (message[0] == 's' and message[7] == 'n')    ; "block name", "struct name"
+            if strict or not name_in(name, &name_words, len(name_words))
+                error(at, message)
+        }
+    }
+
     sub statement(^^ast.Node n, ubyte level) {
         when n.kind {
+            ast.N_ALIAS -> keyword_name(n, n.name, "alias name cannot be a keyword")
+            ast.N_ENUM -> {
+                keyword_name(n, n.name, "enum name cannot be a keyword")
+                if n.a == 0
+                    error(n, "enumeration must contain at least one member")
+            }
             ast.N_DIRECTIVE -> directive(n, level)
             ast.N_VARDECL -> vardecl(n)
             ast.N_SUB -> {
@@ -895,6 +923,16 @@ checker {
 
     sub struct_decl(^^ast.Node s) {
         check_name(s, s.name)
+        keyword_name(s, s.name, "struct name cannot be a keyword")
+        ^^ast.Node kf = s.a
+        while kf != 0 {
+            ^^ast.Node kn = kf.c
+            while kn != 0 {
+                keyword_name(kn, kn.name, "struct field name cannot be a keyword")
+                kn = kn.next
+            }
+            kf = kf.next
+        }
         if s.a == 0 {
             if s.kind == ast.N_UNION
                 error(s, "union must have at least one field")

@@ -434,6 +434,8 @@ irgen {
         ^^types.Type t = types.get(s.type)
         if t.base != types.T_ARRAY or types.size_of(t.elem) != 2
             return false
+        if types.is_struct(t.elem)
+            return false            ; (struct instances lie one after the other, whatever their size)
         if s.decl != 0 and s.decl.kind == ast.N_VARDECL {
             ^^ast.Node tag = s.decl.d
             while tag != 0 {
@@ -550,6 +552,12 @@ irgen {
                 var.zp = "NOT_IN_ZEROPAGE"
             else if strings.compare(tag.name, "dirty") == 0
                 var.dirty = true
+            else if strings.compare(tag.name, "alignword") == 0
+                var.align = 2
+            else if strings.compare(tag.name, "align64") == 0
+                var.align = 64
+            else if strings.compare(tag.name, "alignpage") == 0
+                var.align = 256
             tag = tag.next
         }
     }
@@ -2014,8 +2022,44 @@ irgen {
         zero_locals(n.c, n.c)
         statements(n.c)
         if not ends_with_return(chunk) {
-            defer_exit()
-            void ir.emit(chunk, ir.OP_RETURN, ir.T_NONE, ir.M_NONE)
+            ^^ast.Node results = 0
+            if subsym != 0
+                results = typer.returns_of(subsym)
+            if results != 0 and results.next != 0 {
+                ; the end is reached without a return: every value is 0 (with one value,
+                ; whatever is in its place is what upstream gives too)
+                ^^ast.Node ret = mem.alloc(sizeof(ast.Node))
+                mem.copy(n, ret, sizeof(ast.Node))
+                ret.kind = ast.N_RETURN
+                ret.next = 0
+                ret.a = 0
+                ret.b = 0
+                ret.c = 0
+                ret.d = 0
+                ^^ast.Node tailv = 0
+                while results != 0 {
+                    ^^ast.Node zero = mem.alloc(sizeof(ast.Node))
+                    mem.copy(ret, zero, sizeof(ast.Node))
+                    zero.kind = ast.N_INT
+                    zero.value = 0
+                    zero.type = typer.return_type(results)
+                    if zero.type == types.T_FLOAT {
+                        zero.kind = ast.N_FLOAT
+                        zero.name = "0.0"
+                    }
+                    if tailv == 0
+                        ret.a = zero
+                    else
+                        tailv.next = zero
+                    tailv = zero
+                    results = results.next
+                }
+                returnstmt(ret)
+            }
+            else {
+                defer_exit()
+                void ir.emit(chunk, ir.OP_RETURN, ir.T_NONE, ir.M_NONE)
+            }
         }
         if defer_count != 0
             gen_invoke_defers(n)
@@ -2465,7 +2509,18 @@ irgen {
             }
             return
         }
-        if n.c.next != 0 and n.b.kind == ast.N_CALL {
+        bool several = false
+        if n.c.next != 0 and n.b.kind == ast.N_CALL and n.b.a != 0 and n.b.a.extra != 0 {
+            ; (a call that gives several values has one for each name)
+            ^^symtab.Sym callee = n.b.a.extra
+            if callee.kind == symtab.K_BUILTIN
+                several = strings.compare(callee.name, "divmod") == 0 or strings.compare(callee.name, "lmh") == 0
+            else {
+                ^^ast.Node crt = typer.returns_of(callee)
+                several = crt != 0 and crt.next != 0
+            }
+        }
+        if several {
             ; uword q, r = divmod(a, b): the names are the targets
             ^^ast.Node id2 = n.c
             while id2 != 0 {
@@ -2479,6 +2534,22 @@ irgen {
         }
         if scope.kind != symtab.S_SUB
             return          ; block variables are initialized data
+        if n.c.next != 0 {
+            ; ubyte a, b, c = value: worked out once, and every name gets it
+            uword vr
+            ubyte vt
+            vr, vt = expression(n.b)
+            ^^ast.Node each = n.c
+            while each != 0 {
+                ^^symtab.Sym es = each.extra
+                if es != 0 {
+                    each.type = es.type
+                    store(each, vr, vt, types.is_signed(n.b.type))
+                }
+                each = each.next
+            }
+            return
+        }
         store_to_ident(n.c, n.b)
     }
 
@@ -3858,6 +3929,7 @@ irgen {
             is_str = true
             et = ir.T_BYTE
             elemsize = 1
+            length = typer.known_length(iter)
         }
         else if iter.kind == ast.N_ARRAYLIT {
             arrname = intern_array(iter, lvt_p8)
@@ -3893,10 +3965,28 @@ irgen {
             unsupported(iter, "for loop over this iterable")
             return
         }
+        ; "step -1": from the last element to the first (the length has to be known)
+        bool backwards = false
+        ^^ast.Node fopt = n.d
+        while fopt != 0 {
+            if fopt.kind == ast.N_FOROPT and fopt.op == token.T_KW_STEP {
+                bool sok
+                quad sv
+                sok, sv = typer.const_eval(fopt.a)
+                if sok and sv == -1 and length != 0
+                    backwards = true
+                else if not sok or sv != 1
+                    unsupported(fopt, "this step over an array or string")
+            }
+            fopt = fopt.next
+        }
         if is_split(arr) {
             ; both halves of each element, by a byte index
             uword six = ir.new_reg(ir.T_BYTE)
-            void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_BYTE, six, 0)
+            if backwards
+                void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_BYTE, six, (length - 1) & 255)
+            else
+                void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_BYTE, six, 0)
             label(top)
             uword smr = ir.new_reg(ir.T_BYTE)
             uword slr = ir.new_reg(ir.T_BYTE)
@@ -3911,9 +4001,17 @@ irgen {
             statements(n.c)
             pop_loop()
             label(next)
-            void ir.emit_r(chunk, ir.OP_INC, ir.T_BYTE, six)
-            void ir.emit_ri(chunk, ir.OP_CMPI, ir.T_BYTE, six, length & 255)
-            void ir.emit_t(chunk, ir.OP_BSTNE, top)
+            if backwards {
+                void ir.emit_ri(chunk, ir.OP_CMPI, ir.T_BYTE, six, 0)
+                void ir.emit_t(chunk, ir.OP_BSTEQ, done)
+                void ir.emit_r(chunk, ir.OP_DEC, ir.T_BYTE, six)
+                jump(top)
+            }
+            else {
+                void ir.emit_r(chunk, ir.OP_INC, ir.T_BYTE, six)
+                void ir.emit_ri(chunk, ir.OP_CMPI, ir.T_BYTE, six, length & 255)
+                void ir.emit_t(chunk, ir.OP_BSTNE, top)
+            }
             label(done)
             return
         }
@@ -3921,11 +4019,14 @@ irgen {
         if split_words and length < 256
             ixt = ir.T_BYTE         ; the 6502 indexes with a byte register
         uword ix = ir.new_reg(ixt)
-        void ir.emit_ri(chunk, ir.OP_LOAD, ixt, ix, 0)
+        if backwards
+            void ir.emit_ri(chunk, ir.OP_LOAD, ixt, ix, length - 1)
+        else
+            void ir.emit_ri(chunk, ir.OP_LOAD, ixt, ix, 0)
         label(top)
         uword er = ir.new_reg(et)
         void ir.emit_rmx(chunk, ir.OP_LOADX, et, er, arrname, 0, ix, elemsize as ubyte)
-        if is_str {
+        if is_str and not backwards {
             void ir.emit_ri(chunk, ir.OP_CMPI, et, er, 0)
             void ir.emit_t(chunk, ir.OP_BSTEQ, done)
         }
@@ -3935,6 +4036,14 @@ irgen {
         statements(n.c)
         pop_loop()
         label(next)
+        if backwards {
+            void ir.emit_ri(chunk, ir.OP_CMPI, ixt, ix, 0)
+            void ir.emit_t(chunk, ir.OP_BSTEQ, done)
+            void ir.emit_r(chunk, ir.OP_DEC, ixt, ix)
+            jump(top)
+            label(done)
+            return
+        }
         void ir.emit_r(chunk, ir.OP_INC, ixt, ix)
         if not is_str {
             void ir.emit_ri(chunk, ir.OP_CMPI, ixt, ix, length)
@@ -4700,6 +4809,34 @@ irgen {
                 return rr, rt
             }
             ast.N_CAST -> {
+                if e.type == types.T_BOOL and e.a.type != types.T_BOOL and e.a.type != 0
+                        and (types.size_of(e.a.type) > 1 or e.a.type == types.T_FLOAT) {
+                    ; anything that is not zero is true: all of the value counts, not its low byte
+                    ^^ast.Node zero = mem.alloc(sizeof(ast.Node))
+                    mem.copy(e, zero, sizeof(ast.Node))
+                    zero.next = 0
+                    zero.a = 0
+                    zero.b = 0
+                    zero.extra = 0
+                    zero.type = e.a.type
+                    if e.a.type == types.T_FLOAT {
+                        zero.kind = ast.N_FLOAT
+                        zero.name = "0.0"
+                    }
+                    else {
+                        zero.kind = ast.N_INT
+                        zero.value = 0
+                    }
+                    ^^ast.Node differs = mem.alloc(sizeof(ast.Node))
+                    mem.copy(e, differs, sizeof(ast.Node))
+                    differs.next = 0
+                    differs.kind = ast.N_BINARY
+                    differs.op = token.T_NE
+                    differs.b = zero
+                    differs.type = types.T_BOOL
+                    rr, rt = binary(differs)
+                    return rr, rt
+                }
                 uword cr
                 ubyte ct
                 cr, ct = expression(e.a)
@@ -5291,6 +5428,22 @@ irgen {
             rr = convert(rr, rt, t, types.is_signed(e.b.type))
         uword bres = binary_op(op, lr, t, rr, rt, t, signed, e)
         ubyte bt = t
+        if op == token.T_MINUS and types.is_pointer(e.a.type) and types.is_pointer(e.b.type) {
+            ; the difference of two pointers counts elements, not bytes
+            long psize = types.size_of(types.elem_of(e.a.type))
+            if psize > 1 {
+                ubyte shift = 0
+                long power = 1
+                while power < psize {
+                    power *= 2
+                    shift++
+                }
+                if power == psize
+                    void ir.emit_ri(chunk, ir.OP_ASRI, t, bres, shift)
+                else
+                    void ir.emit_ri(chunk, ir.OP_DIVS, t, bres, psize)
+            }
+        }
         return bres, bt
     }
 

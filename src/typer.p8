@@ -403,7 +403,15 @@ typer {
                 else
                     s.type = types.T_VOID
             }
-            symtab.K_ENUMMEMBER -> s.type = types.T_UBYTE
+            symtab.K_ENUMMEMBER -> {
+                ; as wide as its number asks
+                s.type = types.T_UBYTE
+                quad number = enum_value(d)
+                if number > 65535 or number < 0
+                    s.type = types.T_LONG
+                else if number > 255
+                    s.type = types.T_UWORD
+            }
             symtab.K_LABEL, symtab.K_BLOCK, symtab.K_STRUCT, symtab.K_ENUM -> s.type = types.T_VOID
         }
     }
@@ -592,8 +600,11 @@ typer {
             return          ; a memory-mapped variable: the initializer is its address, which the checker checks
 
         if s.type == 0 {
-            ; a const without a declared type takes the type of its value
+            ; a const without a declared type takes the type of its value; a whole number
+            ; is a long, as upstream has it (its value still goes wherever it fits)
             s.type = vt
+            if types.is_integer(vt) and not types.is_pointer(vt)
+                s.type = types.T_LONG
             return
         }
         if types.is_array(s.type) {
@@ -1142,6 +1153,8 @@ typer {
                     return false, 0
                 if ss.kind == symtab.K_STRUCT
                     return true, types.struct_size(ss)
+                if ss.type == types.T_STR and ss.kind == symtab.K_VAR and known_length(e.a) != 0
+                    return true, known_length(e.a) + 1      ; (a string variable: its bytes, the zero too)
                 if ss.type != 0
                     return true, types.size_of(ss.type)
                 return false, 0
@@ -1707,8 +1720,13 @@ typer {
             if pt.base == types.T_STRUCT
                 strct = pt.strct
         }
-        else if t.base == types.T_STRUCT
+        else if t.base == types.T_STRUCT {
             strct = t.strct
+            ; pointer^^.field: the field is reached through the pointer itself; taking
+            ; what it points at first and then the field would follow the pointer twice
+            if e.a.kind == ast.N_DEREF and e.a.a != 0 and types.is_pointer(e.a.a.type)
+                e.a = e.a.a
+        }
         if strct == 0 {
             error(e, "field access needs a struct pointer")
             return 0
