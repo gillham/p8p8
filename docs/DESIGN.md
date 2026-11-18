@@ -178,6 +178,15 @@ program clears; an array or string with values does not (its values would
 have to be copied in), which is an error for `@requirezp`.  Which zero page
 bytes are free is the target file's business.
 
+On the C64, the C128 and the PET the library has the virtual registers
+R0-R15 outside the zero page.  When the program has the zero page to itself
+(`%zeropage kernalsafe`, the default, or `full`; not a library, not with
+floats unless the mode is given) they are moved into it, as upstream does,
+so that assembly can use one as a pointer: `irgen.zeropage_registers` gives
+`cx16`'s memory mapped variables new addresses from the target file's
+`virtual_registers_zp` before anything is declared, and those 32 bytes are
+not given to variables.
+
 ### Programs for ROM
 
 With `%option romable` nothing that is written may be in the program.  A

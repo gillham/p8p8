@@ -449,6 +449,8 @@ gen6502 {
             void target.mark_ranges("zp_basicsafe", zp_free, true)
         ; the virtual registers, when the machine has them in the zero page
         long vregs = target.number("virtual_registers", -1)
+        if irgen.vregs_moved_to >= 0
+            vregs = irgen.vregs_moved_to        ; (moved into the zero page for this program)
         if vregs >= 0 and vregs < 256 {
             for k in 0 to 31 {
                 if vregs + k < 256

@@ -655,6 +655,12 @@ typer {
     sub check_array_init(^^ast.Node init, uword arraytype) {
         if init.kind == ast.N_STR or init.kind == ast.N_RANGE
             return          ; a string fills a byte array; a range fills an array with its values
+        if init.kind == ast.N_BINARY and init.op == token.T_STAR and init.a != 0 and init.a.kind == ast.N_ARRAYLIT {
+            ; [6] * 10: the repeated values are the array's elements
+            void infer(init)
+            check_array_init(init.a, arraytype)
+            return
+        }
         if init.kind != ast.N_ARRAYLIT {
             uword it = infer(init)
             if it != 0 and it != arraytype and not (types.is_array(it) and types.elem_of(it) == types.elem_of(arraytype))

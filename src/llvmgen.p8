@@ -3774,7 +3774,15 @@ llvmgen {
             else
                 write_array_init(v.init, et, length)
         }
-        if pointers
+        if v.align > 8 or (v.align > 1 and not pointers) {
+            ; @alignword, @align64, @alignpage
+            emit(", align ")
+            buf.clear(nb)
+            buf.add_long(nb, v.align)
+            buf.add_byte(nb, 0)
+            emit(nb.data)
+        }
+        else if pointers
             emit(", align 8")
         emit("\n")
     }

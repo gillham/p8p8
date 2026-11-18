@@ -91,6 +91,7 @@ irgen {
         else
             address_irt = ir.T_LONG
         ; variables, constants and structs of every scope
+        zeropage_registers()
         declare_scope(symtab.global)
         defer_setup()
         scratch_variables()
@@ -405,6 +406,7 @@ irgen {
                 symtab.K_CONST -> declare_const(s)
                 symtab.K_MEMVAR -> declare_memvar(s)
                 symtab.K_STRUCT -> declare_struct(s)
+                symtab.K_ENUM -> declare_enum(s)
                 symtab.K_BLOCK, symtab.K_SUB -> {
                     if s.inner != 0 and s.inner.owner == s.decl
                         declare_scope(s.inner)
@@ -1037,16 +1039,29 @@ irgen {
         bool sok
         quad ssize
         quad salign
-        sok, ssize = typer.const_eval(a.next)
-        if not sok
-            ssize = 0
-        sok, salign = typer.const_eval(a.next.next)
-        if not sok
-            salign = 0
-        if find_var(slabname) == 0 {
+        ssize = 0
+        salign = 0
+        if a.next != 0 {
+            ; (memory("name") alone names a block that is declared elsewhere)
+            sok, ssize = typer.const_eval(a.next)
+            if not sok
+                ssize = 0
+            if a.next.next != 0 {
+                sok, salign = typer.const_eval(a.next.next)
+                if not sok
+                    salign = 0
+            }
+        }
+        ^^ir.Var known = find_var(slabname)
+        if known == 0 {
             ^^ir.Var slab = ir.add_var(prog, ir.V_SLAB, slabname, "", 0)
             slab.size = ssize as long
             slab.align = salign as long
+        }
+        else if known.size == 0 and ssize != 0 {
+            ; (named before it was given its size)
+            known.size = ssize as long
+            known.align = salign as long
         }
         return slabname
     }
@@ -1194,6 +1209,44 @@ irgen {
         ^^ir.Var c = ir.add_var(prog, ir.V_CONST, sym_name(s), type_string(s.type, 0), valuetext)
     }
 
+    ; An enum's members are constants for assembly code: Enum_MEMBER (p8c_Enum_MEMBER
+    ; where the block's names have prefixes), next to the enum.
+    sub declare_enum(^^symtab.Sym s) {
+        if s.inner == 0
+            return
+        ^^symtab.Sym m = s.inner.syms
+        while m != 0 {
+            if m.kind == symtab.K_ENUMMEMBER and m.decl != 0 {
+                ^^ubyte full = sym_name(m)
+                long cut = buf.cstr_len(full)
+                while cut > 0 and full[cut - 1] != '.'
+                    cut--
+                bool prefixed = buf.bytes_equal(full + cut, "p8c_", 4)
+                ; the scope the enum is in: the name without its last two parts
+                long upto = cut
+                if upto > 0
+                    upto--
+                while upto > 0 and full[upto - 1] != '.'
+                    upto--
+                buf.clear(nb)
+                long k = 0
+                while k < upto {
+                    buf.add_byte(nb, full[k])
+                    k++
+                }
+                if prefixed
+                    buf.add_str(nb, "p8c_")
+                buf.add_str(nb, s.name)
+                buf.add_byte(nb, '_')
+                buf.add_str(nb, m.name)
+                ^^ubyte ename = intern_nb()
+                ^^ubyte etype = type_string(m.type, 0)
+                void ir.add_var(prog, ir.V_CONST, ename, etype, number_text(typer.enum_value(m.decl)))
+            }
+            m = m.next
+        }
+    }
+
     sub declare_memvar(^^symtab.Sym s) {
         if s.type == 0 or s.decl.kind != ast.N_VARDECL or s.decl.b == 0
             return
@@ -1337,6 +1390,73 @@ irgen {
 
     ; The compilation options of a 6502 program, from the directives of its
     ; main module and the target's defaults, as upstream derives them.
+    ; On machines where the library has the virtual registers R0-R15 outside the zero page
+    ; (the C64: $cfe0), upstream moves them into it when the program has the zero page
+    ; to itself (%zeropage kernalsafe, the default, or full), so that assembly code can
+    ; use them as pointers.  The target's file says where (virtual_registers_zp).  It is
+    ; done by giving cx16's memory mapped variables their new addresses.
+    long vregs_moved_to = -1        ; (for the code generator: these bytes are not free)
+
+    sub zeropage_registers() {
+        vregs_moved_to = -1
+        if not target.loaded
+            return
+        long from = target.number("virtual_registers", -1)
+        long into = target.number("virtual_registers_zp", -1)
+        if from < 256 or into < 0
+            return
+        ^^ubyte opt_floats = strtab.intern_cstr("enable_floats")
+        bool kernalsafe = true
+        bool given = false
+        bool floats = false
+        bool library = false
+        if target.text("output_type") != 0 and strings.compare(upper_name(target.text("output_type")), "LIBRARY") == 0
+            library = true
+        ^^importer.Module m = importer.modules
+        bool main_module = true
+        while m != 0 {
+            if symtab.has_option(m.tree.a, opt_floats)
+                floats = true
+            if main_module {
+                ^^ast.Node d = m.tree.a
+                while d != 0 {
+                    if d.kind == ast.N_DIRECTIVE and d.a != 0 and d.a.name != 0 {
+                        if strings.compare(d.name, "zeropage") == 0 {
+                            given = true
+                            kernalsafe = strings.compare(d.a.name, "kernalsafe") == 0 or strings.compare(d.a.name, "full") == 0
+                        }
+                        else if strings.compare(d.name, "output") == 0
+                            library = strings.compare(d.a.name, "library") == 0
+                    }
+                    d = d.next
+                }
+            }
+            main_module = false
+            m = m.next
+        }
+        if library or not kernalsafe or (floats and not given)
+            return
+        ^^symtab.Sym block = symtab.find_in(symtab.global, strtab.intern_cstr("cx16"))
+        if block == 0 or block.inner == 0
+            return
+        ^^symtab.Sym s = block.inner.syms
+        while s != 0 {
+            if s.kind == symtab.K_MEMVAR and s.decl != 0 and s.decl.kind == ast.N_VARDECL and s.decl.b != 0 {
+                bool ok
+                quad at
+                ok, at = typer.const_eval(s.decl.b)
+                if ok and at >= from and at < from + 32 {
+                    s.decl.b.kind = ast.N_INT
+                    s.decl.b.value = into + (at - from)
+                    s.decl.b.a = 0
+                    s.decl.b.b = 0
+                    vregs_moved_to = into
+                }
+            }
+            s = s.next
+        }
+    }
+
     sub program_options() {
         if not target.loaded
             return              ; not a machine with a configuration: the neutral defaults
@@ -1522,6 +1642,26 @@ irgen {
     ; %asminclude "file": the file's text as an assembly chunk of the block.
     ; "library:name" is looked up in the library directory, anything else
     ; next to the source file that includes it.
+    ; (inside a subroutine or an asmsub the text of an include is handed back, not made a
+    ; part of the block)
+    bool include_keep = false
+    ^^ubyte included_text = 0
+    long included_len = 0
+
+    sub included(^^ast.Node d) -> bool {
+        if d.kind != ast.N_DIRECTIVE or d.a == 0 or d.a.kind != ast.N_STR
+            return false
+        included_text = 0
+        included_len = 0
+        include_keep = true
+        if strings.compare(d.name, "asminclude") == 0
+            include_assembly(d)
+        else if strings.compare(d.name, "asmbinary") == 0
+            include_binary(d)
+        include_keep = false
+        return included_text != 0
+    }
+
     sub include_assembly(^^ast.Node d) {
         ^^ubyte name = d.a.name
         ^^buf.Buf pb = buf.new(256)
@@ -1541,6 +1681,11 @@ irgen {
             f = source.load(name)       ; (not beside the source: as it is written, as upstream)
         if f == 0 {
             error(d, "cannot read the included assembly file")
+            return
+        }
+        if include_keep {
+            included_text = f.text
+            included_len = f.len
             return
         }
         ^^ir.Chunk bc = ir.add_block_chunk(block, 0)
@@ -1615,6 +1760,11 @@ irgen {
         buf.add_byte(tb, '\n')
         if types.POINTER_SIZE == 4
             buf.add_str(tb, "    even\n")
+        if include_keep {
+            included_text = tb.data
+            included_len = tb.len
+            return
+        }
         ^^ir.Chunk bc = ir.add_block_chunk(block, 0)
         bc.kind = ir.C_ASM
         bc.text = tb.data
@@ -2240,11 +2390,35 @@ irgen {
         }
         if n.kind == ast.N_ASMSUB {
             ^^ast.Node body = n.c
+            ^^buf.Buf whole = 0
             while body != 0 {
+                ^^ubyte piece = 0
+                long piecelen = 0
                 if body.kind == ast.N_ASM {
-                    s.asmtext = body.extra
+                    piece = body.extra
+                    piecelen = body.value as long
                     s.asm_is_ir = body.name == n_ir
-                    s.asmlen = body.value as long
+                }
+                else if included(body) {
+                    piece = included_text
+                    piecelen = included_len
+                }
+                if piece != 0 {
+                    if s.asmtext == 0 {
+                        s.asmtext = piece
+                        s.asmlen = piecelen
+                    }
+                    else {
+                        ; more than one piece: one after the other
+                        if whole == 0 {
+                            whole = buf.new(s.asmlen + piecelen + 64)
+                            buf.add_bytes(whole, s.asmtext, s.asmlen)
+                        }
+                        buf.add_byte(whole, '\n')
+                        buf.add_bytes(whole, piece, piecelen)
+                        s.asmtext = whole.data
+                        s.asmlen = whole.len
+                    }
                 }
                 body = body.next
             }
@@ -2324,6 +2498,10 @@ irgen {
             ast.N_DIRECTIVE -> {
                 if strings.compare(n.name, "breakpoint") == 0
                     void ir.emit(chunk, ir.OP_BREAKPOINT, ir.T_NONE, ir.M_NONE)
+                else if included(n) {
+                    void ir.add_asm_chunk(cursub, 0, included_text, included_len, false)
+                    chunk = ir.add_chunk(cursub, 0)
+                }
             }
             ast.N_SUB, ast.N_ASMSUB, ast.N_EXTSUB, ast.N_STRUCT, ast.N_UNION, ast.N_ENUM, ast.N_ALIAS -> {
             }
@@ -3684,6 +3862,11 @@ irgen {
         uword cr
         ubyte ct
         cr, ct = expression(n.a)
+        if ct == ir.T_FLOAT {
+            ; "repeat 2.5" is twice
+            cr = convert(cr, ct, ir.T_WORD, false)
+            ct = ir.T_WORD
+        }
         if not ok {
             void ir.emit_ri(chunk, ir.OP_CMPI, ct, cr, 0)
             void ir.emit_t(chunk, ir.OP_BSTEQ, done)
@@ -3736,6 +3919,18 @@ irgen {
         void ir.emit_rm(chunk, ir.OP_LOADM, ir.T_POINTER, cr, vname, 0)
         void ir.emit_ri(chunk, ir.OP_CMPI, ir.T_POINTER, cr, 0)
         void ir.emit_t(chunk, ir.OP_BSTEQ, vdone)
+        ^^ast.Node uopt = n.d
+        while uopt != 0 {
+            if uopt.kind == ast.N_FOROPT and uopt.op == token.T_KW_UNTIL {
+                ; "until node": the walk ends before that one
+                uword ur
+                ubyte ut
+                ur, ut = expression(uopt.a)
+                void ir.emit_rr(chunk, ir.OP_CMP, ir.T_POINTER, cr, convert(ur, ut, ir.T_POINTER, false))
+                void ir.emit_t(chunk, ir.OP_BSTEQ, vdone)
+            }
+            uopt = uopt.next
+        }
         push_loop(vdone, vnext)
         statements(n.c)
         pop_loop()
@@ -5703,6 +5898,20 @@ irgen {
                 bool ok
                 quad cv
                 while v != 0 {
+                    if nt == ir.T_FLOAT {
+                        ; floats compare as floats
+                        uword fvr
+                        ubyte fvt
+                        fvr, fvt = expression(v)
+                        fvr = convert(fvr, fvt, ir.T_FLOAT, true)
+                        uword fcr = ir.new_reg(ir.T_BYTE)
+                        ^^ir.Instr ffc = ir.emit_rrr(chunk, ir.OP_FCOMP, ir.T_FLOAT, fcr, nr, fvr)
+                        ffc.t1 = ir.T_BYTE
+                        void ir.emit_ri(chunk, ir.OP_CMPI, ir.T_BYTE, fcr, 0)
+                        void ir.emit_t(chunk, ir.OP_BSTEQ, found)
+                        v = v.next
+                        continue
+                    }
                     ok, cv = typer.const_eval(v)
                     if ok {
                         void ir.emit_ri(chunk, ir.OP_CMPI, nt, nr, truncate(cv, nt))
@@ -5741,6 +5950,40 @@ irgen {
             }
             if hay.kind == ast.N_IDENT and hay.op != resolver.R_FIELDREF and is_split(hay.extra)
                 number = "$101a"            ; the search through a split word array
+            else if split_words and (et == ir.T_LONG or et == ir.T_FLOAT) {
+                ; the 6502's library has no search for these: a loop over the elements
+                long count = typer.known_length(hay)
+                ^^ubyte sfound = new_label()
+                ^^ubyte sdone = new_label()
+                ^^ubyte stop = new_label()
+                uword want = convert(nr, nt, et, types.is_signed(needle.type))
+                if count > 0 {
+                    uword left = ir.new_reg(ir.T_WORD)
+                    void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_WORD, left, count)
+                    label(stop)
+                    uword elem = ir.new_reg(et)
+                    void ir.emit_rp(chunk, ir.OP_LOADI, et, elem, hr, 0)
+                    if et == ir.T_FLOAT {
+                        uword scr = ir.new_reg(ir.T_BYTE)
+                        ^^ir.Instr sfc = ir.emit_rrr(chunk, ir.OP_FCOMP, ir.T_FLOAT, scr, want, elem)
+                        sfc.t1 = ir.T_BYTE
+                        void ir.emit_ri(chunk, ir.OP_CMPI, ir.T_BYTE, scr, 0)
+                    }
+                    else
+                        void ir.emit_rr(chunk, ir.OP_CMP, et, want, elem)
+                    void ir.emit_t(chunk, ir.OP_BSTEQ, sfound)
+                    void ir.emit_ri(chunk, ir.OP_ADD, ir.T_POINTER, hr, types.size_of(types.elem_of(hay.type)))
+                    void ir.emit_r(chunk, ir.OP_DEC, ir.T_WORD, left)
+                    void ir.emit_ri(chunk, ir.OP_CMPI, ir.T_WORD, left, 0)
+                    void ir.emit_t(chunk, ir.OP_BSTNE, stop)
+                }
+                void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_BYTE, res, 0)
+                jump(sdone)
+                label(sfound)
+                void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_BYTE, res, 1)
+                label(sdone)
+                return res
+            }
             uword lr = ir.new_reg(ir.T_WORD)
             void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_WORD, lr, typer.known_length(hay))
             sc = ir.emit_syscall(chunk, number)
@@ -6413,6 +6656,16 @@ irgen {
                     res = convert(r, at, t, false)
                 return res, t
             }
+            if name[0] == 'm' and plain(at) == ir.T_QUAD {
+                ; of 64 bits: the top byte or word (the instruction below knows 32)
+                uword top = ir.new_reg(ir.T_QUAD)
+                void ir.emit_rr(chunk, ir.OP_LOADR, ir.T_QUAD, top, r)
+                if name[2] == 'w'
+                    void ir.emit_ri(chunk, ir.OP_LSRI, ir.T_QUAD, top, 48)
+                else
+                    void ir.emit_ri(chunk, ir.OP_LSRI, ir.T_QUAD, top, 56)
+                return convert(top, ir.T_QUAD, t, false), t
+            }
             ubyte op = ir.OP_LSIGB
             if name[0] == 'm' {
                 op = ir.OP_MSIGB
@@ -6554,7 +6807,53 @@ irgen {
             inplace(a, rop, mop)
             return 0, ir.T_BYTE
         }
-        if name[0] == 'p' and (name[1] == 'u' or name[1] == 'o') {
+        if strings.compare(name, "rsave") == 0 or strings.compare(name, "rrestore") == 0 {
+            ; the status register on the stack, and back (what upstream's 6502 code does)
+            if name[1] == 's'
+                void ir.emit(chunk, ir.OP_PUSHST, ir.T_NONE, ir.M_NONE)
+            else
+                void ir.emit(chunk, ir.OP_POPST, ir.T_NONE, ir.M_NONE)
+            return 0, ir.T_BYTE
+        }
+        if strings.compare(name, "setlsb") == 0 or strings.compare(name, "setmsb") == 0 {
+            ; one byte of a word or long variable: the lowest, or the highest
+            r, at = expression(a)
+            ubyte wide = plain(at)
+            ubyte shift = 0
+            if name[3] == 'm' {
+                shift = 8
+                if wide == ir.T_LONG
+                    shift = 24
+            }
+            quad bytemask = $ff00
+            if shift == 8 and wide == ir.T_WORD
+                bytemask = $00ff
+            else if shift == 8
+                bytemask = $ffff00ff
+            else if shift == 24
+                bytemask = $00ffffff
+            else if wide == ir.T_LONG
+                bytemask = $ffffff00
+            void ir.emit_ri(chunk, ir.OP_AND, wide, r, bytemask)
+            r2, at2 = expression(a.next)
+            r2 = convert(convert(r2, at2, ir.T_BYTE, false), ir.T_BYTE, wide, false)
+            if shift != 0
+                void ir.emit_ri(chunk, ir.OP_LSLI, wide, r2, shift)
+            void ir.emit_rr(chunk, ir.OP_ORR, wide, r, r2)
+            store(a, r, wide, false)
+            return 0, ir.T_BYTE
+        }
+        if strings.compare(name, "pokemon") == 0 {
+            ; like poke, and what was there before is the result
+            r, at = expression(a)
+            r = convert(r, at, ir.T_POINTER, false)
+            uword before = ir.new_reg(ir.T_BYTE)
+            void ir.emit_rp(chunk, ir.OP_LOADI, ir.T_BYTE, before, r, 0)
+            r2, at2 = expression(a.next)
+            void ir.emit_rp(chunk, ir.OP_STOREI, ir.T_BYTE, convert(r2, at2, ir.T_BYTE, false), r, 0)
+            return before, ir.T_BYTE
+        }
+        if name[0] == 'p' and (name[1] == 'u' or name[1] == 'o') and (name[2] == 's' or name[2] == 'p') {
             ; push/pop with a type letter suffix: push, pushw, pushl, pushq, pop, popw, popl, popq
             ubyte st = ir.T_BYTE
             ubyte last = name[3]
@@ -6657,6 +6956,23 @@ irgen {
             c3, ct = expression(ca.next.next)
             c3 = convert(c3, ct, t, types.is_signed(ca.next.next.type))
             uword cres = ir.new_reg(t)
+            if t == ir.T_LONG and split_words {
+                ; the 6502's library clamps bytes and words: a long by comparing
+                ^^ubyte clow = new_label()
+                ^^ubyte chigh = new_label()
+                ^^ubyte cdone = new_label()
+                void ir.emit_rrt(chunk, reg_branch_op(token.T_GT, true), t, c2, c1, clow)
+                void ir.emit_rrt(chunk, reg_branch_op(token.T_GT, true), t, c1, c3, chigh)
+                void ir.emit_rr(chunk, ir.OP_LOADR, t, cres, c1)
+                jump(cdone)
+                label(clow)
+                void ir.emit_rr(chunk, ir.OP_LOADR, t, cres, c2)
+                jump(cdone)
+                label(chigh)
+                void ir.emit_rr(chunk, ir.OP_LOADR, t, cres, c3)
+                label(cdone)
+                return cres, t
+            }
             ^^ir.Instr csys = ir.emit_syscall(chunk, cnum)
             ir.add_arg(csys, ir.new_arg(0, c1, t))
             ir.add_arg(csys, ir.new_arg(0, c2, t))

@@ -60,6 +60,15 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
 
 ## The code that is generated
 
+- **Where R0-R15 are in the C64's and C128's zero page.**  Both compilers
+  move the virtual registers into the zero page with `%zeropage kernalsafe`
+  and `full`.  Upstream puts them at `$04` (C64) and `$0a` (C128), where
+  they share two bytes with the scratch pointer its own code uses; p8p8
+  puts them at `$06` and `$0d`.  Code that names them (`cx16.r0`) does not
+  see the difference.
+- **A defer inside a defer** is an error.  Upstream accepts it and never
+  runs the inner one.
+
 - **A different code generator.**  For the 6502, p8p8 does not use upstream's
   code generator or its output.  It translates the IR one instruction at a
   time and improves the result with its own passes ([DESIGN.md](DESIGN.md)).

@@ -299,6 +299,23 @@ checker {
             bool ok
             quad v
             ok, v = typer.const_eval(arg)
+            if not ok and arg.kind == ast.N_BINARY and arg.a != 0 and arg.b != 0 and typer.float_eval(arg.a) {
+                ; a comparison of floating point constants
+                float left = typer.float_value
+                if typer.float_eval(arg.b) {
+                    float right = typer.float_value
+                    ok = true
+                    when arg.op {
+                        token.T_EQ -> v = (left == right) as ubyte
+                        token.T_NE -> v = (left != right) as ubyte
+                        token.T_LT -> v = (left < right) as ubyte
+                        token.T_GT -> v = (left > right) as ubyte
+                        token.T_LE -> v = (left <= right) as ubyte
+                        token.T_GE -> v = (left >= right) as ubyte
+                        else -> ok = false
+                    }
+                }
+            }
             if not ok
                 error(arg, "assert expression is not a compile-time constant")
             else if v == 0 {
@@ -334,15 +351,6 @@ checker {
             when s.kind {
                 ast.N_ALIAS, ast.N_DIRECTIVE, ast.N_LABEL, ast.N_VARDECL, ast.N_SUB, ast.N_ASMSUB, ast.N_EXTSUB,
                 ast.N_STRUCT, ast.N_UNION, ast.N_ENUM, ast.N_ASM, ast.N_REMOVED -> ok = true
-                ast.N_ASSIGN -> {
-                    ; only the initialization of the variable declared just before it
-                    ok = false
-                    if prev != 0 and prev.kind == ast.N_VARDECL and s.a.next == 0 and s.a.kind == ast.N_IDENT {
-                        ^^symtab.Sym ts = s.a.extra
-                        if ts != 0 and ts.decl == prev
-                            ok = true
-                    }
-                }
                 else -> ok = false
             }
             if not ok and not bad {
@@ -1346,7 +1354,11 @@ checker {
                     buf.add_byte(parser.scratch, ')')
                     error_scratch(n)
                 }
+                else if n.a.kind == ast.N_IDENT
+                    error(n, "cannot assign arrays directly. Maybe use sys.memcopy instead.")
             }
+            else if tt != 0 and types.is_array(tt) and n.a.kind == ast.N_IDENT and value.kind == ast.N_ARRAYLIT
+                error(n, "cannot assign arrays directly. Maybe use sys.memcopy instead.")
         }
         ; a call's values and the targets they go to: as many of each
         if value.kind == ast.N_CALL and value.a.extra != 0 {

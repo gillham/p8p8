@@ -146,6 +146,9 @@ directory `p8c` is in; `lib/` of the repository for one in `build/`);
 and of that library.  Run `p8c` without arguments
 for the list of options.
 
+`p8c -h` (or `-help`) lists the options.  `-target llvm` is another name
+for `-target llvm64`.
+
 For a 6502 machine the program is built with p8p8's own code generator and
 64tass.  `-codegen upstream` hands p8p8's IR to `prog8c-llvm` instead (for a
 68000 machine too), and `-ir` only writes the IR.

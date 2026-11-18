@@ -40,6 +40,24 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- More from upstream's documentation.  New: `setlsb`, `setmsb`, `rsave`,
+  `rrestore`, `memory("name")` alone, `for ... via .field until node` and
+  such a loop without a declared variable, `%asminclude` and `%asmbinary`
+  inside a subroutine or as all of an asmsub, an enum's members for
+  assembly (`p8c_Enum_MEMBER`), `[6] * 10` for an array of words, floats in
+  `%assert`, `repeat 2.5`, `clamp` of a long and `in` with an array of
+  longs or floats for the 6502, `-h`, `-help`, `-target llvm`.
+- Put right: `pokemon()` was compiled as `pop()`; `msb()` and `msw()` of a
+  64-bit value took the top of the low half; `float in [1.0, 3.5]` compared
+  whole numbers; `@align64` and the other alignment tags were not applied
+  to every array on the hosted targets; `monogfx` did not build (a
+  subroutine's `@shared` array that only a nested subroutine's assembly
+  names was dropped).
+- On the C64, C128 and PET the virtual registers R0-R15 are in the zero
+  page with `%zeropage kernalsafe` and `full`, as upstream has them, so
+  assembly can use `(cx16.r0),y`.
+- Refused now, as upstream does: a statement in a block outside any
+  subroutine, and the assignment of one array to another.
 - Follows Prog8 master at df16719e7 and the LLVM branch at e261d6c6d: `petgfx`
   with drawing modes, `clear_screen` and `line`, on the X16 as well; the Amiga
   `sprites` module; the Amiga `text` module is `gfxtext` now.

@@ -162,7 +162,13 @@ main {
                 opt_version = true
             else if strings.compare(arg, "-target") == 0 and value != 0 {
                 opt_target = value
+                if strings.compare(value, "llvm") == 0
+                    opt_target = "llvm64"       ; (upstream's other name for it)
                 i++
+            }
+            else if strings.compare(arg, "-h") == 0 or strings.compare(arg, "-help") == 0 or strings.compare(arg, "--help") == 0 {
+                usage_status = 0        ; (asked for: not a mistake)
+                usage()
             }
             else if strings.compare(arg, "-cpu") == 0 and value != 0 {
                 ; the CPU to write 6502 code for, whatever the target's file says: 6502, 65c02, 65816
@@ -560,6 +566,8 @@ main {
         return program_found
     }
 
+    ubyte usage_status = 1
+
     sub usage() {
         out.puts("usage: p8c [options] file.p8 ...")
         out.nl()
@@ -647,7 +655,9 @@ main {
         out.nl()
         out.puts("  -noopt         with -codegen own: every IR instruction translated by itself, no value tracking")
         out.nl()
-        out.exit(1)
+        out.puts("  -h, -help      this text")
+        out.nl()
+        out.exit(usage_status)
     }
 
     sub compile_file(str path) {

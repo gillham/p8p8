@@ -98,8 +98,22 @@ resolver {
         if s.kind == symtab.K_VAR or s.kind == symtab.K_MEMVAR or s.kind == symtab.K_FIELD {
             if s.decl.kind == ast.N_VARDECL
                 t = s.decl.a
-            else if s.decl.kind == ast.N_FOR
+            else if s.decl.kind == ast.N_FOR {
                 t = s.decl.d
+                if (t == 0 or t.kind != ast.N_TYPE) and s.decl.b != 0 and s.decl.b.kind == ast.N_IDENT and s.decl.b.extra != 0 {
+                    ; "for node in head via .next" without a declaration: the variable is a
+                    ; pointer like the one the walk starts from
+                    ^^ast.Node fo = s.decl.d
+                    while fo != 0 {
+                        if fo.kind == ast.N_FOROPT and fo.op == token.T_KW_VIA {
+                            ^^symtab.Sym start = s.decl.b.extra
+                            if start != s
+                                return pointee_struct(start)
+                        }
+                        fo = fo.next
+                    }
+                }
+            }
         }
         else if s.kind == symtab.K_PARAM
             t = s.decl.a

@@ -85,7 +85,10 @@ irprune {
         return length > 10 and strings.compare(name + length - 10, ".x16jsrfar") == 0
     }
 
+    ^^ir.Program pruned = 0
+
     sub run(^^ir.Program p) {
+        pruned = p
         removed_subs = 0
         removed_vars = 0
         kept_subs = 0
@@ -283,6 +286,17 @@ irprune {
         }
         if s.asmtext != 0
             scan_text(s.asmtext, s.asmlen, blockname, s.name)
+        ; its @shared variables stay with it: assembly may name them from anywhere, a
+        ; subroutine nested in this one for instance
+        if pruned != 0 {
+            long slen = buf.cstr_len(s.name)
+            ^^ir.Var sv = pruned.vars
+            while sv != 0 {
+                if sv.shared and buf.cstr_len(sv.name) > slen + 1 and sv.name[slen] == '.' and buf.bytes_equal(sv.name, s.name, slen)
+                    mark_cstr(sv.name)
+                sv = sv.next
+            }
+        }
         ^^ir.Chunk c = s.chunks
         while c != 0 {
             scan_chunk(c, blockname, s.name)
