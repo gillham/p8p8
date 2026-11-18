@@ -48,8 +48,9 @@ main {
         txt.print_ubhex(h, false)
         txt.print_ubhex(l, false)
         txt.spc()
-        @($0400) = -100
-        txt.print_ub(@($0400))
+        ubyte[2] @shared cell      ; (not a fixed address: the program runs on the host too)
+        @(&cell) = -100
+        txt.print_ub(@(&cell))
         txt.nl()
     }
 

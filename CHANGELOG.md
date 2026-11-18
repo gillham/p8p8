@@ -40,6 +40,9 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- Follows Prog8 master at df16719e7 and the LLVM branch at e261d6c6d: `petgfx`
+  with drawing modes, `clear_screen` and `line`, on the X16 as well; the Amiga
+  `sprites` module; the Amiga `text` module is `gfxtext` now.
 - Found by reading upstream's documentation against p8p8, and put right:
   `ubyte a, b, c = 42` gave the value to `a` only; `pointer^^.field`
   followed the pointer twice; the difference of two pointers was in bytes,
