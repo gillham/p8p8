@@ -55,13 +55,31 @@ irprune {
     }
 
     ; (the reset routine of the startup code, and the far call routine)
+    bool long_to_float = false
+
+    sub converts_long_in(^^ir.Chunk c) {
+        while c != 0 {
+            if c.kind != ir.C_ASM {
+                ^^ir.Instr i = c.first
+                while i != 0 {
+                    if i.op == ir.OP_FFROMSL
+                        long_to_float = true
+                    i = i.next
+                }
+            }
+            c = c.next
+        }
+    }
+
     sub runtime_sub(^^ubyte name) -> bool {
         if strings.compare(name, "sys.reset_system") == 0
             return true
         ; (the conversions to a float that are asmsubs)
         if strings.compare(name, "floats.FREADUY") == 0 or strings.compare(name, "floats.FREADSA") == 0
                 or strings.compare(name, "floats.GIVUAYFAY") == 0 or strings.compare(name, "floats.GIVAYFAY") == 0
-                or strings.compare(name, "floats.internal_long_AY_to_FAC") == 0
+            return true
+        ; (a long made a float: only a program that does that needs the routine)
+        if long_to_float and strings.compare(name, "floats.internal_long_AY_to_FAC") == 0
             return true
         long length = buf.cstr_len(name)
         return length > 10 and strings.compare(name + length - 10, ".x16jsrfar") == 0
@@ -74,6 +92,18 @@ irprune {
         kept_vars = 0
         if scratch == 0
             scratch = buf.new(256)
+        long_to_float = false
+        converts_long_in(p.initglobals)
+        ^^ir.Block cb = p.blocks
+        while cb != 0 {
+            converts_long_in(cb.chunks)
+            ^^ir.Sub cs = cb.subs
+            while cs != 0 {
+                converts_long_in(cs.chunks)
+                cs = cs.next
+            }
+            cb = cb.next
+        }
         build_table(p)
         ^^Entry entry = find_cstr("main.start")
         if entry == 0
