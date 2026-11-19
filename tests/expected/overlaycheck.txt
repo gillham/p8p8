@@ -12,6 +12,10 @@ banks.prg
 words.non
 words.prg
 1296 14677 33340 8616
+-- subs, 65c02
+subs.non
+subs.prg
+HELLO 42 54 REPORT 4 20 12 210
 -- overlays, 65816
 overlays.non
 overlays.prg
@@ -26,6 +30,10 @@ banks.prg
 words.non
 words.prg
 1296 14677 33340 8616
+-- subs, 65816
+subs.non
+subs.prg
+HELLO 42 54 REPORT 4 20 12 210
 -- overlays, c64 with an REU
 overlays.non
 overlays.prg
@@ -36,6 +44,10 @@ MAIN FIRST 42 SECOND FIRST 1238 2
 words.non
 words.prg
 1296 14677 33340 8616
+-- subs, c64 with an REU
+subs.non
+subs.prg
+HELLO 42 54 REPORT 4 20 12 210
 -- overlays, c128 with an REU
 overlays.non
 overlays.prg
@@ -46,6 +58,10 @@ MAIN FIRST 42 SECOND FIRST 1238 2
 words.non
 words.prg
 1296 14677 33340 8616
+-- subs, c128 with an REU
+subs.non
+subs.prg
+HELLO 42 54 REPORT 4 20 12 210
 -- overlays, mega65, 45gs02
 overlays.non
 overlays.prg
@@ -56,6 +72,10 @@ MAIN FIRST 42 SECOND FIRST 1238 2
 words.non
 words.prg
 1296 14677 33340 8616
+-- subs, mega65, 45gs02
+subs.non
+subs.prg
+HELLO 42 54 REPORT 4 20 12 210
 -- overlays, mega65, 6502
 overlays.non
 overlays.prg
@@ -66,5 +86,9 @@ MAIN FIRST 42 SECOND FIRST 1238 2
 words.non
 words.prg
 1296 14677 33340 8616
+-- subs, mega65, 6502
+subs.non
+subs.prg
+HELLO 42 54 REPORT 4 20 12 210
 -- overlays, for a machine without them (pet32): one program
 overlays.prg

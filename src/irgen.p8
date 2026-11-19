@@ -2241,6 +2241,12 @@ irgen {
         loop_depth = 0
         cursub = ir.add_sub(block, sym_name(ss), pos_text(n))
         crumb.name = cursub.name
+        ^^ast.Node od = n.c
+        while od != 0 {
+            if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0
+                cursub.overlay = od.a.value as ubyte
+            od = od.next
+        }
         ; (on the llvm targets a subroutine uses the register numbers of the ones before
         ; it again: ir.new_reg)
         ^^uword numbers_before = ir.begin_numbers()

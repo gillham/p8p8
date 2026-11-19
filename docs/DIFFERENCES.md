@@ -212,7 +212,8 @@ Options are upstream's where both have them, with one dash or two.
 
 ## Overlays
 
-`%overlay n` in a block puts the block's code into overlay n: code that is
+`%overlay n` in a block puts the block's code into overlay n (in a
+subroutine: that subroutine's): code that is
 kept outside main memory and is only there while it runs (a RAM bank of the
 Commander X16, a RAM Expansion Unit on the C64 and C128, memory beyond
 64 KB on the MEGA65).  The block's variables, strings and arrays stay in

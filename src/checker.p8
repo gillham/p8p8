@@ -363,9 +363,10 @@ checker {
                 error(d, "start and end addresss must be in Zeropage so 0..255")
         }
         else if strings.compare(nm, "overlay") == 0 {
-            ; (p8p8's own: the block's code goes into that overlay, on a machine that has them)
-            if level != L_BLOCK
-                error(d, "%overlay may only occur in a block")
+            ; (p8p8's own: the code of the block, or of the one subroutine, goes into that
+            ; overlay on a machine that has them)
+            if level == L_MODULE
+                error(d, "%overlay may only occur in a block or in a subroutine")
             else if nargs != 1 or arg.kind != ast.N_INT or arg.value < 1 or arg.value > 255
                 error(d, "invalid overlay directive, expected a number from 1 to 255")
         }

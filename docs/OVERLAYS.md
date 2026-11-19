@@ -54,6 +54,30 @@ back.
 Several blocks may share a number; they are then in the same overlay and
 call each other at no extra cost.  The `main` block cannot be in an overlay.
 
+### One subroutine
+
+`%overlay n` can also stand in a subroutine, and then only that subroutine
+goes into the overlay:
+
+```prog8
+main {
+    sub start() {
+        ...
+    }
+
+    sub substitute() {
+        %overlay 3
+        ...
+    }
+}
+```
+
+That is the way to move code out of `main`, or to take one large
+subroutine out of a block (which may itself be in another overlay).
+Subroutines declared inside it go with it.  `main.start` stays in main
+memory.  Blocks are the tidier unit: what belongs together is together, and
+calls between its subroutines cost nothing extra.
+
 ## Building and running
 
 ```

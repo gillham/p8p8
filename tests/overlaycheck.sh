@@ -16,7 +16,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_overlay.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
 for cpu in 65c02 65816; do
-    for program in overlays banks words; do
+    for program in overlays banks words subs; do
         echo "-- $program, $cpu"
         rm -rf "$work/$program"
         mkdir -p "$work/$program"
@@ -27,6 +27,7 @@ for cpu in 65c02 65816; do
         emulator=$!
         n=0
         while [ $n -lt "$seconds" ]; do n=$((n + 1)); /bin/sleep 1; done
+        pkill -P $emulator 2> /dev/null     # (an emulator that is started by a script of its own)
         kill $emulator 2> /dev/null
         wait $emulator 2> /dev/null
         tr -d '\000\r' < "$work/$program/screen.txt" | sed 's/\\X[0-9A-F][0-9A-F]//g' \
@@ -37,7 +38,7 @@ done
 for machine in c64 c128; do
     emulator_name=x64sc
     [ $machine = c128 ] && emulator_name=x128
-    for program in overlays words; do
+    for program in overlays words subs; do
         echo "-- $program, $machine with an REU"
         rm -rf "$work/$program"
         mkdir -p "$work/$program"
@@ -51,6 +52,7 @@ for machine in c64 c128; do
         emulator=$!
         n=0
         while [ $n -lt 60 ] && [ ! -s "$work/$program/screen.bin" ]; do n=$((n + 1)); /bin/sleep 1; done
+        pkill -P $emulator 2> /dev/null     # (an emulator that is started by a script of its own)
         kill $emulator 2> /dev/null
         wait $emulator 2> /dev/null
         python3 - "$work/$program/screen.bin" <<'PY'
@@ -61,14 +63,14 @@ if not os.path.exists(sys.argv[1]):
 data = open(sys.argv[1], 'rb').read()
 for row in range(0, len(data), 40):
     line = ''.join(chr((c & 0x7f) + 0x40) if (c & 0x7f) < 0x20 else chr(c & 0x7f) for c in data[row:row + 40]).rstrip()
-    if line and (line[0].isdigit() or line.startswith(('MAIN', '?'))):
+    if line and (line[0].isdigit() or line.startswith(('MAIN', 'HELLO', '?'))):
         print(line)
 PY
     done
 done
 # the MEGA65: overlays in memory beyond 64 KB, brought in by DMA; the file on a disk image
 for cpu in 45gs02 6502; do
-    for program in overlays words; do
+    for program in overlays words subs; do
         echo "-- $program, mega65, $cpu"
         rm -rf "$work/$program"
         mkdir -p "$work/$program"
@@ -77,7 +79,7 @@ for cpu in 45gs02 6502; do
         (cd "$work/$program" && c1541 -format "overlays,p8" d81 disk.d81 -write $program.non $program.non > c1541.log 2>&1 \
             && timeout 90 xmega65 -headless -sleepless -besure -8 disk.d81 -prg $program.prg -prgexit -dumpscreen screen.txt \
             > run.log 2>&1 < /dev/null)
-        sed -n '/ RUN:/,$p' "$work/$program/screen.txt" | grep '^[0-9M?]'
+        sed -n '/ RUN:/,$p' "$work/$program/screen.txt" | grep '^[0-9MH?]'
     done
 done
 echo "-- overlays, for a machine without them (pet32): one program"

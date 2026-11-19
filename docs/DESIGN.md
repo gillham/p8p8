@@ -559,6 +559,13 @@ machine whose target file describes overlays (the Commander X16: a bank of
 high memory, in the window at $a000 while its code runs).  Anywhere else the
 directive says nothing and the program is built in one piece.
 
+`%overlay n` in a subroutine puts that one subroutine into the overlay,
+whatever its block says (`ir.Sub.overlay`; `overlay_prepare` gives every
+subroutine the overlay its code is in, and one declared inside another the
+overlay of that one).  Such a subroutine is written in its overlay's part
+outside its block's scope but under its full name
+(`p8b_main.p8s_name  .proc`), so nothing that names it changes.
+
 Only code is in an overlay.  The variables, strings and arrays of such a
 block are in main memory with all the others (the code generator writes them
 outside the blocks anyway), so an overlay is never written back, a value is

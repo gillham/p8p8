@@ -1866,8 +1866,7 @@ gen6502 {
         ; cartridge's main block sets the assembler's address around its header.
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
-            if bl.overlay == 0
-                block_code(bl)
+            block_code(bl)
             bl = bl.next
         }
         overlay_thunks()
@@ -1903,13 +1902,42 @@ gen6502 {
         while bl != 0 {
             if not possible
                 bl.overlay = 0          ; (a machine without them: one program, as if nothing was said)
-            else if bl.overlay != 0 {
-                if strings.compare(bl.name, "p8b_main") == 0 {
-                    error("the main block cannot be in an overlay", 0)
-                    bl.overlay = 0
+            else if bl.overlay != 0 and strings.compare(bl.name, "p8b_main") == 0 {
+                error("the main block cannot be in an overlay (its subroutines can, one by one)", 0)
+                bl.overlay = 0
+            }
+            ; every subroutine gets the overlay its code is in: its own, or its block's; one
+            ; that is declared in another is written with that one, and goes where it goes
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                if not possible
+                    s.overlay = 0
+                else if parent_of(bl, s) == 0 {
+                    if s.overlay == 0
+                        s.overlay = bl.overlay
+                    else if strings.compare(s.name, "p8b_main.p8s_start") == 0 {
+                        error("main.start cannot be in an overlay", 0)
+                        s.overlay = 0
+                    }
+                    if s.overlay > overlay_max
+                        overlay_max = s.overlay
                 }
-                else if bl.overlay > overlay_max
-                    overlay_max = bl.overlay
+                s = s.next
+            }
+            s = bl.subs
+            while s != 0 {
+                ^^ir.Sub outer = parent_of(bl, s)
+                if outer != 0 {
+                    if possible and s.overlay != 0
+                        error("%overlay is for a subroutine at block level; one inside another goes with it", s.name)
+                    ^^ir.Sub top = outer
+                    while outer != 0 {
+                        top = outer
+                        outer = parent_of(bl, outer)
+                    }
+                    s.overlay = top.overlay
+                }
+                s = s.next
             }
             bl = bl.next
         }
@@ -1923,20 +1951,12 @@ gen6502 {
             memtop = overlay_start
     }
 
-    ; the overlay that the block of this symbol is in (0: none)
+    ; the overlay that the subroutine of this name is in (0: none, or no subroutine)
     sub overlay_of(^^ubyte sym) -> ubyte {
-        ^^ir.Block bl = prog.blocks
-        while bl != 0 {
-            if bl.overlay != 0 {
-                ubyte k = 0
-                while bl.name[k] != 0 and bl.name[k] == sym[k]
-                    k++
-                if bl.name[k] == 0 and sym[k] == '.'
-                    return bl.overlay
-            }
-            bl = bl.next
-        }
-        return 0
+        ^^ir.Sub s = find_sub(sym)
+        if s == 0
+            return 0
+        return s.overlay
     }
 
     ; "p8ovt_" and the subroutine's name with its dots as underscores
@@ -1978,10 +1998,10 @@ gen6502 {
         raw("; ---- the ways into the overlays ----")
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
-            if bl.overlay != 0 {
+            if true {
                 ^^ir.Sub s = bl.subs
                 while s != 0 {
-                    if parent_of(bl, s) == 0 and not (s.is_asm and s.is_inline) {
+                    if s.overlay != 0 and parent_of(bl, s) == 0 and not (s.is_asm and s.is_inline) {
                         ; (a subroutine in assembly may take and give anything, flags too)
                         ^^ubyte template = fast
                         if s.is_asm
@@ -1996,7 +2016,7 @@ gen6502 {
                                 k++
                             }
                             else if template[k] == '%' and template[k + 1] == 'n' {
-                                putn(bl.overlay)
+                                putn(s.overlay)
                                 k++
                             }
                             else if template[k] == '\n' {
@@ -2076,6 +2096,12 @@ gen6502 {
         while bl != 0 {
             if bl.overlay == n
                 return true
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                if s.overlay == n
+                    return true
+                s = s.next
+            }
             bl = bl.next
         }
         return false
@@ -2094,22 +2120,15 @@ gen6502 {
         raw("; ---- the overlays ----")
         ubyte n
         for n in 1 to overlay_max {
-            bool any = false
-            ^^ir.Block bl = prog.blocks
-            while bl != 0 {
-                if bl.overlay == n
-                    any = true
-                bl = bl.next
-            }
-            if any {
+            ^^ir.Block bl
+            if overlay_used(n) {
                 put("p8ov_part_")
                 putn(n)
                 raw("  .segment")
                 cur_overlay = n
                 bl = prog.blocks
                 while bl != 0 {
-                    if bl.overlay == n
-                        block_code(bl)
+                    block_code(bl)
                     bl = bl.next
                 }
                 cur_overlay = 0
@@ -2154,7 +2173,21 @@ gen6502 {
         o = main_o
     }
 
+    ; What of a block is in the part being written (cur_overlay: 0 is the main program).
+    ; The block itself, with its own assembly and labels, is in the part its %overlay
+    ; names; a subroutine that names another part is written there by itself, outside the
+    ; block's scope but under its full name, so that it is the same subroutine to
+    ; everything that names it.
     sub block_code(^^ir.Block bl) {
+        if bl.overlay != cur_overlay {
+            ^^ir.Sub lone = bl.subs
+            while lone != 0 {
+                if lone.overlay == cur_overlay and parent_of(bl, lone) == 0
+                    subroutine(bl, lone, false)
+                lone = lone.next
+            }
+            return
+        }
         if true {
             if bl.address != 0 {
                 put("* = ")
@@ -2187,7 +2220,8 @@ gen6502 {
                     c = c.next
                 }
                 else {
-                    subroutine(bl, s, false)
+                    if s.overlay == cur_overlay
+                        subroutine(bl, s, false)
                     s = s.next
                 }
             }

@@ -316,6 +316,7 @@ ir {
         bool is_inline
         bool asm_is_ir      ; asmtext is inline IR, not native assembly
         bool clobbers_declared
+        ubyte overlay       ; %overlay n in it: its code goes into that overlay (0: where its block's is)
         bool no_pool        ; backend use: may run from an interrupt, so it keeps off the shared temporaries
         bool reenter        ; backend use: may be called again while it runs (recursion, or it is not known)
         ^^ubyte clobbered   ; an asmsub's clobbered CPU registers ("A,X,Y"), or 0
