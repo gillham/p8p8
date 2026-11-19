@@ -1313,18 +1313,43 @@ ir {
         add(" POS=\"")
         add_name(b.pos)
         add("\">\n")
+        ; its chunks and subroutines in the order of the source (each list is in that order)
         ^^Chunk c = b.chunks
-        while c != 0 {
-            if c.kind == C_ASM or c.first != 0 or c.label != 0
-                write_chunk(c)       ; (upstream's reader refuses a chunk with neither code nor label)
-            c = c.next
-        }
         ^^Sub s = b.subs
-        while s != 0 {
-            write_sub(s)
-            s = s.next
+        while c != 0 or s != 0 {
+            if s == 0 or (c != 0 and c.order < s.order) {
+                if c.kind == C_ASM or c.first != 0 or c.label != 0
+                    write_chunk(c)       ; (upstream's reader refuses a chunk with neither code nor label)
+                c = c.next
+            }
+            else {
+                write_sub(s)
+                s = s.next
+            }
         }
         add("</BLOCK>\n\n")
+    }
+
+    ; which section of the file a variable is in, as a letter
+    sub var_letter(^^Var v) -> ubyte {
+        when v.kind {
+            V_VAR -> {
+                if v.init != 0
+                    return 'i'
+                if v.dirty
+                    return 'd'
+                return 'c'
+            }
+            V_INSTANCE -> {
+                if v.init != 0
+                    return 's'
+                return 'n'
+            }
+            V_STRUCT -> return 't'
+            V_CONST -> return 'k'
+            V_MEMVAR -> return 'm'
+        }
+        return 'b'      ; a memory slab
     }
 
     ; Writes the whole program as .p8ir text into the buffer.
@@ -1332,7 +1357,35 @@ ir {
         text = b
         add("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<PROGRAM NAME=\"")
         add_name(p.name)
-        add("\" COMPILERVERSION=\"p8p8\" IRFORMAT=\"8\">\n<OPTIONS>\ncompTarget=")
+        add("\" COMPILERVERSION=\"p8p8\" IRFORMAT=\"8\"")
+        ; (attributes of p8p8's own, for reading the file back as it was: upstream's reader
+        ; passes them by.  The file has the variables by kind and only the registers that
+        ; are left, so the order they were declared in and every register's type go here:
+        ; a letter each, see var_letter and type_suffix.)
+        if p.floats
+            add(" FLOATS=\"true\"")
+        if p.vars_address >= 0 {
+            add(" VARSADDRESS=\"")
+            buf.add_long(text, p.vars_address)
+            add("\"")
+        }
+        add(" VARORDER=\"")
+        ^^Var ov = p.vars
+        while ov != 0 {
+            buf.add_byte(text, var_letter(ov))
+            ov = ov.next
+        }
+        add("\" REGTYPES=\"")
+        uword rr = 1
+        while rr <= regcount and rr != 0 {
+            if regtypes[rr] == T_NONE
+                buf.add_byte(text, '-')
+            else
+                buf.add_byte(text, type_suffix[regtypes[rr]])
+            rr++
+        }
+        add("\"")
+        add(">\n<OPTIONS>\ncompTarget=")
         add_name(p.target)
         if p.options != 0 {
             buf.add_byte(text, '\n')

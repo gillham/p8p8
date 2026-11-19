@@ -32,6 +32,7 @@
 %import crumb
 %import warn
 %import triple
+%import irread
 %zeropage basicsafe
 
 main {
@@ -652,6 +653,8 @@ main {
     sub usage() {
         out.puts("usage: p8c [options] file.p8 ...")
         out.nl()
+        out.puts("  file.p8ir      in place of a source file: an IR file (as -ir writes it) is built for the target it names")
+        out.nl()
         out.puts("  -version       print the version of the compiler and of the library it uses")
         out.nl()
         out.puts("  -report dir    run as without it, and write a report of the run into the new directory dir: versions,")
@@ -777,6 +780,21 @@ main {
             return
         }
         prepare_library()
+        ^^ubyte irtext = 0
+        long irsize = 0
+        if is_ir_file(path) {
+            ; an IR file says what it is for: that is the target, unless -target names one
+            irtext, irsize = file_bytes(path)
+            if irtext == 0 {
+                out.err()
+                out.puts("can't read ")
+                out.puts(path)
+                out.nl()
+                out.exit(1)
+            }
+            if opt_target == 0
+                opt_target = ir_file_target(irtext, irsize)
+        }
         ; the target: a machine with a configuration file (see target.p8), or one p8p8 knows by itself
         ; (without -target the program is for the machine p8c runs on)
         if opt_target == 0 and not explicit_mode
@@ -907,6 +925,44 @@ main {
             if importer.triple == 0
                 importer.triple = "arm64-apple-macosx"
         }
+        if irtext != 0 {
+            ; the IR is there already: no front end
+            types.set_target(importer.target)
+            encoding.set_target(importer.target)
+            if parser.scratch == 0
+                parser.scratch = buf.new(64)        ; (the driver's own scratch buffer is the parser's)
+            crumb.at("reading the IR file")
+            ^^ir.Program irprog = irread.read(irtext, irsize, path)
+            if irprog == 0
+                out.exit(1)
+            if strings.compare(irprog.target, importer.target) != 0 {
+                out.err()
+                out.puts(path)
+                out.puts(": error: the IR is for target ")
+                out.puts(irprog.target)
+                out.puts(", not ")
+                out.puts(importer.target)
+                out.nl()
+                out.exit(1)
+            }
+            if not target.loaded
+                irprog.options = 0          ; (the options are a target file's; without one, the defaults)
+            ; the virtual registers that were moved into the zero page (irgen.zeropage_registers)
+            ^^ir.Var rv = irprog.vars
+            while rv != 0 {
+                if rv.kind == ir.V_MEMVAR and strings.compare(rv.name, "cx16.r0") == 0 and target.number("virtual_registers", -1) >= 256 {
+                    bool rok
+                    long raddress
+                    rok, raddress = target.parse_number(rv.init)
+                    if rok and raddress < 256
+                        irgen.vregs_moved_to = raddress
+                }
+                rv = rv.next
+            }
+            if opt_ir or opt_llvm or opt_build
+                code_from_ir(irprog, irprog.name)
+            return
+        }
         crumb.at("reading the program")
         ^^importer.Module mainmod = importer.load_program(path)
         if opt_modules_file != 0
@@ -989,15 +1045,43 @@ main {
             out_name = strtab.intern(path + start, (i - start) as uword)
     }
 
+    ; does the name end in .p8ir?
+    sub is_ir_file(^^ubyte path) -> bool {
+        long n = buf.cstr_len(path)
+        return n > 5 and buf.bytes_equal(path + n - 5, ".p8ir", 5)
+    }
+
+    ; the compTarget of an IR file's options; 0 when it has none
+    sub ir_file_target(^^ubyte data, long size) -> ^^ubyte {
+        long k = 0
+        while k + 11 < size {
+            if data[k] == '<' and data[k + 1] == 'V'
+                break               ; (<VARS>: the options are behind us)
+            if data[k] == 'c' and buf.bytes_equal(data + k, "compTarget=", 11) {
+                long from = k + 11
+                long upto = from
+                while upto < size and data[upto] != '\n' and data[upto] != '\r'
+                    upto++
+                return strtab.intern(data + from, (upto - from) as uword)
+            }
+            k++
+        }
+        return 0
+    }
+
     sub generate_ir() {
         ^^importer.Module mainmod = importer.modules
         crumb.at("generating the IR")
         ^^ir.Program p = irgen.generate(mainmod.name)
-        ^^ubyte oname = mainmod.name
-        if out_name != 0
-            oname = out_name
         if diag.errors > 0
             return
+        code_from_ir(p, mainmod.name)
+    }
+
+    ; What is asked for from the IR: the IR file, the LLVM IR, the assembly, the program.
+    sub code_from_ir(^^ir.Program p, ^^ubyte oname) {
+        if out_name != 0
+            oname = out_name
         bool is_llvm = buf.bytes_equal(importer.target, "llvm", 4)
         irprune.asmsubs_kept = not opt_own or is_llvm
         crumb.at("removing unused code")

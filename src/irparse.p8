@@ -17,6 +17,7 @@
 %import buf
 %import out
 %import strings
+%import float_platform
 
 irparse {
     %option ignore_unused
@@ -55,8 +56,23 @@ irparse {
         bool is_float_imm
     }
 
-    ^^Operand ops = 0
+    ^^Operand ops = 0         ; four of them (a typed pointer counts in operands: ops + 2 is the third)
     ubyte nops = 0
+
+    ; for the text of a whole IR file (irread.p8):
+    bool one_row = false        ; float registers are numbered with the others, as p8p8 writes them
+    bool exact = false          ; a float is read with the platform's own conversion
+
+    ; What parse_text reads goes into this chunk (of this subroutine, or of none).
+    sub begin(^^ir.Sub s, ^^ir.Chunk c) {
+        if nb == 0 {
+            nb = buf.new(256)
+            ops = mem.alloc(sizeof(Operand) * 4)
+        }
+        errors = 0
+        cursub = s
+        chunk = c
+    }
 
     ; Replaces every inline IR chunk of the subroutine by the instructions
     ; it holds.  Returns false when something could not be parsed.
@@ -168,10 +184,30 @@ irparse {
         while p < stop and is_space(text[p])
             p++
         ^^ir.Instr i
-        if op == ir.OP_CALL or op == ir.OP_SYSCALL {
+        if op == ir.OP_CALL or op == ir.OP_SYSCALL or op == ir.OP_CALLFAR or op == ir.OP_CALLFARVB {
+            ; (a far call's name is "bank,address,name")
             i = ir.emit(chunk, op, type, ir.M_CALL)
             parse_call(i, p, stop)
             return
+        }
+        if op == ir.OP_CALLI or op == ir.OP_JUMPI {
+            ; through an address in a register: "calli (r1.p)()" and "jumpi (r1.p)"
+            while p < stop and (text[p] == '(' or is_space(text[p]))
+                p++
+            long regend = p
+            while regend < stop and text[regend] != ')' and text[regend] != ',' and not is_space(text[regend])
+                regend++
+            ^^Operand regop = ops
+            if p < regend and register(p, regend, regop) {
+                i = ir.emit(chunk, op, ir.T_POINTER, ir.M_R)
+                i.r1 = regop.reg
+                return
+            }
+            if op == ir.OP_CALLI {
+                error("calli without a register")
+                return
+            }
+            ; (jumpi of something else: as the operands say)
         }
         ; the operands, separated by commas
         nops = 0
@@ -282,9 +318,9 @@ irparse {
             n = n * 10 + (text[p] - '0')
             p++
         }
-        if is_float
+        if is_float and not one_row
             n += FLOAT_BASE
-        else if n >= SYSCALL_BASE_TEXT
+        else if n >= SYSCALL_BASE_TEXT and not one_row
             n = SYSCALL_BASE + (n - SYSCALL_BASE_TEXT)      ; the VM's r99000.. syscall registers, in uword range
         o.reg = n as uword
         o.type = ir.T_NONE
@@ -298,7 +334,7 @@ irparse {
     }
 
     sub parse_operand(ubyte index, long p, long stop) {
-        ^^Operand o = ops + index * sizeof(Operand)
+        ^^Operand o = ops + index
         o.sym = 0
         o.value = 0
         o.offset = 0
@@ -327,7 +363,10 @@ irparse {
                     buf.clear(nb)
                     buf.add_bytes(nb, text + p, numend - p)
                     buf.add_byte(nb, 0)
-                    o.fvalue = parse_float(nb.data)
+                    if exact
+                        o.fvalue = float_platform.parse(nb.data)
+                    else
+                        o.fvalue = parse_float(nb.data)
                 }
                 else
                     o.value = number(p, numend)
@@ -391,7 +430,7 @@ irparse {
                 long star = p
                 while star < partend and text[star] != '*'
                     star++
-                ^^Operand tmp = ops + 3 * sizeof(Operand)
+                ^^Operand tmp = ops + 3
                 if register(p, star, tmp) {
                     o.reg = tmp.reg
                     o.type = tmp.type
@@ -460,7 +499,7 @@ irparse {
         ubyte n = 0
         ^^Operand o
         while n < nops {
-            o = ops + n * sizeof(Operand)
+            o = ops + n
             when o.kind {
                 K_REG -> {
                     nregs++
@@ -507,11 +546,11 @@ irparse {
         if nops > 0
             k1 = ops.kind
         if nops > 1 {
-            o = ops + sizeof(Operand)
+            o = ops + 1
             k2 = o.kind
         }
         if nops > 2 {
-            o = ops + 2 * sizeof(Operand)
+            o = ops + 2
             k3 = o.kind
         }
         if nops == 0
@@ -622,12 +661,25 @@ irparse {
         while at < stop and text[at] != '@'
             at++
         ubyte slot = 255
-        if at < stop
+        if at + 2 < stop and text[at + 1] == 'P' {
+            ; a CPU status flag
+            when text[at + 2] {
+                'c' -> slot = ir.SLOT_FLAGS
+                'z' -> slot = ir.SLOT_FLAGS + 1
+                'v' -> slot = ir.SLOT_FLAGS + 2
+                else -> slot = ir.SLOT_FLAGS + 3
+            }
+        }
+        else if at < stop
             slot = number(at + 2, stop) as ubyte
-        ^^Operand o = ops + 3 * sizeof(Operand)
+        ^^Operand o = ops + 3
         o.reg = 0
         ^^ir.Arg a
-        if text[p] == '#' {
+        if p == at {
+            ; only a place: a hardware register the call writes
+            a = ir.new_arg(name, 0, ir.T_NONE)
+        }
+        else if text[p] == '#' {
             parse_operand(3, p, at)
             a = ir.new_arg(name, 0, o.type)
             a.value = o.value

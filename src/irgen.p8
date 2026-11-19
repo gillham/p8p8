@@ -1058,6 +1058,15 @@ irgen {
             slab.size = ssize as long
             slab.align = salign as long
         }
+        else if known.size != 0 and ssize != 0 and (known.size != (ssize as long) or known.align != (salign as long)) {
+            ; one name is one block
+            ^^buf.Buf mb = buf.new(128)
+            buf.add_str(mb, "memory block '")
+            buf.add_str(mb, a.name)
+            buf.add_str(mb, "' already exists with a different size and/or alignment")
+            buf.add_byte(mb, 0)
+            error(mcall, mb.data)
+        }
         else if known.size == 0 and ssize != 0 {
             ; (named before it was given its size)
             known.size = ssize as long

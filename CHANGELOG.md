@@ -40,6 +40,19 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- An IR file as input: `p8c program.p8ir` builds the program from the IR
+  that `p8c -ir` wrote, to the same bytes as from the source
+  (`make irroundtrip`).  IR written by upstream mostly does not build: it
+  uses instructions p8p8's back ends do not have.
+- Another seventy of upstream's checks, found by running every example of
+  its documentation through both compilers again: variable tags that do
+  not exist or do not apply, numbers where booleans belong and the other
+  way round, a subroutine with several values used as one, the rules for
+  register parameters and bank subroutines, struct field kinds, `sizeof`
+  of things without a size.  `tests/bad_upstream2.p8` has a sample.
+- Programs with floats need 250 bytes less memory: the float registers of
+  library routines that the program does not call no longer get a place.
+- Fixed: the parser of `%ir` blocks wrote outside its operand table.
 - About seventy checks that upstream makes and p8p8 did not, with
   upstream's messages (`tests/bad_upstream.p8` has a sample): a long used
   as an address or a pointer used as a long where addresses are words, the
@@ -48,8 +61,7 @@
   other, struct and union initializers, enum values, `private public`,
   `[rows,cols]`, a BASIC program that does not load at BASIC's address,
   and more.  Of upstream's 1,362 unit test programs, 11 that it refuses
-  still build (7 of them are upstream failing, or 64-bit integers on the
-  6502, which p8p8 has).
+  still build, 5 of them because upstream itself fails on them.
 - New: a loop's own variable can be used before the loop; a label can be
   called; `math.sin8u()` and its relatives, `math.log2()`, `math.diff()`
   and `strings.isdigit()` of constants are worked out when compiling; the

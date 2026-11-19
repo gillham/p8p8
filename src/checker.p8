@@ -266,6 +266,8 @@ checker {
         }
         if strings.compare(nm, "link") == 0 and not llvm_target
             error(d, "%link is only available on the llvm targets")
+        if level == L_SUB and strings.compare(nm, "jmptable") == 0
+            error(d, "this directive may only occur in a block")
         if name_in(nm, &module_only, len(module_only)) {
             if level != L_MODULE
                 error(d, "this directive may only occur at module level")
@@ -344,6 +346,8 @@ checker {
         else if strings.compare(nm, "align") == 0 {
             if nargs != 1 or arg.kind != ast.N_INT
                 error(d, "missing correct alignment size")
+            else if arg.value < 2 or arg.value > 65536
+                error(d, "invalid alignment size")
         }
         else if strings.compare(nm, "assert") == 0 {
             if nargs == 0 or nargs > 2 {
@@ -352,6 +356,10 @@ checker {
             }
             bool ok
             quad v
+            if sizeof_of_str(arg) {
+                error(arg, "Syntax error: sizeof argument should be an identifier, number, or type name")
+                return
+            }
             ok, v = typer.const_eval(arg)
             if not ok and arg.kind == ast.N_BINARY and arg.a != 0 and arg.b != 0 and typer.float_eval(arg.a) {
                 ; a comparison of floating point constants
@@ -469,6 +477,18 @@ checker {
             ast.N_SUB -> {
                 if level == L_SUB and nesting > 1
                     error(n, "subroutines can only be defined in the scope of a block or within another subroutine")
+                ^^symtab.Sym fsub = n.extra
+                if for_6502() and fsub != 0 and (fsub.marks & 1) != 0 and not floats_enabled() {
+                    ; (a subroutine that is used)
+                    ^^ast.Node fq = n.a
+                    while fq != 0 {
+                        if fq.a != 0 and fq.a.type == types.T_FLOAT {
+                            error(fq, "floating point used, but that is not enabled via options")
+                            break
+                        }
+                        fq = fq.next
+                    }
+                }
                 ; a virtual register for two parameters
                 ^^ast.Node rp = n.a
                 bool rtwice = false
@@ -501,6 +521,7 @@ checker {
                 else {
                     if (n.flags & ast.F_INLINE) != 0
                         error(n, "extsub can never be inline")
+                    bank_selector(n)
                     if n.c != 0 and n.c.kind == ast.N_IDENT and n.c.extra != 0 {
                         ^^symtab.Sym xa = n.c.extra
                         if xa.kind == symtab.K_VAR or xa.kind == symtab.K_MEMVAR
@@ -582,6 +603,8 @@ checker {
             }
             ast.N_ONGOTO -> {
                 expression(n.a)
+                if n.a != 0 and n.a.type != 0 and n.a.type != types.T_UBYTE
+                    error(n.a, "on..goto index must be an unsigned byte")
                 ^^ast.Node og = n.b
                 while og != 0 {
                     if og.kind == ast.N_IDENT and og.extra != 0 {
@@ -609,6 +632,8 @@ checker {
             error(n, "%asm with native assembly code can't be used on the llvm targets, use %ir instead")
         else if target_name != 0 and strings.compare(target_name, "virtual") == 0 and n.name != 0 and strings.compare(n.name, "asm") == 0
             error(n, "%asm blocks with native assembly code cannot be executed by the virtual machine, use %ir {{ ... }} instead")
+        else if for_6502() and n.name != 0 and strings.compare(n.name, "ir") == 0
+            error(n, "%asm containing IR code cannot be translated to 6502 assembly")
     }
 
     ; is there a return or a jump in these statements (not in nested subroutines)
@@ -675,6 +700,47 @@ checker {
         if init != 0 and init.kind == ast.N_TUPLE
             is_tuple = true
         checks++
+        if for_6502() and t != 0 and not floats_enabled() and n.op != token.T_KW_CONST
+                and types.is_array(t) and types.elem_of(t) == types.T_FLOAT
+            error(n, "floating point used, but that is not enabled via options")
+        if init != 0 and not is_tuple {
+            float_results(init)
+            value_shape(n, init, t)
+            if init.kind == ast.N_CALL and init.a != 0 and init.a.extra != 0 {
+                ; as many names as the call has values
+                ^^symtab.Sym callee = init.a.extra
+                if callee.kind == symtab.K_SUB {
+                    long given = ast.list_length(typer.returns_of(callee))
+                    long wanted = ast.list_length(n.c)
+                    if given > wanted and given > 1 {
+                        begin_message("call returns too many values: expected ")
+                        buf.add_long(parser.scratch, wanted)
+                        buf.add_str(parser.scratch, " got ")
+                        buf.add_long(parser.scratch, given)
+                        buf.add_str(parser.scratch, ", missing assignments for: ")
+                        ^^ast.Node rt = typer.returns_of(callee)
+                        long rn = 0
+                        while rt != 0 {
+                            if rn >= wanted {
+                                if rn > wanted
+                                    buf.add_str(parser.scratch, ", ")
+                                types.name_into(parser.scratch, typer.return_type(rt))
+                            }
+                            rn++
+                            rt = rt.next
+                        }
+                        error_scratch(init)
+                    }
+                    else if given < wanted and wanted > 1 and given > 0 {
+                        begin_message("call returns too few values: expected ")
+                        buf.add_long(parser.scratch, wanted)
+                        buf.add_str(parser.scratch, " got ")
+                        buf.add_long(parser.scratch, given)
+                        error_scratch(init)
+                    }
+                }
+            }
+        }
         if init != 0 and init.kind == ast.N_ARRAYLIT and t != 0 and types.is_array(t) {
             uword aelem = types.elem_of(t)
             ^^ast.Node ae = init.a
@@ -692,6 +758,10 @@ checker {
         }
         ^^ast.Node bn = n.c
         while bn != 0 {
+            if bn.name != 0 and strings.compare(bn.name, "pointer") == 0 {
+                error(n, "variable name cannot be a keyword")
+                break
+            }
             if bn.name != 0 and symtab.builtins != 0 and symtab.find_in(symtab.builtins, bn.name) != 0 {
                 error(n, "builtin function cannot be redefined")
                 break
@@ -701,6 +771,7 @@ checker {
         if (has_tag(n, strtab.intern_cstr("alignword")) or has_tag(n, strtab.intern_cstr("align64")) or has_tag(n, strtab.intern_cstr("alignpage")))
                 and (has_tag(n, strtab.intern_cstr("zp")) or has_tag(n, strtab.intern_cstr("requirezp")))
             error(n, "zeropage variables can't have alignment")
+        declaration_tags(n, t)
         if init != 0 and not is_tuple
             struct_values(n, t, init)
         if no_quads and t != 0 {
@@ -782,6 +853,99 @@ checker {
         }
         if init != 0
             expression(init)
+    }
+
+    ; The tags upstream knows, and what each may stand on; several names in one
+    ; declaration are for numbers, booleans, pointers and structs.
+    sub declaration_tags(^^ast.Node n, uword t) {
+        bool aligned = false
+        bool nosplit = false
+        ^^ast.Node tag = n.d
+        while tag != 0 {
+            if tag.kind == ast.N_TAG and tag.name != 0 {
+                if strings.compare(tag.name, "alignword") == 0 or strings.compare(tag.name, "align64") == 0 or strings.compare(tag.name, "alignpage") == 0
+                    aligned = true
+                else if strings.compare(tag.name, "nosplit") == 0
+                    nosplit = true
+                else if strings.compare(tag.name, "zp") != 0 and strings.compare(tag.name, "requirezp") != 0 and strings.compare(tag.name, "nozp") != 0
+                        and strings.compare(tag.name, "shared") != 0 and strings.compare(tag.name, "dirty") != 0 {
+                    begin_message("Syntax error: invalid variable tag '@")
+                    buf.add_str(parser.scratch, tag.name)
+                    buf.add_byte(parser.scratch, 39)
+                    error_scratch(n)
+                }
+            }
+            tag = tag.next
+        }
+        if t == 0
+            return
+        if aligned and not types.is_array(t) and t != types.T_STR
+            error(n, "only string and array variables can have an alignment option")
+        if nosplit {
+            uword ne = 0
+            if types.is_array(t)
+                ne = types.elem_of(t)
+            ; (words and pointers; where a pointer is a long, an array of longs)
+            if ne == 0 or not (ne == types.T_UWORD or ne == types.T_WORD or ne == types.T_STR or types.is_pointer(ne) or types.is_address(ne)
+                    or (ne == types.T_LONG and types.POINTER_SIZE != 2))
+                error(n, "@nosplit is for word or pointer arrays only")
+        }
+        if n.c != 0 and n.c.next != 0 and (types.is_array(t) or t == types.T_STR)
+            error(n, "cannot multi declare variables of this type")
+        if n.op == token.T_AMP and for_6502() and types.is_array(t) and not nosplit {
+            uword me = types.elem_of(t)
+            if me == types.T_UWORD or me == types.T_WORD or types.is_pointer(me) or types.is_address(me)
+                error(n, "memory mapped word arrays cannot be split, should have @nosplit")
+        }
+        if types.is_array(t) and n.b != 0 and n.b.kind == ast.N_RANGE and n.a != 0 and n.a.a != 0 {
+            ; a range fills an array of its own size
+            long rl = typer.range_length(n.b)
+            ^^types.Type rat = types.get(t)
+            if rl > 0 and rat.length > 0 and rl != rat.length {
+                begin_message("range expression size (")
+                buf.add_long(parser.scratch, rl)
+                buf.add_str(parser.scratch, ") doesn't match declared array size (")
+                buf.add_long(parser.scratch, rat.length)
+                buf.add_byte(parser.scratch, ')')
+                error_scratch(n.b)
+            }
+        }
+    }
+
+    ; a call of a subroutine with several values
+    sub several_values(^^ast.Node e) -> bool {
+        if e == 0 or e.kind != ast.N_CALL or e.a == 0 or e.a.kind != ast.N_IDENT or e.a.extra == 0
+            return false
+        ^^symtab.Sym cs = e.a.extra
+        return cs.kind == symtab.K_SUB and ast.list_length(typer.returns_of(cs)) > 1
+    }
+
+    ; What cannot be the value that goes into a variable of this type: an operator on a
+    ; call with several values; the bare name of an array (its address is &name).
+    sub value_shape(^^ast.Node at, ^^ast.Node value, uword tt) {
+        if value.kind == ast.N_BINARY and (several_values(value.a) or several_values(value.b)) {
+            error(value, "invalid assignment value")
+            return
+        }
+        if value.kind == ast.N_IDENT and value.type != 0 and types.is_array(value.type) and tt != 0 and not types.is_array(tt) and tt != types.T_STR {
+            if tt == types.T_UWORD or tt == types.ADDRESS_TYPE
+                error(value, "invalid assignment value")
+            else if types.is_pointer(tt) or tt == types.T_LONG
+                error(value, "cannot assign array")
+        }
+    }
+
+    ; is there a sizeof(str) in the expression (of an %assert, which nothing else looks at)
+    sub sizeof_of_str(^^ast.Node e) -> bool {
+        if e == 0
+            return false
+        if e.kind == ast.N_SIZEOF
+            return e.op != 1 and e.a != 0 and e.a.kind == ast.N_TYPE and e.a.op == token.T_KW_STR and (e.a.flags & ast.F_POINTER) == 0 and e.a.a == 0
+        if e.kind == ast.N_BINARY
+            return sizeof_of_str(e.a) or sizeof_of_str(e.b)
+        if e.kind == ast.N_UNARY
+            return sizeof_of_str(e.a)
+        return false
     }
 
     sub has_tag(^^ast.Node n, ^^ubyte tagname) -> bool {
@@ -1037,8 +1201,17 @@ checker {
                 error_scratch(n)
             }
         }
-        else if elemsize == 2 {
-            if length < 1 or length > limit {
+        else if elemsize == 2 and not types.is_struct(elem) {
+            if for_6502() and has_tag(n, strtab.intern_cstr("nosplit")) {
+                if length < 1 or length > limit / 2 {
+                    begin_message("regular word array length must be 1-")
+                    buf.add_long(parser.scratch, limit / 2)
+                    buf.add_str(parser.scratch, ", use split array to get to ")
+                    buf.add_long(parser.scratch, limit)
+                    error_scratch(n)
+                }
+            }
+            else if length < 1 or length > limit {
                 begin_message("split word array length must be 1-")
                 buf.add_long(parser.scratch, limit)
                 error_scratch(n)
@@ -1130,20 +1303,45 @@ checker {
     ; word (return, returnr, returni, jump, jumpi in %ir), or is a comment with
     ; !notreached! in it.  An included file is taken on trust.
     sub asm_returns(^^ast.Node n) -> bool {
-        ^^ast.Node last = 0
+        ^^ubyte text = 0
+        long stop = 0
+        bool is_ir = false
         ^^ast.Node b = n.c
         while b != 0 {
-            if b.kind == ast.N_DIRECTIVE and b.name != 0 and (strings.compare(b.name, "asmbinary") == 0 or strings.compare(b.name, "asminclude") == 0)
+            if b.kind == ast.N_DIRECTIVE and b.name != 0 and strings.compare(b.name, "asmbinary") == 0
                 return true
-            if b.kind == ast.N_ASM
-                last = b
+            if b.kind == ast.N_DIRECTIVE and b.name != 0 and strings.compare(b.name, "asminclude") == 0 and b.a != 0 and b.a.kind == ast.N_STR and b.a.name != 0 {
+                ; the included text counts like assembly written here (a library's file is
+                ; taken on trust); one that cannot be read is no return
+                if buf.bytes_equal(b.a.name, "library:", 8)
+                    return true
+                ^^source.File from = source.get(b.file)
+                ^^buf.Buf ipath = buf.new(256)
+                long slash = buf.cstr_len(from.name)
+                while slash > 0 and from.name[slash - 1] != '/'
+                    slash--
+                buf.add_bytes(ipath, from.name, slash)
+                buf.add_str(ipath, b.a.name)
+                buf.add_byte(ipath, 0)
+                ^^source.File inc = source.load(ipath.data)
+                if inc == 0
+                    inc = source.load(b.a.name)
+                text = 0
+                is_ir = false
+                if inc != 0 {
+                    text = inc.text
+                    stop = inc.len
+                }
+            }
+            if b.kind == ast.N_ASM {
+                text = b.extra
+                stop = b.value as long
+                is_ir = b.name != 0 and strings.compare(b.name, "ir") == 0
+            }
             b = b.next
         }
-        if last == 0
+        if text == 0
             return false
-        ^^ubyte text = last.extra
-        long stop = last.value as long
-        bool is_ir = last.name != 0 and strings.compare(last.name, "ir") == 0
         ; the lines from the end
         while stop > 0 {
             long start = stop
@@ -1230,6 +1428,8 @@ checker {
     sub struct_decl(^^ast.Node s) {
         check_name(s, s.name)
         keyword_name(s, s.name, "struct name cannot be a keyword")
+        if s.name != 0 and symtab.builtins != 0 and symtab.find_in(symtab.builtins, s.name) != 0
+            error(s, "builtin function cannot be redefined")
         ^^ast.Node kf = s.a
         while kf != 0 {
             ^^ast.Node kn = kf.c
@@ -1259,6 +1459,29 @@ checker {
                     error(kf, "array length must be positive")
             }
             kf = kf.next
+        }
+        ; an array field has plain elements
+        ^^symtab.Sym asym = s.extra
+        if asym != 0 and asym.inner != 0 {
+            ^^symtab.Sym af = asym.inner.syms
+            while af != 0 {
+                if af.kind == symtab.K_FIELD and af.type != 0 and types.is_array(af.type) {
+                    uword afe = types.elem_of(af.type)
+                    if types.is_struct(afe) {
+                        begin_message("arrays of struct instances are currently not supported as struct fields at '")
+                        buf.add_str(parser.scratch, af.name)
+                        buf.add_byte(parser.scratch, 39)
+                        error_scratch(s)
+                    }
+                    else if types.is_pointer(afe) and afe != types.ADDRESS_TYPE {
+                        begin_message("arrays of typed pointers are currently not supported, use untyped pointer for now at field '")
+                        buf.add_str(parser.scratch, af.name)
+                        buf.add_byte(parser.scratch, 39)
+                        error_scratch(s)
+                    }
+                }
+                af = af.next
+            }
         }
         ; a field that is a struct itself (not a pointer to one)
         ^^symtab.Sym ss = s.extra
@@ -1291,6 +1514,66 @@ checker {
             }
         }
         checks++
+    }
+
+    ; @bank of an extsub: a number, a ubyte variable, or a subroutine that takes the
+    ; call's ID as a ubyte and gives the bank as a ubyte
+    sub bank_selector(^^ast.Node n) {
+        if n.d == 0 or n.d.kind != ast.N_IDENT or n.d.extra == 0
+            return
+        ^^symtab.Sym bs = n.d.extra
+        if bs.kind == symtab.K_SUB and bs.decl != 0 and bs.decl.kind == ast.N_SUB {
+            ^^ast.Node bp = bs.decl.a
+            if bp == 0 or bp.next != 0 or bp.a == 0 or bp.a.type != types.T_UBYTE
+                error(n, "bank subroutine must have exactly one ubyte parameter (call id)")
+            else {
+                ^^ast.Node br = bs.decl.b
+                if br == 0 or br.next != 0 or typer.return_type(br) != types.T_UBYTE
+                    error(n, "bank subroutine must return a single ubyte")
+            }
+        }
+        else if (bs.kind == symtab.K_VAR or bs.kind == symtab.K_MEMVAR) and bs.type != 0 and bs.type != types.T_UBYTE
+            error(n, "@bank must be a ubyte variable or a subroutine(ubyte callid) returning ubyte")
+    }
+
+    ; Does a module of the program switch floating point on?  (%option enable_floats,
+    ; which importing floats brings.)
+    ubyte floats_known = 0          ; 0 not looked yet, 1 no, 2 yes
+
+    sub floats_enabled() -> bool {
+        if floats_known == 0 {
+            floats_known = 1
+            ^^ubyte opt = strtab.intern_cstr("enable_floats")
+            ^^importer.Module m = importer.modules
+            while m != 0 {
+                if m.tree != 0 and symtab.has_option(m.tree.a, opt)
+                    floats_known = 2
+                m = m.next
+            }
+        }
+        return floats_known == 2
+    }
+
+    ^^ast.Node float_results_reported = 0
+
+    ; On the 6502 one floating point value comes back from a call (in FAC1).
+    sub float_results(^^ast.Node made) {
+        if not for_6502() or made == 0 or made.kind != ast.N_CALL or made.a == 0 or made.a.kind != ast.N_IDENT or made.a.extra == 0
+            return
+        ^^symtab.Sym cs = made.a.extra
+        if cs.kind != symtab.K_SUB or cs.decl == 0 or cs.decl.kind != ast.N_SUB or cs.decl == float_results_reported
+            return
+        ubyte floats = 0
+        ^^ast.Node r = cs.decl.b
+        while r != 0 {
+            if typer.return_type(r) == types.T_FLOAT
+                floats++
+            r = r.next
+        }
+        if floats > 1 {
+            float_results_reported = cs.decl
+            error(cs.decl, "can only have a single float value in a multi-value result on 6502 targets")
+        }
     }
 
     sub params(^^ast.Node p) {
@@ -1375,7 +1658,7 @@ checker {
                             error_scratch(n)
                             wrong = true
                         }
-                        else if pair and size != 2 and t != types.T_STR {
+                        else if pair and (size != 2 or (types.is_pointer(t) and t != types.ADDRESS_TYPE and types.elem_of(t) != types.T_UBYTE)) and t != types.T_STR {
                             begin_message("return type #")
                             buf.add_long(parser.scratch, index)
                             buf.add_str(parser.scratch, " should be (u)word/address or ^^ubyte")
@@ -1389,12 +1672,40 @@ checker {
         }
         if twice
             error(n, "a register is used multiple times in the return values")
+        ; a status flag gives a boolean
+        index = 0
+        r = n.b
+        while r != 0 {
+            index++
+            if r.b != 0 and r.b.kind == ast.N_IDENT and r.b.name != 0 and (r.b.name[0] & $df) == 'P' and r.b.name[1] != 0 and r.b.name[2] == 0 and r.op != token.T_KW_VOID {
+                uword ft = typer.return_type(r)
+                if ft != 0 and ft != types.T_BOOL and not wrong {
+                    begin_message("return type #")
+                    buf.add_long(parser.scratch, index)
+                    buf.add_str(parser.scratch, " should be bool")
+                    error_scratch(n)
+                    wrong = true
+                }
+            }
+            r = r.next
+        }
         ; the clobber list: with the asmsub, or on the first return type of an extsub
         ^^ast.Node clob = n.d
         if n.kind == ast.N_EXTSUB {
             clob = 0
             if n.b != 0
                 clob = n.b.d
+        }
+        ^^ast.Node cl = clob
+        while cl != 0 {
+            ; (A, X and Y, one by one; D0-D7 and A0-A6 of the 68000)
+            bool m68k_register = cl.name != 0 and cl.name[1] >= '0' and cl.name[2] == 0
+                    and ((cl.name[0] == 'D' and cl.name[1] <= '7') or (cl.name[0] == 'A' and cl.name[1] <= '6'))
+            if cl.kind == ast.N_IDENT and cl.name != 0 and not m68k_register and (cl.name[1] != 0 or cpu_bits(cl.name) == 0) {
+                error(n, "Syntax error: invalid cpu register")
+                break
+            }
+            cl = cl.next
         }
         while clob != 0 {
             if clob.kind == ast.N_IDENT and clob.name != 0 and (cpu_bits(clob.name) & used) != 0 {
@@ -1466,6 +1777,12 @@ checker {
                 else {
                     if (r[0] & $df) == 'P' and (r[1] & $df) != 'C' and r[1] != 0
                         error(q, "can only use Carry as status flag parameter")
+                    else if (r[0] & $df) == 'P' and (r[1] & $df) == 'C' and r[2] == 0 and q.a != 0 and q.a.type != 0 and q.a.type != types.T_BOOL {
+                        begin_message("parameter '")
+                        buf.add_str(parser.scratch, q.name)
+                        buf.add_str(parser.scratch, "' should be of type bool")
+                        error_scratch(q)
+                    }
                     ; a virtual register or a status flag: the same one twice
                     ^^ast.Node other = p
                     while other != q {
@@ -1522,6 +1839,18 @@ checker {
             if rp.b != 0 and rp.b.name != 0 and (rp.b.name[0] & $df) != 'R' {
                 error(rp, "can only use R0-R15 as register param for normal subroutines")
                 break
+            }
+            if rp.b != 0 and rp.b.name != 0 and rp.a != 0 and rp.a.type != 0 {
+                ; what a virtual register holds
+                uword rpt = rp.a.type
+                if types.is_pointer(rpt) and rpt != types.ADDRESS_TYPE {
+                    error(rp, "pointer parameters cannot be register-mapped")
+                    break
+                }
+                if rpt == types.T_FLOAT or rpt == types.T_STR {
+                    error(rp, "using R0-R15 as register param requires integer or boolean type")
+                    break
+                }
             }
             rp = rp.next
         }
@@ -1679,6 +2008,8 @@ checker {
         ^^ast.Node value = n.b
         if value.kind == ast.N_TUPLE and ast.list_length(value.a) != ast.list_length(n.a)
             error(n, "Syntax error: multivalue assignment: number of values does not match number of targets")
+        if n.a.next == 0 and n.a.kind != ast.N_VOID
+            value_shape(n, value, n.a.type)
         if value.kind == ast.N_IDENT and value.extra != 0 {
             ; the name of a subroutine or label is not a value: its address is (&name)
             ^^symtab.Sym vs = value.extra
@@ -1712,6 +2043,7 @@ checker {
             else if tt != 0 and types.is_array(tt) and n.a.kind == ast.N_IDENT and value.kind == ast.N_ARRAYLIT
                 error(n, "cannot assign arrays directly. Maybe use sys.memcopy instead.")
         }
+        float_results(value)
         ; a call's values and the targets they go to: as many of each
         if value.kind == ast.N_CALL and value.a.extra != 0 {
             ^^symtab.Sym callee = value.a.extra
@@ -1953,6 +2285,47 @@ checker {
         bool ok
         quad v
         checks++
+        if via_opt == 0 and lv != 0 and lvt != 0 and lv.decl != 0 and lv.decl.kind == ast.N_FOR and lv.decl != n {
+            ; the variable is an earlier loop's: this loop asks for the same type, which
+            ; without one written is that of what it goes over
+            uword wanted = 0
+            if typed
+                wanted = typer.from_type(n.d)
+            else if n.b.kind == ast.N_RANGE {
+                quad lo
+                quad hi
+                ok, lo = typer.const_eval(n.b.a)
+                if ok {
+                    ok, hi = typer.const_eval(n.b.b)
+                    if ok {
+                        if hi < lo {
+                            v = lo
+                            lo = hi
+                            hi = v
+                        }
+                        wanted = types.literal_type(hi)
+                        if lo < 0 {
+                            wanted = types.literal_type(lo)
+                            if types.size_of(types.literal_type(hi)) > types.size_of(wanted) or (hi > 127 and types.size_of(wanted) == 1)
+                                wanted = types.T_WORD
+                        }
+                    }
+                }
+            }
+            else if it != 0 and types.is_array(it)
+                wanted = types.elem_of(it)
+            ; (a wider variable takes the narrower values)
+            if wanted != 0 and wanted != lvt and types.is_integer(wanted) and types.is_integer(lvt)
+                    and not (types.size_of(lvt) > types.size_of(wanted) and (types.is_signed(lvt) or not types.is_signed(wanted))) {
+                begin_message("for loop var '")
+                buf.add_str(parser.scratch, lv.name)
+                buf.add_str(parser.scratch, "' already has type ")
+                types.name_into(parser.scratch, lvt)
+                buf.add_str(parser.scratch, " (from an earlier variable declaration or for loop), but the requested type is ")
+                types.name_into(parser.scratch, wanted)
+                error_scratch(n)
+            }
+        }
         if via_opt != 0 {
             if lv == 0 or not types.is_pointer(lvt)
                 error(n, "linked-list for loop requires a pointer loop variable")
@@ -1968,6 +2341,15 @@ checker {
                 }
                 if vf == 0 or vf.type != lvt
                     error(n, "linked-list for loop 'via' field must be a pointer to the same node type")
+            }
+            if until_opt != 0 and until_opt.a != 0 and lv != 0 {
+                ; where the walk ends: a node pointer, an address taken with &, or 0
+                ^^ast.Node ue = until_opt.a
+                bool uok = ue.kind == ast.N_ADDROF or (ue.kind != ast.N_CAST and ue.kind != ast.N_INT and ue.type == lvt)
+                if ue.kind == ast.N_INT and ue.value == 0
+                    uok = true
+                if not uok
+                    error(n, "linked-list for loop 'until' must be a compatible node pointer or 0")
             }
             expression(n.b)
             loop_body(n.c)
@@ -2206,6 +2588,15 @@ checker {
                     ^^symtab.Sym s = e.a.extra
                     if s != 0 and s.kind == symtab.K_CONST
                         error(e, "invalid address-of operand type")
+                    if e.op == token.T_AMPGT and s != 0 and for_6502() and s.decl != 0 and s.decl.kind == ast.N_VARDECL {
+                        ; the high bytes are apart only in a split word array
+                        uword st = s.type
+                        uword se = 0
+                        if st != 0 and types.is_array(st)
+                            se = types.elem_of(st)
+                        if se == 0 or types.size_of(se) != 2 or types.is_struct(se) or has_tag(s.decl, strtab.intern_cstr("nosplit")) or s.decl.op == token.T_AMP
+                            error(e, "$> can only be used on split word arrays")
+                    }
                 }
                 expression(e.b)
             }
@@ -2220,6 +2611,18 @@ checker {
             ast.N_CALL -> {
                 check_name(e.a, e.a.name)
                 expressions(e.b)
+                ^^ast.Node marg = e.b
+                long margn = 1
+                while marg != 0 {
+                    if several_values(marg) {
+                        begin_message("argument ")
+                        buf.add_long(parser.scratch, margn)
+                        buf.add_str(parser.scratch, " invalid argument type")
+                        error_scratch(marg)
+                    }
+                    margn++
+                    marg = marg.next
+                }
                 if e.a.kind == ast.N_IDENT and e.a.extra != 0 {
                     ^^symtab.Sym called = e.a.extra
                     if called.kind == symtab.K_BUILTIN
@@ -2229,6 +2632,21 @@ checker {
                         error(e.b, "argument 1 type mismatch, was: long expected: POINTER")
                     if called.kind == symtab.K_SUB and called.decl != 0 and called.decl.kind == ast.N_SUB and for_6502()
                         split_arguments(e, called)
+                    if called.kind == symtab.K_BUILTIN and strings.compare(called.name, "call") == 0 and e.b != 0 and e.b.next != 0 {
+                        begin_message("invalid number of arguments: expected 1 but got ")
+                        buf.add_long(parser.scratch, ast.list_length(e.b))
+                        error_scratch(e.b)
+                    }
+                    if called.kind == symtab.K_BUILTIN and strings.compare(called.name, "memory") == 0 and e.b != 0 and e.b.next != 0 {
+                        ; memory(name, size, alignment): both are known when the program is built
+                        bool mok
+                        quad mv
+                        mok, mv = typer.const_eval(e.b.next)
+                        if mok and e.b.next.next != 0
+                            mok, mv = typer.const_eval(e.b.next.next)
+                        if not mok
+                            error(e.b.next, "argument must be a constant")
+                    }
                     if called.kind == symtab.K_BUILTIN and strings.compare(called.name, "call") == 0 and e.b != 0 {
                         ; a subroutine that is named is called by its name
                         ^^ast.Node what = e.b
@@ -2283,6 +2701,10 @@ checker {
         }
         else if r.op == token.T_KW_DOWNTO
             stride = -1
+        if r.b != 0 and r.b.type == types.T_BOOL {
+            error(r.b, "range expression to value must be integer")
+            return
+        }
         ok, from = typer.const_eval(r.a)
         if not ok
             return
@@ -2296,9 +2718,9 @@ checker {
         if from == to_value
             warning(r, "range is just a single value, don't use a loop here")
         else if from < to_value and stride <= 0
-            error(r, "ascending range requires stride > 0")
+            error(r, "ascending range requires step > 0")
         else if from > to_value and stride >= 0
-            error(r, "descending range requires stride < 0")
+            error(r, "descending range requires step < 0")
     }
 
     ; a constant index into an array or string of known length
@@ -2327,6 +2749,67 @@ checker {
         }
         else if idx >= length
             error(e.b, "index out of bounds")
+    }
+
+    ; A boolean and a number do not meet in an operator: upstream's rules, in its order.
+    sub boolean_operands(^^ast.Node e) {
+        uword lt = e.a.type
+        uword rt = e.b.type
+        ubyte op = e.op
+        if lt == 0 or rt == 0
+            return
+        bool lbool = lt == types.T_BOOL
+        bool rbool = rt == types.T_BOOL
+        if not lbool and not rbool {
+            if (op == token.T_KW_AND or op == token.T_KW_OR or op == token.T_KW_XOR) and types.is_numeric(lt)
+                error(e.b, "logical operator requires boolean operands")
+            return
+        }
+        if op == token.T_KW_IN or op == parser.OP_NOT_IN
+            return
+        if op == token.T_AMP or op == token.T_PIPE or op == token.T_CARET {
+            if op == token.T_AMP
+                error(e.b, "operator requires numeric operands, did you mean logical 'and'?")
+            else if op == token.T_PIPE
+                error(e.b, "operator requires numeric operands, did you mean logical 'or'?")
+            else
+                error(e.b, "operator requires numeric operands, did you mean logical 'xor'?")
+            return
+        }
+        if lbool and rbool {
+            if op == token.T_LT or op == token.T_LE or op == token.T_GT or op == token.T_GE
+                error(e, "can't use boolean operand with this comparison operator")
+            return
+        }
+        if not types.is_numeric(lt) and not lbool
+            return
+        if not types.is_numeric(rt) and not rbool
+            return
+        if not lbool {
+            if op == token.T_KW_AND or op == token.T_KW_OR or op == token.T_KW_XOR {
+                error(e.b, "logical operator requires boolean operands")
+                return
+            }
+            if lt == types.T_UBYTE {
+                ; a byte on the left: equal to a boolean variable is allowed (0 or 1)
+                if op == token.T_EQ or op == token.T_NE {
+                    if e.b.kind == ast.N_IDENT
+                        return
+                    ; (upstream turns the two around before it complains)
+                    error(e, "left and right operands aren't the same type: bool vs ubyte")
+                }
+                else if op == token.T_LT or op == token.T_LE or op == token.T_GT or op == token.T_GE
+                    error(e, "can't use boolean operand with this comparison operator")
+                else
+                    error(e.b, "operator requires numeric operands")
+                return
+            }
+        }
+        begin_message("left and right operands aren't the same type: ")
+        types.name_into(parser.scratch, lt)
+        buf.add_str(parser.scratch, " vs ")
+        types.name_into(parser.scratch, rt)
+        error_scratch(e)
     }
 
     sub binary(^^ast.Node e) {
@@ -2366,6 +2849,7 @@ checker {
                 error_scratch(e)
             }
         }
+        boolean_operands(e)
         if op == token.T_SLASH or op == token.T_PERCENT {
             ok, v = typer.const_eval(e.b)
             if ok and v == 0 and e.b.type != types.T_FLOAT
@@ -2380,6 +2864,13 @@ checker {
             error(e.b, "can only multiply string by integer constant")
         else if op == token.T_STAR and e.a.kind == ast.N_ARRAYLIT and rt == types.T_BOOL
             error(e.b, "can only multiply array by integer constant")
+        else if op == token.T_STAR and e.a.kind == ast.N_ARRAYLIT {
+            ; [values] * count: at most 255 elements
+            ok, v = typer.const_eval(e.b)
+            long each = ast.list_length(e.a.a)
+            if ok and each > 0 and (v < 1 or v > 255 / each)
+                error(e.b, "array length must be 1-255")
+        }
         else if op == token.T_STAR and lt == types.T_STR {
             ok, v = typer.const_eval(e.b)
             if not ok

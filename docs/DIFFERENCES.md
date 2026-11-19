@@ -22,7 +22,9 @@ compiler with LLVM targets added.
   the library repository lists.
 - **The intermediate representation.**  p8p8 writes upstream's `.p8ir`
   format.  Its IR runs in upstream's virtual machine and builds with
-  upstream's IR back ends.
+  upstream's IR back ends.  An IR file is accepted as input, as upstream
+  does; that works for the IR p8p8 writes, and for little of what upstream
+  writes (it uses instructions p8p8's back ends do not have).
 - **The conventions of 6502 programs:** symbol prefixes, how arguments reach
   `asmsub`s, split word arrays, the layout that library assembly expects,
   64tass as the assembler.

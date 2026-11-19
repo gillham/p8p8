@@ -244,6 +244,7 @@ gen6502 {
         return 2
     }
 
+    ^^ubyte reg_named = 0           ; per register: an instruction of the program names it
     ^^ubyte reg_fixed = 0           ; per register: its cell is used by address and keeps its place
 
     ; gives every register that the program uses a cell
@@ -252,6 +253,8 @@ gen6502 {
         cell_of = mem.alloc(cell_cap * 2)
         reg_fixed = mem.alloc(cell_cap)
         sys.memset(reg_fixed, cell_cap as uword, 0)
+        reg_named = mem.alloc(cell_cap)
+        sys.memset(reg_named, cell_cap as uword, 0)
         fixed_longs_in(prog.initglobals)
         ^^ir.Block fb = prog.blocks
         while fb != 0 {
@@ -269,8 +272,12 @@ gen6502 {
         long r = 1
         while r <= ir.regcount {
             if ir.regtypes[r] == ir.T_FLOAT {
-                cell_of[r] = regfile_size as uword
-                regfile_size += 5
+                ; (a float register of code that was removed needs none)
+                cell_of[r] = 0
+                if reg_named[r] != 0 {
+                    cell_of[r] = regfile_size as uword
+                    regfile_size += 5
+                }
             }
             else if reg_fixed[r] != 0 {
                 ; (a long whose address goes to a float routine: the same)
@@ -1332,6 +1339,25 @@ gen6502 {
             if c.kind != ir.C_ASM {
                 ^^ir.Instr i = c.first
                 while i != 0 {
+                    ; (and which registers the code that is left still names)
+                    if i.r1 != 0 and i.r1 <= ir.regcount
+                        reg_named[i.r1] = 1
+                    if i.r2 != 0 and i.r2 <= ir.regcount
+                        reg_named[i.r2] = 1
+                    if i.r3 != 0 and i.r3 <= ir.regcount
+                        reg_named[i.r3] = 1
+                    ^^ir.Arg na = i.args
+                    while na != 0 {
+                        if na.reg != 0 and na.reg <= ir.regcount
+                            reg_named[na.reg] = 1
+                        na = na.next
+                    }
+                    na = i.results
+                    while na != 0 {
+                        if na.reg != 0 and na.reg <= ir.regcount
+                            reg_named[na.reg] = 1
+                        na = na.next
+                    }
                     if i.op == ir.OP_FFROMSL and i.r2 != 0 and i.r2 <= ir.regcount
                         reg_fixed[i.r2] = 1
                     if i.op == ir.OP_FTOSL and i.r1 != 0 and i.r1 <= ir.regcount

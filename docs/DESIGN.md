@@ -65,6 +65,23 @@ For the 6502 machines the IR is already in their conventions: register
 arguments of `asmsub`s, split word arrays, the symbol prefixes (`p8b_`,
 `p8s_`, `p8v_`) that library assembly expects.
 
+An IR file can be the input too (`p8c program.p8ir`): `irread.p8` reads the
+whole file into the same structures `irgen` builds, with `irparse.p8` (which
+was there for the libraries' `%ir` blocks) for the instruction lines, and the
+program goes on through `irprune` and a back end as generated IR does.  The
+test is that p8p8's own IR comes back the same: written, read and written
+again it is the same text, and the code made from the file is byte for byte
+what the program gives directly (`make irroundtrip`).  For that the file
+carries what the code generators take from the program besides the IR, as
+attributes of `<PROGRAM>` that upstream's reader passes over: `FLOATS` and
+`VARSADDRESS` when set, the order the variables were declared in
+(`VARORDER`: the file groups them by kind, and the order decides zero page
+addresses) and the registers' types (`REGTYPES`).  A block's chunks and
+subroutines are written in source order.  IR that upstream wrote is another
+matter: it has opcodes p8p8 does not generate or translate (`storep_inc`,
+`loadiz`, `loadmzl`, `bsigb`, `midb`) and a `<LOOP>` element, so only the
+simplest programs get through.
+
 ## Conventions of the source
 
 - **Memory is allocated and not freed.**  A compiler is a batch job.
@@ -177,6 +194,11 @@ size goes there, and an array without values, which the start of the
 program clears; an array or string with values does not (its values would
 have to be copied in), which is an error for `@requirezp`.  Which zero page
 bytes are free is the target file's business.
+
+A float register's cell is used by address and keeps its place, so those are
+given out before the others; only the float registers that the code left
+after pruning still names get one (the library's float routines that a
+program does not call used to cost 250 bytes of cells).
 
 On the C64, the C128 and the PET the library has the virtual registers
 R0-R15 outside the zero page.  When the program has the zero page to itself

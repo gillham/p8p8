@@ -648,7 +648,18 @@ typer {
             }
             return
         }
+        declaring = true
+        ; (a variable that nothing uses is gone before upstream looks at its value)
+        unused_declaration = (s.marks & 1) == 0
+        ^^ast.Node utag = n.d
+        while utag != 0 {
+            if utag.kind == ast.N_TAG and utag.name != 0 and strings.compare(utag.name, "shared") == 0
+                unused_declaration = false
+            utag = utag.next
+        }
         check_assign(n.b, vt, s.type)
+        declaring = false
+        unused_declaration = false
     }
 
     ; Each element of an array literal must fit the element type.
@@ -715,6 +726,10 @@ typer {
         types.name_into(parser.scratch, t)
     }
 
+    bool declaring = false      ; check_assign looks at a declaration's first value
+    bool returning = false      ; or at a returned value
+    bool unused_declaration = false
+
     sub check_assign(^^ast.Node v, uword vt, uword tt) {
         checks++
         if vt == 0 or tt == 0
@@ -726,8 +741,36 @@ typer {
         if v.kind == ast.N_BINARY and (v.op == token.T_AMP or v.op == token.T_PIPE or v.op == token.T_CARET)
             and types.size_of(vt) == types.size_of(tt) and types.is_integer(tt)
             return          ; a bitwise operation between different types of the same size
-        if v.kind == ast.N_UNARY and v.op == token.T_TILDE and types.is_integer(vt) and types.is_integer(tt) and types.size_of(vt) == types.size_of(tt)
-            return          ; and an inversion
+        if v.kind == ast.N_UNARY and v.op == token.T_TILDE and types.is_integer(vt) and types.is_integer(tt) and types.size_of(vt) == types.size_of(tt) {
+            ; an inversion too; of a signed value it is unsigned, as upstream has it
+            if types.is_signed(vt) and types.is_signed(tt) and types.size_of(vt) <= 2
+                error_mismatch(v, types.unsigned_of(vt), tt)
+            return
+        }
+        if v.kind == ast.N_INT and tt == types.T_BOOL and not unused_declaration and (arg_checked != 0 or returning or not declaring or v.value != 0) {
+            ; a number is not a boolean (a declaration may start at 0)
+            buf.clear(parser.scratch)
+            if arg_checked != 0 {
+                buf.add_str(parser.scratch, "argument ")
+                buf.add_long(parser.scratch, arg_checked)
+                buf.add_str(parser.scratch, " type mismatch, was: ")
+                types.name_into(parser.scratch, types.literal_type(v.value))
+                buf.add_str(parser.scratch, " expected: bool")
+            }
+            else if returning {
+                buf.add_str(parser.scratch, "return value type ")
+                types.name_into(parser.scratch, types.literal_type(v.value))
+                buf.add_str(parser.scratch, " doesn't match subroutine return type bool")
+            }
+            else {
+                buf.add_str(parser.scratch, "value type ")
+                types.name_into(parser.scratch, types.literal_type(v.value))
+                buf.add_str(parser.scratch, " doesn't match target type bool")
+            }
+            buf.add_byte(parser.scratch, 0)
+            diag.error_at(source.get(v.file), v.line, v.col, parser.scratch.data)
+            return
+        }
         if v.kind == ast.N_INT {
             if types.POINTER_SIZE == 2 and types.is_pointer(tt) and (v.value > 65535 or v.value < 0) {
                 error(v, "address out of range")
@@ -880,7 +923,9 @@ typer {
                     error(v, "too many return values")
             }
             else {
+                returning = true
                 check_assign(v, vt, return_type(r))
+                returning = false
                 r = r.next
             }
             v = v.next
@@ -1052,12 +1097,62 @@ typer {
                 return
             }
         }
+        if k == ast.N_CAST and e.a != 0 and e.a.type == types.T_FLOAT and e.type != 0 and types.is_integer(e.type) and types.size_of(e.type) <= 2 and float_eval(e.a) {
+            ; a floating point constant outside the type's range
+            float fv = float_value
+            float flo = 0.0
+            float fhi = 255.0
+            when e.type {
+                types.T_BYTE -> {
+                    flo = -128.0
+                    fhi = 127.0
+                }
+                types.T_UWORD -> fhi = 65535.0
+                types.T_WORD -> {
+                    flo = -32768.0
+                    fhi = 32767.0
+                }
+            }
+            if fv < flo or fv >= fhi + 1.0 {
+                buf.clear(parser.scratch)
+                buf.add_str(parser.scratch, "no cast available from FLOAT to ")
+                when e.type {
+                    types.T_UBYTE -> buf.add_str(parser.scratch, "UBYTE")
+                    types.T_BYTE -> buf.add_str(parser.scratch, "BYTE")
+                    types.T_UWORD -> buf.add_str(parser.scratch, "UWORD")
+                    else -> buf.add_str(parser.scratch, "WORD")
+                }
+                buf.add_str(parser.scratch, " for value ")
+                if fv < 0.0 {
+                    buf.add_byte(parser.scratch, '-')
+                    fv = 0.0 - fv
+                }
+                long whole = fv as long
+                buf.add_long(parser.scratch, whole)
+                buf.add_byte(parser.scratch, '.')
+                ; (the fraction as it is written out, to six places without the zeros at the end)
+                long frac = ((fv - (whole as float)) * 1000000.0 + 0.5) as long
+                if frac == 0
+                    buf.add_byte(parser.scratch, '0')
+                else {
+                    long scale = 100000
+                    while frac != 0 and scale != 0 {
+                        buf.add_byte(parser.scratch, '0' + (frac / scale) as ubyte)
+                        frac = frac % scale
+                        scale /= 10
+                    }
+                }
+                buf.add_byte(parser.scratch, 0)
+                error(e, parser.scratch.data)
+                return
+            }
+        }
         ok, value = const_eval(e)
         if not ok
             return
         if not types.is_integer(e.type) and e.type != types.T_BOOL
             return
-        if k == ast.N_CALL or k == ast.N_SIZEOF
+        if (k == ast.N_CALL or k == ast.N_SIZEOF) and e.type != types.T_BOOL
             e.type = types.literal_type(value)      ; a builtin's constant result takes the smallest type, as upstream does
         else if (k == ast.N_BINARY or k == ast.N_UNARY) and types.is_integer(e.type) {
             ; folded arithmetic takes the larger of its own type and the
@@ -1815,6 +1910,19 @@ typer {
                 return types.T_UBYTE
             }
             ast.N_SIZEOF -> {
+                if e.op != 1 and e.a != 0 {
+                    ; not of the type str, nor of an enum, a subroutine or a block
+                    bool sizable = true
+                    if e.a.kind == ast.N_TYPE and e.a.op == token.T_KW_STR and (e.a.flags & ast.F_POINTER) == 0 and e.a.a == 0
+                        sizable = false
+                    if (e.a.kind == ast.N_IDENT or (e.a.kind == ast.N_TYPE and e.a.op == token.T_IDENT)) and e.a.extra != 0 {
+                        ^^symtab.Sym zs = e.a.extra
+                        if zs.kind == symtab.K_ENUM or zs.kind == symtab.K_SUB or zs.kind == symtab.K_BLOCK
+                            sizable = false
+                    }
+                    if not sizable
+                        error(e, "Syntax error: sizeof argument should be an identifier, number, or type name")
+                }
                 if e.a.kind != ast.N_TYPE and e.op != 1 {
                     sizing = true
                     void infer(e.a)

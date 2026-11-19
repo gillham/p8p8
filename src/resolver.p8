@@ -298,6 +298,14 @@ resolver {
                     buf.add_str(parser.scratch, "' from outside its block")
                     diag.error_at(module.file, node.line, node.col, parser.scratch.data)
                 }
+                else if inner.scope != 0 and inner.scope.kind == symtab.S_BLOCK and inner.scope.private_symbols and (inner.flags & ast.F_PUBLIC) == 0
+                        and inner.scope != current_block() {
+                    buf.clear(parser.scratch)
+                    buf.add_str(parser.scratch, "cannot access alias '")
+                    buf.add_str(parser.scratch, inner.name)
+                    buf.add_str(parser.scratch, "' from outside its block (not public)")
+                    diag.error_at(module.file, node.line, node.col, parser.scratch.data)
+                }
                 ; alias inside another block: continue from its target with the rest of the name
                 inner = alias_target(inner, node, i + 1)
                 return inner

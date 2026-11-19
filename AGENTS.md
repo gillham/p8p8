@@ -82,7 +82,7 @@ Which suite after which change (see the Makefile for all of them):
 |---|---|
 | anything | `make test`, `make bootstrap` (p8c compiled by itself must reproduce itself), `make seedcheck` (built from the seed and built by prog8c-llvm it must be the same compiler) |
 | front end | `make programs`, `make roundtrip` |
-| IR generation | `make conformance` (quick), `make vmcmp`, `make nativecmp` |
+| IR generation | `make conformance` (quick), `make vmcmp`, `make nativecmp`, `make irroundtrip` (the IR file read back) |
 | 6502 code generator or peephole | `BUILDALL_CODEGEN=own make buildall`, `EMUCMP_CODEGEN=own make emucmp`, `EMUCMP_CODEGEN=own make emucmp64` |
 | IR generation for 68000 targets | `make qemucmpir` (p8p8's IR through prog8c-llvm's 68000 back end) |
 | 68000 code generator | `make qemucmp` (needs vasmm68k_mot, vlink, qemu-system-m68k), `make amigacmp`, `make amigacmp500` (vamos), `make coppercmp`, `make amigacmpfloat` (Copperline) |

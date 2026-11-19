@@ -281,6 +281,9 @@ parser {
         ^^ast.Node n
         ; private/public/inline modifiers, when a declaration follows
         while (k == token.T_KW_PRIVATE or k == token.T_KW_PUBLIC or k == token.T_KW_INLINE) and starts_declaration(kind_at(1)) {
+            ; (upstream's grammar has private or public before inline, and says this)
+            if (flags & ast.F_INLINE) != 0 and k != token.T_KW_INLINE
+                error("variable declaration must be on its own line (did you forget '=' or a newline?)")
             if k == token.T_KW_PRIVATE
                 flags |= ast.F_PRIVATE
             else if k == token.T_KW_PUBLIC
@@ -290,6 +293,8 @@ parser {
             advance()
             k = kind()
         }
+        if flags != 0 and at_ident() and kind_at(1) == token.T_COLON
+            error("parse error: a label is not private or public")
         if (flags & ast.F_PRIVATE) != 0 and (flags & ast.F_PUBLIC) != 0
             error("Syntax error: cannot use both 'private' and 'public' on the same declaration")
         if k == token.T_DIRECTIVE {
@@ -525,8 +530,11 @@ parser {
             if not accept(token.T_COMMA)
                 break
         }
-        if accept(token.T_ASSIGN)
+        if accept(token.T_ASSIGN) {
             n.b = parse_tuple_or_expression()
+            if is_basetype(kind())
+                error("variable declaration must be on its own line (did you forget '=' or a newline?)")
+        }
         else if needs_init
             error("'=' and a value expected")
         else if at_ident()
@@ -824,8 +832,12 @@ parser {
                 break
             ^^ast.Node m = node(ast.N_ENUMMEMBER)
             m.name = take_ident("enum member")
-            if accept(token.T_ASSIGN)
+            if accept(token.T_ASSIGN) {
+                ; (a whole number, written out: upstream's grammar takes nothing else)
+                if kind() != token.T_INT
+                    error("parse error: an enum member's value is an integer literal")
                 m.a = parse_expression()
+            }
             if n.a == 0
                 n.a = m
             tail = ast.link(tail, m)
@@ -1244,6 +1256,10 @@ parser {
                 r.op = op
                 r.a = left
                 r.b = parse_binary(level + 1)
+                ; (upstream's grammar takes all that follows as the end value: "1 to 10 and x"
+                ; is a range that ends at "10 and x")
+                if kind() == token.T_KW_AND or kind() == token.T_KW_OR or kind() == token.T_KW_XOR
+                    error("range expression to value must be integer")
                 if accept(token.T_KW_STEP)
                     r.c = parse_binary(level + 1)
                 left = r

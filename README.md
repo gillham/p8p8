@@ -134,6 +134,8 @@ p8c -target cx16 -srcdirs src:src/cx16 -out build src/main.p8
 p8c -target plus4 -out build program.p8              # a machine of the library
 p8c -target config/mine.properties -out build program.p8     # or a file of your own
 p8c -target llvm64 -out build -run program.p8
+p8c -target cx16 -ir -out build program.p8           # the IR, as build/program.p8ir
+p8c -out build build/program.p8ir                    # and the program from that file
 ```
 
 The directories of `-srcdirs` are separated by `:` or by `;`, on every

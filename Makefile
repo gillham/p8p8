@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64
+.PHONY:	quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -318,7 +318,7 @@ test:	$(TESTBIN) $(P8P8)
 	    [ $$? -eq 1 ] || { echo "expected exit status 1"; exit 1; }; \
 	    diff -u tests/expected/$(TARGET)_$$t.txt $(OUT)/$$t.out || exit 1; \
 	done
-	@for t in bad_upstream bad_upstream_syntax; do \
+	@for t in bad_upstream bad_upstream2 bad_upstream_syntax; do \
 	    echo "test $$t (upstream's checks, for the X16; must be rejected)"; \
 	    $(P8P8) -lib lib -target cx16 -check tests/$$t.p8 > $(OUT)/$$t.out 2>&1; \
 	    [ $$? -eq 1 ] || { echo "expected exit status 1"; exit 1; }; \
@@ -346,6 +346,14 @@ CONFTESTS=$(wildcard tests/conformance/*.p8)
 VMTESTS=$(wildcard .prog8-reference/compiler/test/arithmetic/*.p8 .prog8-reference/compiler/test/comparisons/*.p8) .prog8-reference/examples/virtual/bsieve.p8 .prog8-reference/examples/virtual/sincos.p8 $(PTRTESTS) $(wildcard tests/programs/*.p8) $(CONFTESTS)
 vmcmp:	$(P8P8)
 	@tests/vmcmp.sh $(P8P8) .prog8-reference $(VMTESTS)
+
+# a .p8ir file as input: p8c's own IR, read back, gives the same IR and the same code
+IRTESTS=tests/hello.p8 $(wildcard tests/programs/*.p8)
+irroundtrip:	$(P8P8)
+	@tests/irroundtrip.sh $(P8P8) cx16 $(IRTESTS)
+	@tests/irroundtrip.sh $(P8P8) c64 $(IRTESTS)
+	@tests/irroundtrip.sh $(P8P8) llvm64 $(IRTESTS)
+	@tests/irroundtrip.sh $(P8P8) qemu68k $(IRTESTS)
 
 conformance:	$(P8P8)
 	@tests/vmcmp.sh $(P8P8) .prog8-reference $(CONFTESTS)
