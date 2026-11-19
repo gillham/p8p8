@@ -407,6 +407,19 @@ bytes of data (`p8_qconst_N`).  A signed comparison is a subtraction whose
 sign the overflow flag turns round; the top byte is in Z, so `tza` first.
 After a comparison Z is made zero between `php` and `plp`.
 
+A long comes back from a call in R14 and R15 and is fetched from there into
+Q; a long is returned by storing Q there.
+
+**The MEGA65's arithmetic unit.**  The 45GS02 is that machine's CPU, so its
+multiplier and divider are there: two 32-bit numbers at `$d770` and `$d774`,
+their product at `$d778` at once and the quotient at `$d76c` when the busy
+bit of `$d70f` is off.  A long multiplication is five 32-bit instructions.
+The divider is unsigned and prog8's longs are not, so a division calls
+`p8_qdivs`, which the generator writes into a program that divides longs:
+it makes both numbers positive, divides, and gives the quotient its sign
+(18 bytes of the register file are its cells).  `P8P8_45_NOMATH` leaves both
+to the library's routines.
+
 The lines are written as text the peephole passes do not look into, and a
 long register's cell has a fixed place (they would otherwise move and share
 it), as a float's has.

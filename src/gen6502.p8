@@ -294,10 +294,18 @@ gen6502 {
             }
             else if reg_fixed[r] != 0 {
                 ; (a long whose address goes to a float routine: the same)
-                cell_of[r] = regfile_size as uword
-                regfile_size += 4
+                cell_of[r] = 0
+                if reg_named[r] != 0 or not c45 {
+                    cell_of[r] = regfile_size as uword
+                    regfile_size += 4
+                }
             }
             r++
+        }
+        if c45 {
+            ; the cells of the division routine (p8_qdivs)
+            qdiv_cells = regfile_size
+            regfile_size += 18
         }
         float_cells = regfile_size
         r = 1
@@ -1274,6 +1282,7 @@ gen6502 {
         peep6502.c02 = c02
         peep6502.c02z = c02z
         peep6502.c45 = c45
+        hardware_math = c45 and io_platform.env("P8P8_45_NOMATH") == 0
         peep6502.arms_enabled = io_platform.env("P8P8_NOARMS") == 0
         long fr = 1
         while fr <= ir.regcount {
@@ -5237,6 +5246,9 @@ gen6502 {
         q_result(i.r1)
     }
 
+    long qdiv_cells = 0             ; where p8_qdivs keeps its numbers: 18 bytes of the register file
+    bool qdiv_used = false
+    bool hardware_math = false      ; the MEGA65's multiplier and divider are there (the 45GS02 is that machine's CPU)
     bool q_long_args = false        ; the long arguments of the call in hand are in their parameters already
     bool qz_keep_flags = false      ; what follows reads the flags: making Z zero must leave them alone
 
@@ -5487,6 +5499,68 @@ gen6502 {
                 q_load(i.r1)
                 q_mem("stq", i)
                 qmirror = i
+                return true
+            }
+            ir.OP_RETURNR -> {
+                ; a long goes back in the virtual registers R14 and R15
+                q_load(i.r1)
+                q_text("stq", "cx16.r14", 0)
+                q_text("ldz", "#0", 0)
+                qz_dirty = false
+                qz_keep_flags = false
+                qalias_count = 0
+                qmirror = 0
+                qacc = 0
+                qacc_stored = true
+                return_uses(4)
+                return true
+            }
+            ir.OP_MUL, ir.OP_MULR, ir.OP_MULS, ir.OP_MULSR -> {
+                ; The MEGA65's multiplier: two 32-bit numbers at $d770 and $d774, their
+                ; product at $d778 at once.  (The low half is the same for signed numbers.)
+                if not hardware_math or i.scale == 250
+                    return false
+                if i.mode != ir.M_RR and i.mode != ir.M_RM and (qconst_count == len(qconsts) or (i.mode != ir.M_RI and i.mode != ir.M_RIT))
+                    return false
+                q_load(i.r1)
+                q_text("stq", "$d770", 0)
+                if i.mode == ir.M_RR and i.r2 == i.r1
+                    q_text("stq", "$d774", 0)
+                else {
+                    q_spill(1)
+                    qmirror = 0
+                    void q_compare_operand(i, "ldq")
+                    q_text("stq", "$d774", 0)
+                }
+                qacc_stored = true      ; (the register's old value is not wanted: it gets the product)
+                qacc = 0
+                q_text("ldq", "$d778", 0)
+                q_result(i.r1)
+                return true
+            }
+            ir.OP_DIVS, ir.OP_DIVSR, ir.OP_DIV, ir.OP_DIVR -> {
+                ; The MEGA65's divider, by way of a routine of the program's own that
+                ; sees to the signs: the divisor in its cell, the dividend in Q, and the
+                ; quotient comes back in Q.
+                if not hardware_math
+                    return false
+                if i.mode != ir.M_RR and i.mode != ir.M_RM and (qconst_count == len(qconsts) or (i.mode != ir.M_RI and i.mode != ir.M_RIT))
+                    return false
+                q_spill(0)
+                qmirror = 0
+                void q_compare_operand(i, "ldq")
+                qacc = 0
+                qacc_stored = true
+                qz_dirty = true
+                put("    stq  p8_regfile+")
+                putn(qdiv_cells + 4)
+                nl()
+                q_load(i.r1)
+                q_text("jsr", "p8_qdivs", 0)
+                qdiv_used = true
+                qacc_stored = true
+                qacc = 0
+                q_result(i.r1)
                 return true
             }
             ir.OP_CMP, ir.OP_CMPI -> {
@@ -6520,7 +6594,18 @@ gen6502 {
             if vreg >= 0 {
                 ; the result is in a virtual register (an asmsub's, or the R14R15 of a long)
                 ubyte vk
-                for vk in 0 to rsize - 1 {
+                if c45 and rsize == 4 {
+                    ; (the 45GS02: all four bytes into Q, where the next instruction may want them)
+                    if pb == 0
+                        pb = buf.new(128)
+                    buf.clear(pb)
+                    buf.add_str(pb, "cx16.r")
+                    buf.add_long(pb, vreg)
+                    buf.add_byte(pb, 0)
+                    q_text("ldq", pb.data, 0)
+                    q_result(r.reg)
+                }
+                else for vk in 0 to rsize - 1 {
                     if pb == 0
                         pb = buf.new(128)
                     buf.clear(pb)
@@ -7004,7 +7089,55 @@ gen6502 {
 
     long data_size = 1          ; the size of the elements that put_value writes
 
+    ; "    mnemonic  p8_regfile+N" for byte n of the division routine's cells
+    sub qdiv_line(str mnemonic, long n) {
+        put("    ")
+        put(mnemonic)
+        put("  p8_regfile+")
+        putn(qdiv_cells + n)
+        nl()
+    }
+
+    ; The division of longs with the MEGA65's divider, which is unsigned and gives no
+    ; remainder: Q divided by the long in cell B, the quotient in Q.  The cells: A the
+    ; dividend (0), B the divisor (4), SIGN (16).  The quotient goes towards zero.
+    sub qdiv_routine() {
+        raw("")
+        raw("; the division of two longs (the 45GS02 on the MEGA65: its divider at $d770)")
+        raw("p8_qdivs:")
+        qdiv_line("stq", 0)
+        qdiv_line("lda", 3)
+        qdiv_line("eor", 7)
+        qdiv_line("sta", 16)
+        qdiv_line("bit", 3)
+        raw("    bpl  +")
+        qdiv_line("ldq", 0)
+        raw("    .byte  $42, $42, $42    ; negq")
+        qdiv_line("stq", 0)
+        raw("+")
+        qdiv_line("bit", 7)
+        raw("    bpl  +")
+        qdiv_line("ldq", 4)
+        raw("    .byte  $42, $42, $42    ; negq")
+        qdiv_line("stq", 4)
+        raw("+")
+        qdiv_line("ldq", 0)
+        raw("    stq  $d770")
+        qdiv_line("ldq", 4)
+        raw("    stq  $d774")
+        raw("-   bit  $d70f")
+        raw("    bmi  -")
+        raw("    ldq  $d76c")
+        qdiv_line("bit", 16)
+        raw("    bpl  +")
+        raw("    .byte  $42, $42, $42    ; negq")
+        raw("+")
+        raw("    rts")
+    }
+
     sub data() {
+        if qdiv_used
+            qdiv_routine()
         ubyte qk = 0
         while qk < qconst_count {
             ; (the long constants that are operands of the 45GS02's 32-bit instructions)

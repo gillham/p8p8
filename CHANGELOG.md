@@ -44,6 +44,9 @@
   -cpu 45gs02`.  Longs are loaded, combined, compared and stored with the
   32-bit instructions (`c = a + b` is four instructions), which makes a test
   of long arithmetic 876 bytes where the 6502 code is 1,501.
+  Long results and returns go through the 32-bit register, and long
+  multiplication and division use the MEGA65's arithmetic unit (a test of
+  long division: 941 bytes against 1,997).
   `make emucmp65` compares the two kinds of code for every test program in
   xmega65.
 - Fixed: a program with more than 65,535 IR registers was compiled wrongly
