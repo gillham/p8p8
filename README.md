@@ -18,7 +18,13 @@ The command is `p8c`.
   writes 64tass assembly and builds the program.  The Commodore 64, the
   Commodore 128, the Commander X16 and the PET come with it; any other 6502
   machine is described by a properties file in the format of the reference
-  compiler's custom targets (see [docs/TARGETS.md](docs/TARGETS.md)).
+  compiler's custom targets (see [docs/TARGETS.md](docs/TARGETS.md)), and
+  the library has such files for a number of them (the MEGA65, the VIC-20,
+  the Plus/4, the Foenix F256, the GameTank and others).
+- The same code generator writes for two more CPUs of that family, which
+  the reference compiler has no code for: the 65816 (`-cpu 65816`, for a
+  Commander X16 that has one or a C64 with a SuperCPU) and the 45GS02 of
+  the MEGA65.
 - For the 68000 there is a first code generator, for the `qemu68k` target
   (a bare 68020 in QEMU), the Amiga 1200 and the Amiga 500: it writes vasm
   assembly.
@@ -51,6 +57,7 @@ What else you need depends on what you build:
 | To build | You need |
 |---|---|
 | programs for 6502 machines | [64tass](https://sourceforge.net/projects/tass64/) |
+| programs for 68000 machines | [vasm](http://www.compilers.de/vasm.html) (`vasmm68k_mot`), and [vlink](http://www.compilers.de/vlink.html) for `-target qemu68k` |
 | programs for the host (`-target llvm64`) | clang.  On Windows clang links with Microsoft's tools: install LLVM, and the Visual Studio Build Tools with a Windows SDK |
 | and to run a 6502 program with `-emu` | [VICE](https://vice-emu.sourceforge.io/) or [x16emu](https://github.com/X16Community/x16-emulator) |
 
@@ -234,6 +241,8 @@ Options p8p8 has that the reference compiler does not:
 |---|---|
 | `-encoding <name>` | the encoding of string and character literals without a prefix, in place of the target's (`%encoding` in a module and a prefix still override it) |
 | `-codegen own\|upstream` | which back end builds a 6502 program |
+| `-cpu 6502\|65c02\|65816\|45gs02` | the CPU a 6502 machine's program is written for, in place of the target's |
+| `-triple <name>` | the platform of an llvm32 program: a profile in the library's `triples/` (WebAssembly, 32-bit ARM and RISC-V Linux) |
 | `-noopt` | the own code generator without its optimizations |
 | `-verbose` | print the commands that are run and the assembler's summary |
 | `-libpath` | print the library directory that is used |
@@ -295,6 +304,11 @@ suites need 64tass, x16emu and VICE as well.
 | `make wasihost` | p8c built as WebAssembly (llvm32) and run with wasmtime writes what the native p8c writes: its own source, and the 6502 assembly of the test programs |
 | `make buildall` | every C64 and X16 example builds |
 | `make emucmp`, `make emucmp64` | programs built by both compilers print the same in x16emu and in VICE |
+| `make emucmp816`, `make emucmp64816` | the same with p8p8's 65816 code, in `x16emu -c816` and VICE's `xscpu64` |
+| `make emucmp65` | programs for the MEGA65 print the same as 6502 code and as 45GS02 code, in xmega65 |
+| `make farcheck` | memory beyond 64 KB on the X16's 65816, the SuperCPU and the MEGA65: the addressing modes by hand, the compiler's code and the library's |
+| `make irroundtrip` | a program built from the IR file that `p8c -ir` wrote is the same bytes as from its source |
+| `tools/benchmega65.sh` | loops of long, word and byte arithmetic on the MEGA65 as 6502 code and as 45GS02 code |
 | `make qemucmpir` | the same programs built from p8p8's IR by `prog8c-llvm`'s 68000 back end (`-codegen upstream`) |
 | `make qemucmp`, `make amigacmp`, `make amigacmp500` | programs built for qemu68k, the Amiga 1200 and the Amiga 500 by both compilers print the same in QEMU and in vamos |
 | `tools/bench68k.sh` | how long small benchmarks take on an Amiga 500 in Copperline, from both compilers |

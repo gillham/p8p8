@@ -7581,13 +7581,22 @@ gen6502 {
     ; (their names begin with prog8_: by that the peephole passes know a routine that takes
     ; the scratch words, as the library's do)
     bool[5] hw_used
-    ^^ubyte[5] hw_names = ["prog8_hw_mulb", "prog8_hw_mulw", "prog8_hw_mulbw", "prog8_hw_divb", "prog8_hw_divw"]
+
+    sub hw_name(ubyte which) -> ^^ubyte {
+        when which {
+            0 -> return "prog8_hw_mulb"
+            1 -> return "prog8_hw_mulw"
+            2 -> return "prog8_hw_mulbw"
+            3 -> return "prog8_hw_divb"
+        }
+        return "prog8_hw_divw"
+    }
 
     sub math_routine(^^ubyte library, ubyte which) -> ^^ubyte {
         if not hardware_math
             return library
         hw_used[which] = true
-        return hw_names[which]
+        return hw_name(which)
     }
 
     sub hw_zero(str a, str b, str c) {
