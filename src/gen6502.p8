@@ -40,6 +40,9 @@ gen6502 {
     ; Commander X16 as well): no bbr, bbs, rmb or smb.
     bool c02 = false
     bool c816 = false               ; a 65816: everything a 65C02 has that p8p8 uses, and more
+    bool c45 = false                ; a 45GS02 (MEGA65): the 65C02's too, but for two (c02z), and 32-bit instructions
+    bool c02z = false               ; "stz" stores a zero and "(zp)" is there: a 65C02 or 65816, not the 45GS02,
+                                    ; where stz stores the Z register and (zp) is (zp),z
     ^^ubyte cpu_option = 0          ; -cpu: the CPU to write code for, in place of the target's
 
     ; the options of the program (the <OPTIONS> lines of the IR)
@@ -219,7 +222,7 @@ gen6502 {
 
     ; stores zero at a memory location (A is lost on the 6502)
     sub store_zero(^^ubyte symbol, long offset) {
-        if c02
+        if c02z
             ins_at("stz", symbol, offset)
         else {
             ins("lda", "#0")
@@ -255,6 +258,16 @@ gen6502 {
         sys.memset(reg_fixed, cell_cap as uword, 0)
         reg_named = mem.alloc(cell_cap)
         sys.memset(reg_named, cell_cap as uword, 0)
+        if c45 {
+            ; a long is loaded and stored whole (ldq, stq): its cell is four bytes in a row
+            ; with a place of its own
+            long qr = 1
+            while qr <= ir.regcount {
+                if ir.regtypes[qr] == ir.T_LONG
+                    reg_fixed[qr] = 1
+                qr++
+            }
+        }
         fixed_longs_in(prog.initglobals)
         ^^ir.Block fb = prog.blocks
         while fb != 0 {
@@ -1235,14 +1248,21 @@ gen6502 {
         ; the CPU: a 65C02 has more instructions (the default without a configuration: a 6502)
         c02 = target.is("cpu", "65c02") or target.is("cpu", "cpu65c02")
         c816 = target.is("cpu", "65816") or target.is("cpu", "65c816") or target.is("cpu", "w65c816")
+        c45 = target.is("cpu", "45gs02")
         if cpu_option != 0 {
             c02 = strings.compare(cpu_option, "65c02") == 0
             c816 = strings.compare(cpu_option, "65816") == 0
-            if not c02 and not c816 and strings.compare(cpu_option, "6502") != 0
+            c45 = strings.compare(cpu_option, "45gs02") == 0
+            if not c02 and not c816 and not c45 and strings.compare(cpu_option, "6502") != 0
                 error("this code generator has no instructions for the cpu of -cpu", cpu_option)
         }
-        if c816
+        if c816 or c45
             c02 = true              ; (the 65C02's instructions that p8p8 uses are all the 65816's too)
+        ; On the 45GS02 "stz" stores the Z register and "(zp)" is "(zp),z".  With Z at zero
+        ; they are the 65C02's, and the generated code leaves Z at zero; whether the
+        ; machine's ROM does is another matter, so they are only used when asked for
+        ; (P8P8_45_STZ, for trying it).
+        c02z = c02 and (not c45 or io_platform.env("P8P8_45_STZ") != 0)
         if cpu_option == 0 and target.loaded and not c02 and not target.is("cpu", "6502") and not target.is("cpu", "cpu6502")
             error("this code generator has no instructions for the target's cpu", target.text("cpu"))
         read_options()
@@ -1252,6 +1272,8 @@ gen6502 {
         zp_assign()
         peep6502.init(regfile_size)
         peep6502.c02 = c02
+        peep6502.c02z = c02z
+        peep6502.c45 = c45
         peep6502.arms_enabled = io_platform.env("P8P8_NOARMS") == 0
         long fr = 1
         while fr <= ir.regcount {
@@ -1467,6 +1489,11 @@ gen6502 {
             raw("; Target CPU: 65816")
             raw("")
             raw(".cpu  '65816'")
+        }
+        else if c45 {
+            raw("; Target CPU: 45GS02")
+            raw("")
+            raw(".cpu  '45gs02'")
         }
         else if c02 {
             raw("; Target CPU: 65C02")
@@ -2172,6 +2199,17 @@ gen6502 {
             return
         }
         ^^ir.Instr i = c.first
+        if c45 {
+            quad_chunk(c)
+            q_index = 0
+            while i != 0 {
+                instruction(i)
+                i = i.next
+                q_index++
+            }
+            q_flush()
+            return
+        }
         while i != 0 {
             instruction(i)
             i = i.next
@@ -2260,9 +2298,11 @@ gen6502 {
     ; which chunk names each virtual register, over the whole program
     sub wide_prepare() {
         wide_enabled = false
-        if not c816 or io_platform.env("P8P8_NOWIDE") != 0 or find_sub("p8b_main.p8s_start") == 0
+        bool wide_wanted = c816 and io_platform.env("P8P8_NOWIDE") == 0 and find_sub("p8b_main.p8s_start") != 0
+        ; (the 45GS02's 32-bit code wants to know where a register is used too)
+        if not wide_wanted and not c45
             return
-        wide_enabled = true
+        wide_enabled = wide_wanted
         wide_done = 0
         wide_total = 0
         sys.memset(&wide_missed, sizeof(long) * 256, 0)
@@ -4816,6 +4856,704 @@ gen6502 {
         return mask
     }
 
+    ; ---- the 45GS02's 32-bit instructions ----
+    ; A, X, Y and Z together are the register Q.  A long is loaded, combined and stored
+    ; in one instruction each: "ldq a / clc / adq b / stq a" where the 6502 has four
+    ; times "lda / adc / sta".  The lines are written as they are (the peephole passes
+    ; know neither the instructions nor that a register's cell is named in them: a
+    ; long's cell has a fixed place on this CPU).  Z is zero again after every such piece
+    ; of code: the machine's ROM is written for that, and so is "stz" as the 65C02's.
+
+    sub q_text(str mnemonic, ^^ubyte operand, long offset) {
+        put("    ")
+        put(mnemonic)
+        if operand != 0 {
+            put("  ")
+            put(operand)
+            if offset > 0 {
+                put("+")
+                putn(offset)
+            }
+            else if offset < 0
+                putn(offset)
+        }
+        nl()
+    }
+
+    sub q_reg(str mnemonic, uword r) {
+        q_text(mnemonic, cell(r, 0), 0)
+    }
+
+    sub q_mem(str mnemonic, ^^ir.Instr i) {
+        memory_operand(i)
+        q_text(mnemonic, mem_symbol, mem_offset)
+    }
+
+    ; Q = a constant
+    sub q_constant(quad value) {
+        ^^ubyte letters = "axyz"
+        ubyte k
+        for k in 0 to 3 {
+            put("    ld")
+            buf.add_byte(w(), letters[k])
+            put("  #")
+            putn(((value >> (k * 8)) & 255) as long)
+            nl()
+        }
+    }
+
+    ; Between instructions on longs the value stays in Q, and a long that was only
+    ; fetched from a variable is that variable until something stores to it: so
+    ; "c = a + b" is "ldq a / clc / adq b / stq c".  What Q holds, which registers are
+    ; variables for now, and whether Z has to be made zero again:
+    uword qacc = 0                  ; the register whose value Q holds, or 0
+    bool qacc_stored = true         ; and its cell (or the variable it is) has that value too
+    bool qz_dirty = false
+    const ubyte QALIASES = 8
+    uword[QALIASES] qalias_reg
+    ^^pointer qalias_src = 0        ; the LOADM instructions they came from
+    ubyte qalias_count = 0
+    long q_index = 0                ; the instruction's place in its chunk
+    ^^ir.Instr qmirror = 0          ; Q's value is also in this instruction's memory operand (it was just stored there)
+
+    ; where each register of chunk c is named (the tables of the 65816's runs)
+    sub quad_chunk(^^ir.Chunk c) {
+        wchunk = c
+        qacc = 0
+        qacc_stored = true
+        qz_dirty = false
+        qalias_count = 0
+        qmirror = 0
+        if qalias_src == 0
+            qalias_src = mem.alloc(QALIASES as long * sizeof(pointer))
+        ^^ir.Instr i = c.first
+        ^^ir.Arg a
+        while i != 0 {
+            wide_reset_reg(i.r1)
+            wide_reset_reg(i.r2)
+            wide_reset_reg(i.r3)
+            a = i.args
+            while a != 0 {
+                wide_reset_reg(a.reg)
+                a = a.next
+            }
+            a = i.results
+            while a != 0 {
+                wide_reset_reg(a.reg)
+                a = a.next
+            }
+            i = i.next
+        }
+        long index = 0
+        i = c.first
+        while i != 0 {
+            wide_index_reg(i.r1, index)
+            wide_index_reg(i.r2, index)
+            wide_index_reg(i.r3, index)
+            a = i.args
+            while a != 0 {
+                wide_index_reg(a.reg, index)
+                a = a.next
+            }
+            a = i.results
+            while a != 0 {
+                wide_index_reg(a.reg, index)
+                a = a.next
+            }
+            index++
+            i = i.next
+        }
+    }
+
+    ; is the register named in this chunk only?
+    sub q_local(uword r) -> bool {
+        if r == 0 or r >= wcap
+            return false
+        pointer here = wchunk
+        return whome[r] == here
+    }
+
+    ; is its value wanted by the instruction at q_index + ahead or a later one?
+    sub q_wanted(uword r, long ahead) -> bool {
+        if not q_local(r)
+            return true
+        return wlast[r] >= q_index + ahead
+    }
+
+    sub q_alias(uword r) -> ^^ir.Instr {
+        ubyte k = 0
+        while k < qalias_count {
+            if qalias_reg[k] == r
+                return qalias_src[k]
+            k++
+        }
+        return 0
+    }
+
+    sub q_unalias(uword r) {
+        ubyte k = 0
+        while k < qalias_count {
+            if qalias_reg[k] == r {
+                qalias_count--
+                qalias_reg[k] = qalias_reg[qalias_count]
+                qalias_src[k] = qalias_src[qalias_count]
+                return
+            }
+            k++
+        }
+    }
+
+    ; Q's value into its register's cell, when something still wants it there
+    sub q_spill(long ahead) {
+        if qacc != 0 and not qacc_stored and q_wanted(qacc, ahead) {
+            q_reg("stq", qacc)
+            qacc_stored = true
+        }
+    }
+
+    ; "mnemonic  where register r's value is in memory"
+    sub q_operand(str mnemonic, uword r) {
+        ^^ir.Instr src = q_alias(r)
+        if src != 0 {
+            q_mem(mnemonic, src)
+            return
+        }
+        if r == qacc and not qacc_stored {
+            ; (it is only in Q: the operand is Q itself)
+            q_reg("stq", r)
+            qacc_stored = true
+        }
+        q_reg(mnemonic, r)
+    }
+
+    ; Q = register r
+    sub q_load(uword r) {
+        if qacc == r
+            return
+        q_spill(0)
+        ^^ir.Instr src = q_alias(r)
+        if src == 0 or qmirror == 0 or src.sym != qmirror.sym or src.offset != qmirror.offset or src.sym == 0
+            q_operand("ldq", r)     ; (else: the variable it is has just been stored from Q)
+        qacc = r
+        qacc_stored = true
+        qz_dirty = true
+    }
+
+    ; what is in Q now is the new value of register r
+    sub q_result(uword r) {
+        if qacc != r
+            q_spill(1)
+        qmirror = 0
+        q_unalias(r)
+        qacc = r
+        qacc_stored = false
+        qz_dirty = true
+    }
+
+    ; a register that is a variable for now gets a cell of its own
+    sub q_materialize(ubyte k) {
+        uword r = qalias_reg[k]
+        ^^ir.Instr src = qalias_src[k]
+        q_spill(0)
+        q_mem("ldq", src)
+        q_reg("stq", r)
+        qmirror = 0
+        qacc = r
+        qacc_stored = true
+        qz_dirty = true
+    }
+
+    ; instruction i is about to store to its memory operand: the registers that are
+    ; that variable for now have its old value
+    sub q_written(^^ir.Instr i) {
+        qmirror = 0
+        ubyte k = 0
+        while k < qalias_count {
+            ^^ir.Instr src = qalias_src[k]
+            if src.sym == 0 or i.sym == 0 or src.sym == i.sym {
+                uword r = qalias_reg[k]
+                if q_wanted(r, 0)
+                    q_materialize(k)
+                q_unalias(r)
+                continue            ; (another one is at k now)
+            }
+            k++
+        }
+    }
+
+    ; before an instruction that is not written with Q, and at the end of a chunk:
+    ; every value where the 6502's code looks for it, and Z zero
+    sub q_flush() {
+        if qacc == 0 and qalias_count == 0 and not qz_dirty {
+            qz_keep_flags = false
+            return
+        }
+        q_spill(0)
+        while qalias_count != 0 {
+            if q_wanted(qalias_reg[0], 0)
+                q_materialize(0)
+            q_unalias(qalias_reg[0])
+        }
+        if qz_dirty {
+            if qz_keep_flags {
+                q_text("php", 0, 0)
+                q_text("ldz", "#0", 0)
+                q_text("plp", 0, 0)
+            }
+            else
+                q_text("ldz", "#0", 0)
+        }
+        qz_keep_flags = false
+        qz_dirty = false
+        qmirror = 0
+        qacc = 0
+        qacc_stored = true
+    }
+
+    sub q_carry(ubyte carry) {
+        when carry {
+            1 -> q_text("clc", 0, 0)
+            2 -> q_text("sec", 0, 0)
+        }
+    }
+
+    ; register = register op (register, constant or memory); carry 1: an addition,
+    ; 2: a subtraction
+    sub q_combine(^^ir.Instr i, str mnemonic, ubyte carry) -> bool {
+        when i.mode {
+            ir.M_RI, ir.M_RIT -> {
+                if qconst_count < len(qconsts) {
+                    ; the constant is four bytes in the data
+                    q_load(i.r1)
+                    q_carry(carry)
+                    void q_literal(mnemonic, i.value)
+                    q_result(i.r1)
+                    return true
+                }
+                ; the constant in Q, combined with the register; a subtraction adds the negative
+                quad value = i.value
+                if carry == 2
+                    value = 0 - value
+                if qacc == i.r1 and not qacc_stored {
+                    q_reg("stq", i.r1)
+                    qacc_stored = true
+                }
+                q_spill(0)
+                q_constant(value)
+                qmirror = 0
+                qacc = 0
+                qz_dirty = true
+                if carry != 0
+                    q_text("clc", 0, 0)
+                if carry == 2
+                    q_operand("adq", i.r1)
+                else
+                    q_operand(mnemonic, i.r1)
+            }
+            ir.M_RM -> {
+                q_load(i.r1)
+                q_carry(carry)
+                q_mem(mnemonic, i)
+            }
+            ir.M_RR -> {
+                if carry != 2 and qacc == i.r2 and i.r1 != i.r2 {
+                    ; the second operand is the one in Q, and the order does not matter
+                    q_carry(carry)
+                    q_operand(mnemonic, i.r1)
+                }
+                else {
+                    q_load(i.r1)
+                    q_carry(carry)
+                    q_operand(mnemonic, i.r2)
+                }
+            }
+            else -> return false
+        }
+        q_result(i.r1)
+        return true
+    }
+
+    ; memory = memory op (a register or a constant)
+    sub q_combine_memory(^^ir.Instr i, str mnemonic, ubyte carry) -> bool {
+        if i.mode != ir.M_IM and i.mode != ir.M_RM and i.mode != ir.M_M
+            return false
+        q_written(i)
+        if i.mode == ir.M_IM {
+            quad value = i.value
+            if carry == 2
+                value = 0 - value
+            q_spill(0)
+            q_constant(value)
+            if carry != 0
+                q_text("clc", 0, 0)
+            if carry == 2
+                q_mem("adq", i)
+            else
+                q_mem(mnemonic, i)
+        }
+        else if carry == 2 {
+            ; memory - register
+            if qacc == i.r1 and not qacc_stored {
+                q_reg("stq", i.r1)
+                qacc_stored = true
+            }
+            q_spill(0)
+            q_mem("ldq", i)
+            q_text("sec", 0, 0)
+            q_operand(mnemonic, i.r1)
+        }
+        else {
+            q_load(i.r1)
+            q_spill(1)              ; (Q is the sum next, not the register)
+            q_carry(carry)
+            q_mem(mnemonic, i)
+        }
+        q_mem("stq", i)
+        qmirror = 0
+        qacc = 0
+        qacc_stored = true
+        qz_dirty = true
+        return true
+    }
+
+    ; a one-operand instruction on a register or on memory: the given line, that many times
+    sub q_inplace(^^ir.Instr i, str line, ubyte times) {
+        if i.mode == ir.M_M {
+            q_written(i)
+            q_spill(0)
+            q_mem("ldq", i)
+            repeat times
+                q_text(line, 0, 0)
+            q_mem("stq", i)
+            qmirror = 0
+            qacc = 0
+            qacc_stored = true
+            qz_dirty = true
+            return
+        }
+        q_load(i.r1)
+        repeat times
+            q_text(line, 0, 0)
+        q_result(i.r1)
+    }
+
+    bool q_long_args = false        ; the long arguments of the call in hand are in their parameters already
+    bool qz_keep_flags = false      ; what follows reads the flags: making Z zero must leave them alone
+
+    ; There is no "adq #constant": a constant that is an operand is four bytes in the
+    ; program's data, p8_qconst_N.
+    long[128] qconsts
+    ubyte qconst_count = 0
+
+    ; "mnemonic  p8_qconst_N" for the constant; false when there is no room for another
+    sub q_literal(str mnemonic, quad value) -> bool {
+        long v = (value & $ffffffff) as long
+        ubyte k = 0
+        while k < qconst_count and qconsts[k] != v
+            k++
+        if k == qconst_count {
+            if qconst_count == len(qconsts)
+                return false
+            qconsts[k] = v
+            qconst_count++
+        }
+        put("    ")
+        put(mnemonic)
+        put("  p8_qconst_")
+        putn(k)
+        nl()
+        return true
+    }
+
+    ; before a comparison: the registers that are variables and are wanted afterwards
+    ; get their cells now (afterwards the flags must stay as they are)
+    sub q_before_compare() {
+        q_spill(0)
+        ubyte k = 0
+        while k < qalias_count {
+            if q_wanted(qalias_reg[k], 1) {
+                ; (it stays that variable for this instruction)
+                uword r = qalias_reg[k]
+                ^^ir.Instr src = qalias_src[k]
+                q_mem("ldq", src)
+                q_reg("stq", r)
+                qmirror = 0
+                qacc = 0
+                qacc_stored = true
+                qz_dirty = true
+            }
+            k++
+        }
+    }
+
+    ; "mnemonic  the second operand of a comparison": a constant, memory or a register
+    sub q_compare_operand(^^ir.Instr i, str mnemonic) -> bool {
+        when i.mode {
+            ir.M_RI, ir.M_RIT, ir.M_IM -> return q_literal(mnemonic, i.value)
+            ir.M_RM, ir.M_M -> q_mem(mnemonic, i)
+            else -> q_operand(mnemonic, i.r2)
+        }
+        return true
+    }
+
+    ; Q = the second operand of a comparison
+    sub q_load_second(^^ir.Instr i) -> bool {
+        when i.mode {
+            ir.M_RI, ir.M_RIT, ir.M_IM -> {
+                q_spill(0)
+                qacc = 0
+                qmirror = 0
+                qz_dirty = true
+                return q_literal("ldq", i.value)
+            }
+            ir.M_RM, ir.M_M -> {
+                q_spill(0)
+                q_mem("ldq", i)
+                qacc = 0
+                qmirror = 0
+                qz_dirty = true
+            }
+            else -> q_load(i.r2)
+        }
+        return true
+    }
+
+    ; after a comparison that branches itself: nothing is in Q or a variable any more,
+    ; and Z is zero again with the flags as the comparison left them
+    sub q_after_compare() {
+        q_spill(1)
+        qalias_count = 0
+        qmirror = 0
+        qacc = 0
+        qacc_stored = true
+        if qz_dirty {
+            q_text("php", 0, 0)
+            q_text("ldz", "#0", 0)
+            q_text("plp", 0, 0)
+        }
+        qz_dirty = false
+    }
+
+    ; a comparison of longs that branches: unsigned with cpq, signed by the sign of the
+    ; difference (the overflow flag turns it round; the top byte is in Z)
+    sub q_compare_branch(^^ir.Instr i) -> bool {
+        bool swapped = false
+        bool signed = false
+        ^^ubyte branch = "bcs"
+        when i.op {
+            ir.OP_BGE, ir.OP_BGER -> branch = "bcs"
+            ir.OP_BLT -> branch = "bcc"
+            ir.OP_BGT, ir.OP_BGTR -> {
+                swapped = true
+                branch = "bcc"
+            }
+            ir.OP_BLE -> {
+                swapped = true
+                branch = "bcs"
+            }
+            ir.OP_BGES, ir.OP_BGESR -> {
+                signed = true
+                branch = "bpl"
+            }
+            ir.OP_BLTS -> {
+                signed = true
+                branch = "bmi"
+            }
+            ir.OP_BGTS, ir.OP_BGTSR -> {
+                signed = true
+                swapped = true
+                branch = "bmi"
+            }
+            ir.OP_BLES -> {
+                signed = true
+                swapped = true
+                branch = "bpl"
+            }
+            else -> return false
+        }
+        if qconst_count == len(qconsts) and i.mode != ir.M_RR
+            return false            ; (no room for a constant)
+        q_before_compare()
+        if swapped {
+            ; the operand against the register
+            void q_load_second(i)
+            if signed {
+                q_spill(1)
+                q_text("sec", 0, 0)
+                q_operand("sbq", i.r1)
+            }
+            else
+                q_operand("cpq", i.r1)
+        }
+        else {
+            q_load(i.r1)
+            if signed {
+                q_spill(1)
+                q_text("sec", 0, 0)
+                void q_compare_operand(i, "sbq")
+            }
+            else
+                void q_compare_operand(i, "cpq")
+        }
+        if signed {
+            qacc_stored = true      ; (Q is the difference now)
+            qacc = 0
+            q_text("tza", 0, 0)
+            q_text("bvc", "+", 0)
+            q_text("eor", "#$80", 0)
+            put("+")
+            nl()
+        }
+        q_after_compare()
+        ins(branch, i.sym)
+        return true
+    }
+
+    ; the long arguments of a call that go into parameter variables: from Q, or from
+    ; the variable the register is
+    sub quad_arguments(^^ir.Instr i) {
+        if i.op == ir.OP_CALL and convention(find_sub(i.sym)) != CONV_NONE
+            return
+        ^^ir.Arg a = i.args
+        while a != 0 {
+            if a.slot == 255 and a.name != 0 and a.type == ir.T_LONG and a.reg != 0 {
+                q_load(a.reg)
+                if starts_with(a.name, "cx16.")
+                    q_text("stq", a.name, 0)
+                else {
+                    if pb == 0
+                        pb = buf.new(128)
+                    buf.clear(pb)
+                    buf.add_str(pb, i.sym)
+                    buf.add_byte(pb, '.')
+                    buf.add_str(pb, a.name)
+                    buf.add_byte(pb, 0)
+                    q_text("stq", pb.data, 0)
+                }
+                q_long_args = true
+                ; (the call is the last that wants it: no cell of its own for it)
+                if q_local(a.reg) and wlast[a.reg] <= q_index {
+                    q_unalias(a.reg)
+                    if qacc == a.reg
+                        qacc_stored = true
+                }
+            }
+            a = a.next
+        }
+    }
+
+    ; a long instruction with the 32-bit instructions; false where the instruction is
+    ; not one of these (the caller then has q_flush put everything where the 6502's
+    ; code looks for it)
+    sub quad_instruction(^^ir.Instr i) -> bool {
+        when i.op {
+            ir.OP_LOAD -> {
+                if i.sym != 0
+                    return false
+                q_spill(0)
+                q_constant(i.value)
+                q_result(i.r1)
+                return true
+            }
+            ir.OP_LOADM -> {
+                if qacc == i.r1 {
+                    qacc = 0
+                    qacc_stored = true
+                }
+                q_unalias(i.r1)
+                if q_local(i.r1) and qalias_count < QALIASES {
+                    ; it is that variable until something stores there
+                    qalias_reg[qalias_count] = i.r1
+                    qalias_src[qalias_count] = i
+                    qalias_count++
+                    return true
+                }
+                q_spill(0)
+                q_mem("ldq", i)
+                q_reg("stq", i.r1)
+                qmirror = 0
+                qacc = i.r1
+                qacc_stored = true
+                qz_dirty = true
+                return true
+            }
+            ir.OP_LOADR -> {
+                q_load(i.r2)
+                q_result(i.r1)
+                return true
+            }
+            ir.OP_STOREM -> {
+                q_written(i)
+                q_load(i.r1)
+                q_mem("stq", i)
+                qmirror = i
+                return true
+            }
+            ir.OP_CMP, ir.OP_CMPI -> {
+                ; the flags for the branch that follows: all of them are those of the
+                ; whole 32 bits
+                if qconst_count == len(qconsts) and i.mode != ir.M_RR
+                    return false
+                q_before_compare()
+                q_load(i.r1)
+                void q_compare_operand(i, "cpq")
+                q_spill(1)
+                qalias_count = 0
+                qz_keep_flags = true
+                return true
+            }
+            ir.OP_BGT, ir.OP_BGTR, ir.OP_BLT, ir.OP_BGE, ir.OP_BGER, ir.OP_BLE,
+            ir.OP_BGTS, ir.OP_BGTSR, ir.OP_BGES, ir.OP_BGESR, ir.OP_BLTS, ir.OP_BLES -> return q_compare_branch(i)
+            ir.OP_AND, ir.OP_ANDR -> return q_combine(i, "anq", 0)
+            ir.OP_OR, ir.OP_ORR -> return q_combine(i, "orq", 0)
+            ir.OP_XOR, ir.OP_XORR -> return q_combine(i, "eoq", 0)
+            ir.OP_ADD, ir.OP_ADDR -> return q_combine(i, "adq", 1)
+            ir.OP_SUB, ir.OP_SUBR -> return q_combine(i, "sbq", 2)
+            ir.OP_ANDM -> return q_combine_memory(i, "anq", 0)
+            ir.OP_ORM -> return q_combine_memory(i, "orq", 0)
+            ir.OP_XORM -> return q_combine_memory(i, "eoq", 0)
+            ir.OP_ADDM, ir.OP_ADDIM -> return q_combine_memory(i, "adq", 1)
+            ir.OP_SUBM, ir.OP_SUBIM -> return q_combine_memory(i, "sbq", 2)
+            ir.OP_INC, ir.OP_INCM -> {
+                q_inplace(i, "inq", 1)
+                return true
+            }
+            ir.OP_DEC, ir.OP_DECM -> {
+                q_inplace(i, "deq", 1)
+                return true
+            }
+            ir.OP_NEG, ir.OP_NEGM -> {
+                q_inplace(i, ".byte  $42, $42, $42    ; negq", 1)
+                return true
+            }
+            ir.OP_LSL, ir.OP_LSLM -> {
+                q_inplace(i, "asl  q", 1)
+                return true
+            }
+            ir.OP_LSR, ir.OP_LSRM -> {
+                q_inplace(i, "lsr  q", 1)
+                return true
+            }
+            ir.OP_ASR, ir.OP_ASRM -> {
+                q_inplace(i, "asr  q", 1)
+                return true
+            }
+            ir.OP_LSLI, ir.OP_LSRI, ir.OP_ASRI -> {
+                ; a few places: that many shifts of Q (more is quicker by moving bytes)
+                if i.value < 1 or i.value > 4 or i.mode == ir.M_M
+                    return false
+                if i.op == ir.OP_LSLI
+                    q_inplace(i, "asl  q", i.value as ubyte)
+                else if i.op == ir.OP_LSRI
+                    q_inplace(i, "lsr  q", i.value as ubyte)
+                else
+                    q_inplace(i, "asr  q", i.value as ubyte)
+                return true
+            }
+        }
+        return false
+    }
+
     sub instruction(^^ir.Instr i) {
         if i.op != ir.OP_NOP {
             prev_instr = this_instr
@@ -4825,6 +5563,15 @@ gen6502 {
             fac_reg = 0
             fwait_prev = fwait
             fwait = 0
+        }
+        if c45 {
+            ; (not an instruction that is marked as part of a fused pattern)
+            if i.type == ir.T_LONG and i.scale < 200 and quad_instruction(i)
+                return
+            q_long_args = false
+            if i.op == ir.OP_CALL or i.op == ir.OP_CALLFAR or i.op == ir.OP_CALLFARVB
+                quad_arguments(i)
+            q_flush()
         }
         if i.scale == 252
             return                  ; (written with the head of its chain)
@@ -5671,7 +6418,7 @@ gen6502 {
         ; arguments in registers, or else in the parameter variables
         bool in_registers = i.op == ir.OP_CALL and convention(find_sub(i.sym)) != CONV_NONE
         while a != 0 {
-            if a.slot == 255 and a.name != 0 and not in_registers {
+            if a.slot == 255 and a.name != 0 and not in_registers and not (q_long_args and a.type == ir.T_LONG and a.reg != 0) {
                 ubyte size = type_size(a.type)
                 ubyte k
                 for k in 0 to size - 1 {
@@ -6258,6 +7005,21 @@ gen6502 {
     long data_size = 1          ; the size of the elements that put_value writes
 
     sub data() {
+        ubyte qk = 0
+        while qk < qconst_count {
+            ; (the long constants that are operands of the 45GS02's 32-bit instructions)
+            put("p8_qconst_")
+            putn(qk)
+            put("  .byte  ")
+            ubyte qb
+            for qb in 0 to 3 {
+                if qb != 0
+                    put(", ")
+                putn(((qconsts[qk] >> (qb * 8)) & 255) as long)
+            }
+            nl()
+            qk++
+        }
         ubyte fk = 0
         while fk < fconst_count {
             ; (the float constants that are operands where they are)

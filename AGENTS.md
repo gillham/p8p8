@@ -86,6 +86,7 @@ Which suite after which change (see the Makefile for all of them):
 | 6502 code generator or peephole | `BUILDALL_CODEGEN=own make buildall`, `EMUCMP_CODEGEN=own make emucmp`, `EMUCMP_CODEGEN=own make emucmp64` |
 | IR generation for 68000 targets | `make qemucmpir` (p8p8's IR through prog8c-llvm's 68000 back end) |
 | 68000 code generator | `make qemucmp` (needs vasmm68k_mot, vlink, qemu-system-m68k), `make amigacmp`, `make amigacmp500` (vamos), `make coppercmp`, `make amigacmpfloat` (Copperline) |
+| the 45GS02 code (`-cpu 45gs02`) | `make emucmp65` (needs xmega65; 6502 code against 45GS02 code on the MEGA65) |
 | what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |
 
 The comparison suites build each program with the reference compiler and

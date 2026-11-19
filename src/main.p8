@@ -202,7 +202,7 @@ main {
                 usage()
             }
             else if strings.compare(arg, "-cpu") == 0 and value != 0 {
-                ; the CPU to write 6502 code for, whatever the target's file says: 6502, 65c02, 65816
+                ; the CPU to write 6502 code for, whatever the target's file says: 6502, 65c02, 65816, 45gs02
                 long ck = 0
                 while value[ck] != 0 {
                     if value[ck] >= 'A' and value[ck] <= 'Z'
@@ -1599,6 +1599,8 @@ main {
             ; (the options upstream gives 64tass for each output type)
             extension = ".prg"
             buf.add_str(cmd, "64tass")
+            if gen6502.c45
+                buf.add_str(cmd, " --m45gs02")      ; (what ".cpu 'default'" in library assembly goes back to)
             if asm_defines != 0
                 buf.add_bytes(cmd, asm_defines.data, asm_defines.len)
             if strings.compare(gen6502.output_type, "XEX") == 0 {

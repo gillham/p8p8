@@ -250,7 +250,7 @@ instruction named.  A write through a pointer is not seen.
 The generator knows the 6502 and the 65C02.  On the 65C02 it uses `stz`,
 `bra`, `inc a`/`dec a`, `(zp)`, `tsb` and `trb`.  It never uses `bbr`,
 `bbs`, `rmb` or `smb`: the 65816, which many Commander X16s have, does not
-have them.  The 65816 and the 45GS02 are planned as further CPUs.
+have them.  The 65816 and the 45GS02 have sections of their own below.
 
 Multiplication, division, shifts by a variable and floating point use the
 library's routines, the same ones the reference compiler calls.  A
@@ -376,6 +376,51 @@ words is six instructions on a 65C02 and three on a 65816.
 - Not yet: word arrays (two byte arrays on this CPU family), anything through
   a pointer, values that come from outside a run (a call's result), 16-bit
   index registers, stack-relative addressing, block moves.
+
+## The 45GS02
+
+The MEGA65's CPU (`-cpu 45gs02`; for now it has to be asked for: the target's
+file says 6502, because the reference compilers read that file too and know
+no 45GS02).  It is the 6502 generator with two differences.
+
+**Two 65C02 instructions mean something else.**  `stz` stores the Z register,
+and `(zp)` is `(zp),z`.  With Z at zero they are the 65C02's.  The generated
+code leaves Z at zero wherever it used it, but does not count on finding it
+zero (whether the machine's ROM always hands it back so is not settled), so
+those two forms are not written; the other 65C02 instructions are
+(`c02z` is "a 65C02 for these two as well").  `P8P8_45_STZ` turns them on, to
+try.
+
+**Longs are 32 bits in one instruction.**  A, X, Y and Z together are the
+register Q, and `ldq`, `stq`, `adq`, `sbq`, `anq`, `orq`, `eoq`, `cpq`, `inq`,
+`deq` and the shifts of Q work on four bytes of memory.  `quad_instruction`
+writes the long IR instructions with them (loads, stores, the arithmetic and
+logic, shifts by a few places, comparisons, the long arguments of a call);
+what it does not know goes the 6502's way, a byte at a time.  Between two
+such instructions the value stays in Q, and a long that was only fetched from
+a variable *is* that variable until something stores there (`qacc`, the
+`qalias` tables; the tables of where a register is named are the 65816
+runs'), so that `c = a + b` is `ldq a / clc / adq b / stq c`.  Before any
+other instruction `q_flush` puts every value where the 6502's code looks for
+it and makes Z zero.  There is no immediate form: a constant operand is four
+bytes of data (`p8_qconst_N`).  A signed comparison is a subtraction whose
+sign the overflow flag turns round; the top byte is in Z, so `tza` first.
+After a comparison Z is made zero between `php` and `plp`.
+
+The lines are written as text the peephole passes do not look into, and a
+long register's cell has a fixed place (they would otherwise move and share
+it), as a float's has.
+
+64tass's names for these instructions are its own (`adq`, not `adcq`; `asl q`;
+none for the negation of Q, which is three bytes `$42`), and a word it does
+not know on a line of its own is a label to it, silently.  Library assembly
+that switches to `.cpu "45gs02"` for a few lines goes back with
+`.cpu "default"`, which is the CPU of the command line (`--m45gs02` when the
+program is 45GS02 code).
+
+There is no other compiler to compare with: `make emucmp65` runs each test
+program on the MEGA65 (xmega65, without a window) as 6502 code and as 45GS02
+code and compares the screens.
 
 ## Machines and the library
 

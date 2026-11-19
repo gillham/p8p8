@@ -40,6 +40,12 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- A first code generator for the 45GS02, the MEGA65's CPU: `-target mega65
+  -cpu 45gs02`.  Longs are loaded, combined, compared and stored with the
+  32-bit instructions (`c = a + b` is four instructions), which makes a test
+  of long arithmetic 876 bytes where the 6502 code is 1,501.
+  `make emucmp65` compares the two kinds of code for every test program in
+  xmega65.
 - Fixed: a program with more than 65,535 IR registers was compiled wrongly
   without a word (the numbers began again at zero).  p8p8's own source had
   reached that size.  For the llvm targets subroutines now share register

@@ -39,6 +39,8 @@ peep6502 {
     ; the Rockwell and WDC 65C02 (bbr, bbs, rmb, smb): the 65816, which many
     ; Commander X16s have in place of the 65C02, does not have them.
     bool c02 = false
+    bool c02z = false           ; stz is a zero and (zp) is there (not on the 45GS02)
+    bool c45 = false
 
     ^^buf.Buf dest = 0              ; where the region is written
     ^^buf.Buf rawtext = 0           ; the text of the raw lines
@@ -616,7 +618,7 @@ peep6502 {
         stat_lines += count
         optimize()
         share_cells()
-        if c02 and zero_index() {
+        if c02z and zero_index() {
             ; (the "ldy #0" may be for nothing now)
             use_previous = true
             backward()
@@ -1819,7 +1821,7 @@ peep6502 {
             M_LDX -> vx = operand_value(i)
             M_LDY -> vy = operand_value(i)
             M_STA -> {
-                if c02 and va == 1 and direct_operand(i) {
+                if c02z and va == 1 and direct_operand(i) {
                     ; a zero: stz leaves A free
                     lmn[i] = M_STZ
                     changed = true
@@ -2354,7 +2356,7 @@ peep6502 {
                     i = at[6]
                 }
             }
-            if c02 and lkind[i] == L_INS and (lmn[i] == M_STZ or (lmn[i] == M_LDA and lok[i] == O_NUM)) {
+            if c02z and lkind[i] == L_INS and (lmn[i] == M_STZ or (lmn[i] == M_LDA and lok[i] == O_NUM)) {
                 ; the same where one of the two stores a zero with stz: six lines
                 at[0] = i
                 n = 1

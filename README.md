@@ -166,6 +166,10 @@ a program for a 6502 or 68000 machine, the LLVM IR (`.ll`) for an llvm
 target, the IR for `-target virtual`.  `-build`, `-run` or `-o <file>` make
 an llvm target's executable; `-check` only checks the program.
 
+`-cpu 45gs02` writes code for the MEGA65's CPU (`-target mega65 -cpu
+45gs02`): `long` values are handled 32 bits at a time, which makes programs
+that use them smaller and faster.  It is a first version.
+
 `-cpu 65816` writes code for that CPU on any 6502 machine (`-target cx16
 -cpu 65816`, for a Commander X16 that has one; `-target c64 -cpu 65816` for
 a C64 with a SuperCPU).  This is new: word arithmetic on variables uses
