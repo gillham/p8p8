@@ -53,6 +53,13 @@
   multiplications 1 against 18.  Bytes and words are multiplied and
   divided by the machine's arithmetic unit too (a loop of word
   multiplications: 9 frames against 40; of divisions: 13 against 72).
+- Far memory, an extension: on the MEGA65 and on a C64 with a SuperCPU a
+  long constant is an address of data.  Memory mapped variables and arrays
+  (`&ubyte ATTIC = $8000000`, `ATTIC[i]`), `@(...)`, `peek` and `poke` and
+  their relatives.  The target's file says how many bits
+  (`far_address_bits`).  `make farcheck` runs the test on both machines.
+- Fixed: `pokel(address, -5)` stored 251: a value narrower than what is
+  stored lost its sign.
 - Fixed: an address of more than 16 bits in `@(...)`, in `peek` and `poke`
   and their relatives, or as an indexed constant was accepted on the 6502
   machines and cut to 16 bits without a word.  It is refused, as upstream

@@ -36,6 +36,40 @@ checker {
     long array_limit = 65535
     quad max_address = $ffff
 
+    ; the highest address data can have: on a machine with far memory (types.far_bits) more
+    ; than a pointer names
+    sub max_data_address() -> quad {
+        if types.far_bits > 16 and types.POINTER_SIZE == 2 {
+            quad top = 1
+            top <<= types.far_bits
+            return top - 1
+        }
+        return max_address
+    }
+
+    ; the name of a memory mapped variable at an address of more than 16 bits
+    sub far_variable(^^ast.Node e) -> bool {
+        if e == 0 or e.kind != ast.N_IDENT or e.extra == 0 or types.far_bits == 0
+            return false
+        ^^symtab.Sym s = e.extra
+        if s.kind != symtab.K_MEMVAR or s.decl == 0 or s.decl.kind != ast.N_VARDECL or s.decl.b == 0
+            return false
+        bool ok
+        quad v
+        ok, v = typer.const_eval(s.decl.b)
+        return ok and v > 65535
+    }
+
+    ; a constant that is an address in far memory
+    sub far_constant(^^ast.Node e) -> bool {
+        if e == 0 or types.far_bits == 0
+            return false
+        bool ok
+        quad v
+        ok, v = typer.const_eval(e)
+        return ok and v >= 0 and v <= max_data_address()
+    }
+
     ; interned names
     ^^ubyte main_name = 0
     ^^ubyte start_name = 0
@@ -833,7 +867,7 @@ checker {
                 ok, v = typer.const_eval(init)
                 if not ok
                     error(init, "value of memory mapped variable can only be a constant number, maybe use an address pointer type instead?")
-                else if v < 0 or v > max_address
+                else if v < 0 or v > max_data_address()
                     error(init, "memory address must be valid integer for the target")
             }
             ^^types.Type mt = types.get(t)
@@ -1107,7 +1141,7 @@ checker {
                     }
                     else if i >= 13 and i <= 22 {
                         ; (a long is no address where addresses are words: it would be cut to 16 bits)
-                        if at == types.T_FLOAT or at == types.T_BOOL or (types.POINTER_SIZE == 2 and at == types.T_LONG)
+                        if at == types.T_FLOAT or at == types.T_BOOL or (types.POINTER_SIZE == 2 and at == types.T_LONG and not far_constant(e.b))
                             error(e, "invalid address type for memory access")
                     }
                 }
@@ -2529,7 +2563,7 @@ checker {
         quad v
         if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_IDENT and e.a.type == types.T_LONG
             error(e, "invalid address type for memory access")      ; (an address is a word here)
-        else if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_INT and (e.a.value > 65535 or e.a.value < 0)
+        else if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_INT and (e.a.value > max_data_address() or e.a.value < 0)
             error(e, "invalid address type for memory access")      ; (a number that does not fit one)
         else if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_BINARY and e.a.type == types.T_LONG
                 and (long_var(e.a.a) or long_var(e.a.b))
@@ -2557,7 +2591,7 @@ checker {
                 uword bt = e.a.type
                 if bt == types.T_BOOL or bt == types.T_UBYTE or bt == types.T_BYTE or bt == types.T_WORD or bt == types.T_FLOAT
                     error(e, "indexing requires an iterable, address uword, or pointer variable")
-                else if types.POINTER_SIZE == 2 and e.a.kind == ast.N_INT and (e.a.value > 65535 or e.a.value < 0)
+                else if types.POINTER_SIZE == 2 and e.a.kind == ast.N_INT and (e.a.value > max_data_address() or e.a.value < 0)
                     error(e, "invalid address type for memory access")
                 else if types.POINTER_SIZE == 2 and bt == types.T_LONG and e.a.kind == ast.N_IDENT {
                     ; a long is no address where addresses are words
@@ -2591,6 +2625,8 @@ checker {
                     error(e, "cannot type cast to string or array type")
             }
             ast.N_ADDROF -> {
+                if far_variable(e.a)
+                    error(e, "the address of a variable in far memory does not fit a pointer (taking it is not supported yet)")
                 if e.op == token.T_AMPAMP and e.a.kind == ast.N_IDENT and e.a.extra != 0 {
                     ^^symtab.Sym tps = e.a.extra
                     if tps.kind == symtab.K_SUB
@@ -2621,6 +2657,13 @@ checker {
                     error(e.b, "both values in the if expression should be the same type")
             }
             ast.N_CALL -> {
+                ; (an array is passed by its address, a word)
+                ^^ast.Node fararg = e.b
+                while fararg != 0 {
+                    if far_variable(fararg) and fararg.type != 0 and types.is_array(fararg.type)
+                        error(fararg, "an array in far memory cannot be passed to a subroutine yet (its address does not fit a pointer)")
+                    fararg = fararg.next
+                }
                 check_name(e.a, e.a.name)
                 expressions(e.b)
                 ^^ast.Node marg = e.b
@@ -2891,6 +2934,8 @@ checker {
         if (op == token.T_KW_IN or op == parser.OP_NOT_IN) and e.b.kind != ast.N_ARRAYLIT and e.b.kind != ast.N_RANGE and e.b.kind != ast.N_STR
                 and rt != 0 and not types.is_array(rt) and rt != types.T_STR
             error(e.b, "iterable must be an array, a string, or a range expression")
+        if (op == token.T_KW_IN or op == parser.OP_NOT_IN) and far_variable(e.b)
+            error(e.b, "an array in far memory cannot be searched with 'in' yet (its address does not fit a pointer)")
         if op == token.T_PLUS or op == token.T_MINUS {
             if types.is_array(lt) or (lt == types.T_STR and e.a.kind == ast.N_IDENT and rt != types.T_STR)
                 error(e.a, "missing & (address-of) on the operand")

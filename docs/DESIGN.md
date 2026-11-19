@@ -487,15 +487,40 @@ code and compares the screens.
 
 ## Addresses of more than 16 bits
 
-The compiler writes none yet.  What the CPUs have was tried by hand first
-(`make farcheck`, two programs with the instructions in assembly, run on
-three emulators): the 65816's absolute long, absolute long indexed by X,
-`[dp]` and `[dp],y` all work on the Commander X16 and on the C64 with a
-SuperCPU; on the X16 a bank other than 0 is bank 0 again (in x16emu), on the
-SuperCPU with memory it is memory of its own.  On the MEGA65 a pointer of
-four bytes in the zero page with `[zp],z`, and `ldq`/`stq` through it, reach
-bank 4 and the attic RAM at `$8000000`.  How Prog8 source is to name such
-memory is open.
+An extension, where the CPU has the means and the target says the machine
+has the memory: `far_address_bits` in the target's file (28 for the MEGA65,
+24 for the C64, which counts with a SuperCPU and `-cpu 65816`; the Commander
+X16 has the 65816's instructions and nothing to reach with them).  The
+driver puts the number into `types.far_bits` when the program's CPU is the
+65816 or the 45GS02; everywhere else an address of that size is refused as
+upstream refuses it.
+
+A long is a far address.  Pointers stay words: what needs a pointer to far
+memory (its address taken, an array passed or searched) is refused.  So far
+the address has to be a constant: a memory mapped variable or array
+(`&ubyte ATTIC = $8000000`, `ATTIC[i]`), `@(constant)`, `peek` and `poke`
+and their relatives.  In the IR those are what they are nearby: a memory
+operand with a fixed address or the variable's name, only larger.
+
+The code generator (`far_instruction`) does every instruction with a far
+memory operand in one way: a pointer to the operand goes into the two scratch
+words, which are four bytes in a row (three bytes and `[dp],y` on the 65816,
+four and `[zp],z` on the 45GS02; the index of an array is added in), the
+value is fetched through it into a few bytes of the register file, the
+instruction is written as for a variable there, and what it changed is
+stored back.  That is not fast (a byte read is some ten instructions) but
+whatever can be done to a variable can be done to a far one at once.  The
+65816 could name a constant far address in the instruction itself; that is
+left for later.  The 16-bit runs and the fusing of indexed patterns leave
+chunks with far operands alone (the runs had written to the low 16 bits of
+the address).
+
+`make farcheck` runs three programs: the instructions written by hand (the
+65816's absolute long, absolute long indexed, `[dp]`, `[dp],y` on the X16 and
+the SuperCPU; the 45GS02's `[zp],z` and `ldq`/`stq` through it on the MEGA65)
+and `tests/far/fardata.p8`, where the compiler writes the code, on the two
+machines with far memory.  On the X16 a bank other than 0 is bank 0 again in
+x16emu.
 
 Assembly text that switches the CPU for a few lines goes back with
 `.cpu "default"`, so p8c gives 64tass the program's CPU on its command line

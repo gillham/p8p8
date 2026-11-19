@@ -307,6 +307,11 @@ gen6502 {
             qdiv_cells = regfile_size
             regfile_size += 18
         }
+        if types.far_bits != 0 {
+            ; where a value from far memory is while an instruction works on it
+            far_cells = regfile_size
+            regfile_size += 5
+        }
         float_cells = regfile_size
         r = 1
         while r <= ir.regcount {
@@ -1274,6 +1279,7 @@ gen6502 {
         if cpu_option == 0 and target.loaded and not c02 and not target.is("cpu", "6502") and not target.is("cpu", "cpu6502")
             error("this code generator has no instructions for the target's cpu", target.text("cpu"))
         read_options()
+        far_prepare()
         wide_prepare()
         assign_cells()
         count_registers()
@@ -1298,6 +1304,8 @@ gen6502 {
                 peep6502.opaque_cells(cell_of[fr], 4)
             fr++
         }
+        if types.far_bits != 0
+            peep6502.opaque_cells(far_cells, 5)
         ^^ir.Var v = p.vars
         while v != 0 {
             if v.kind == ir.V_MEMVAR and v.init != 0 and strings.compare(v.name, "cx16.r0") == 0 {
@@ -2059,6 +2067,16 @@ gen6502 {
     }
 
     sub fuse_indexed(^^ir.Chunk c) {
+        if types.far_bits != 0 {
+            ; (a chunk with an instruction on far memory is left as it is: the patterns
+            ; here are written for memory that an instruction names directly)
+            ^^ir.Instr fi = c.first
+            while fi != 0 {
+                if far_operand(fi)
+                    return
+                fi = fi.next
+            }
+        }
         fuse_floats(c)
         ^^ir.Instr a = c.first
         while a != 0 {
@@ -2357,6 +2375,8 @@ gen6502 {
     ; with it (a comparison), 3: the same, a comparison that branches itself
     sub wide_ok(^^ir.Instr i) -> ubyte {
         if not is_word(i.type) or i.scale >= 251
+            return 0
+        if far_operand(i)
             return 0
         when i.op {
             ir.OP_LOADM, ir.OP_STOREM, ir.OP_STOREZM, ir.OP_STOREIM, ir.OP_LOAD, ir.OP_LOADR,
@@ -4888,6 +4908,198 @@ gen6502 {
         return true
     }
 
+    ; ---- memory beyond the first 64 KB ----
+    ; An instruction whose memory operand is at an address of more than 16 bits.  Both
+    ; CPUs reach such memory through a pointer in the zero page (the 65816 with three
+    ; bytes and [dp],y; the 45GS02 with four and [zp],z; the two scratch words are four
+    ; bytes in a row).  The value is fetched into a few bytes of the register file, the
+    ; instruction is written as for a variable there, and what it changed is put back:
+    ; so every instruction that has a memory operand can have a far one.
+    long far_cells = 0
+
+    ; the memory mapped variables that are in far memory, and where: an instruction may
+    ; name one instead of giving its address
+    const ubyte FAR_NAMES = 64
+    ^^pointer far_names = 0
+    long[FAR_NAMES] far_addresses
+    ubyte far_count = 0
+
+    sub far_prepare() {
+        far_count = 0
+        if types.far_bits == 0
+            return
+        if far_names == 0
+            far_names = mem.alloc(FAR_NAMES as long * sizeof(pointer))
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_MEMVAR and v.init != 0 {
+                long address = number(v.init)
+                if address > $ffff {
+                    if far_count == FAR_NAMES
+                        error("too many variables in far memory for this code generator (64)", v.name)
+                    else {
+                        far_names[far_count] = v.name
+                        far_addresses[far_count] = address
+                        far_count++
+                    }
+                }
+            }
+            v = v.next
+        }
+    }
+
+    ; the address of the far variable of that name, or -1
+    sub far_named(^^ubyte name) -> long {
+        ubyte k = 0
+        while k < far_count {
+            ^^ubyte known = far_names[k]
+            if known == name or strings.compare(known, name) == 0
+                return far_addresses[k]
+            k++
+        }
+        return -1
+    }
+
+    ; The address of the instruction's memory operand when that is more than 16 bits, or -1.
+    sub far_address(^^ir.Instr i) -> long {
+        if types.far_bits == 0 or (i.mode != ir.M_M and i.mode != ir.M_RM and i.mode != ir.M_IM)
+            return -1
+        if i.sym == 0 {
+            if i.offset > $ffff
+                return i.offset
+            return -1
+        }
+        if far_count == 0
+            return -1
+        long base = far_named(i.sym)
+        if base < 0
+            return -1
+        return base + i.offset
+    }
+
+    sub far_operand(^^ir.Instr i) -> bool {
+        return far_address(i) >= 0
+    }
+
+    sub far_line(str text) {
+        put("    ")
+        put(text)
+        nl()
+    }
+
+    ; "    mnemonic  p8_regfile+N" for byte k of the value's place
+    sub far_cell(str mnemonic, ubyte k) {
+        put("    ")
+        put(mnemonic)
+        put("  p8_regfile+")
+        putn(far_cells + k)
+        nl()
+    }
+
+    ; the pointer to the operand of i: its address, and the index when it has one
+    sub far_pointer(long address, ^^ir.Instr i, bool indexed) {
+        ubyte bytes = 3
+        if c45
+            bytes = 4
+        ubyte k
+        if indexed
+            index_to_y(i)           ; (the index times the element size, as for an array nearby)
+        for k in 0 to bytes - 1 {
+            put("    lda  #")
+            putn((address >> (k * 8)) & 255)
+            nl()
+            if indexed and k == 0 {
+                far_line("sty  P8ZP_SCRATCH_W1")
+                far_line("clc")
+                far_line("adc  P8ZP_SCRATCH_W1")
+            }
+            else if indexed
+                far_line("adc  #0")
+            put("    sta  P8ZP_SCRATCH_W1+")
+            putn(k)
+            nl()
+        }
+    }
+
+    ; A = byte k behind the pointer, or the other way round
+    sub far_byte(str mnemonic, ubyte k) {
+        if c45 {
+            put("    ldz  #")
+            putn(k)
+            nl()
+            put("    ")
+            put(mnemonic)
+            far_line("  [P8ZP_SCRATCH_W1],z")
+        }
+        else {
+            put("    ldy  #")
+            putn(k)
+            nl()
+            put("    ")
+            put(mnemonic)
+            far_line("  [P8ZP_SCRATCH_W1],y")
+        }
+    }
+
+    sub far_instruction(^^ir.Instr i) {
+        ubyte size = type_size(i.type)
+        bool indexed = i.op == ir.OP_LOADX or i.op == ir.OP_STOREX or i.op == ir.OP_STOREZX
+        bool only_writes = i.op == ir.OP_STOREM or i.op == ir.OP_STOREZM or i.op == ir.OP_STOREIM or i.op == ir.OP_STOREX or i.op == ir.OP_STOREZX
+        bool only_reads = i.op == ir.OP_LOADM or i.op == ir.OP_LOADMZ or i.op == ir.OP_LOADX or (i.mode == ir.M_RM and not only_writes)
+        ubyte k
+        long address = far_address(i)
+        ^^ubyte saved_sym = i.sym
+        if c45
+            q_flush()               ; (nothing in the 32-bit register across this)
+        if not only_writes {
+            far_pointer(address, i, indexed)
+            for k in 0 to size - 1 {
+                far_byte("lda", k)
+                far_cell("sta", k)
+            }
+            if c45
+                far_line("ldz  #0")
+        }
+        ; the instruction itself, on the value's place in the register file
+        ubyte saved_op = i.op
+        long saved_offset = i.offset
+        uword saved_r2 = i.r2
+        ubyte saved_scale = i.scale
+        buf.clear(nb)
+        buf.add_str(nb, "p8_regfile+")
+        buf.add_long(nb, far_cells)
+        buf.add_byte(nb, 0)
+        i.sym = strtab.intern_cstr(nb.data)
+        i.offset = 0
+        when i.op {
+            ir.OP_LOADX -> i.op = ir.OP_LOADM
+            ir.OP_STOREX -> i.op = ir.OP_STOREM
+            ir.OP_STOREZX -> i.op = ir.OP_STOREZM
+        }
+        if indexed {
+            i.scale = 1
+            i.r2 = 0
+        }
+        instruction(i)
+        if c45
+            q_flush()
+        i.op = saved_op
+        i.sym = saved_sym
+        i.offset = saved_offset
+        i.r2 = saved_r2
+        i.scale = saved_scale
+        if not only_reads {
+            ; (the pointer again: the instruction may have used the scratch words)
+            far_pointer(address, i, indexed)
+            for k in 0 to size - 1 {
+                far_cell("lda", k)
+                far_byte("sta", k)
+            }
+            if c45
+                far_line("ldz  #0")
+        }
+    }
+
     ; ---- the 45GS02's 32-bit instructions ----
     ; A, X, Y and Z together are the register Q.  A long is loaded, combined and stored
     ; in one instruction each: "ldq a / clc / adq b / stq a" where the 6502 has four
@@ -5827,6 +6039,10 @@ gen6502 {
             fwait_prev = fwait
             fwait = 0
         }
+        if far_operand(i) {
+            far_instruction(i)
+            return
+        }
         if c45 {
             ; (not an instruction that is marked as part of a fused pattern)
             if i.type == ir.T_LONG and i.scale < 200 and quad_instruction(i)
@@ -5856,6 +6072,10 @@ gen6502 {
             ir.OP_NOP -> {
             }
             ir.OP_LOAD -> {
+                if i.sym != 0 and far_count != 0 and far_named(i.sym) >= 0 {
+                    error("the address of a variable in far memory does not fit a pointer (it cannot be passed or pointed to yet)", i.sym)
+                    return
+                }
                 if i.sym != 0 {
                     ; the address of a symbol
                     ins_half("lda", '<', i.sym, i.offset)

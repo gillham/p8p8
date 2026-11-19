@@ -6928,6 +6928,15 @@ irgen {
         if strings.compare(name, "peek") == 0 or strings.compare(name, "peekw") == 0 or strings.compare(name, "peekl") == 0
             or strings.compare(name, "peekbool") == 0 or strings.compare(name, "peekp") == 0 or strings.compare(name, "peekq") == 0
             or strings.compare(name, "peekf") == 0 {
+            bool farok
+            quad faraddr
+            farok, faraddr = typer.const_eval(a)
+            if farok and faraddr > 65535 and types.far_bits != 0 {
+                ; an address in far memory: memory at a fixed address, not through a pointer
+                uword fpr = ir.new_reg(t)
+                void ir.emit_rm(chunk, ir.OP_LOADM, t, fpr, 0, faraddr as long)
+                return fpr, t
+            }
             r, at = expression(a)
             r = convert(r, at, ir.T_POINTER, false)
             uword pr = ir.new_reg(t)
@@ -6937,8 +6946,14 @@ irgen {
         if strings.compare(name, "poke") == 0 or strings.compare(name, "pokew") == 0 or strings.compare(name, "pokel") == 0
             or strings.compare(name, "pokebool") == 0 or strings.compare(name, "pokep") == 0 or strings.compare(name, "pokeq") == 0
             or strings.compare(name, "pokef") == 0 {
-            r, at = expression(a)
-            r = convert(r, at, ir.T_POINTER, false)
+            bool pfarok
+            quad pfaraddr
+            pfarok, pfaraddr = typer.const_eval(a)
+            bool pfar = pfarok and pfaraddr > 65535 and types.far_bits != 0
+            if not pfar {
+                r, at = expression(a)
+                r = convert(r, at, ir.T_POINTER, false)
+            }
             r2, at2 = expression(a.next)
             ubyte vt = ir.T_BYTE
             if name[4] == 'w'
@@ -6951,7 +6966,12 @@ irgen {
                 vt = ir.T_POINTER
             else if name[4] == 'f'
                 vt = ir.T_FLOAT
-            void ir.emit_rp(chunk, ir.OP_STOREI, vt, convert(r2, at2, vt, false), r, 0)
+            ; (a value narrower than what is stored keeps its sign: pokel(a, -5))
+            bool vsigned = a.next.type != 0 and types.is_signed(a.next.type)
+            if pfar
+                void ir.emit_rm(chunk, ir.OP_STOREM, vt, convert(r2, at2, vt, vsigned), 0, pfaraddr as long)
+            else
+                void ir.emit_rp(chunk, ir.OP_STOREI, vt, convert(r2, at2, vt, vsigned), r, 0)
             return 0, ir.T_BYTE
         }
         if strings.compare(name, "cmp") == 0 {

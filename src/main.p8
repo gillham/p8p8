@@ -984,6 +984,16 @@ main {
         if diag.errors > 0
             out.exit(1)
         types.set_target(importer.target)
+        types.far_bits = 0
+        if target.loaded and target.number("far_address_bits", 0) != 0 {
+            ; (only for the CPU that has the instructions: the one of -cpu, or the target's)
+            ^^ubyte cpuname = gen6502.cpu_option
+            if cpuname == 0
+                cpuname = target.text("cpu")
+            if cpuname != 0 and (strings.compare(cpuname, "65816") == 0 or strings.compare(cpuname, "45gs02") == 0
+                    or strings.compare(cpuname, "65c816") == 0 or strings.compare(cpuname, "w65c816") == 0)
+                types.far_bits = target.number("far_address_bits", 0) as ubyte
+        }
         encoding.set_target(importer.target)
         if opt_encoding != encoding.E_INVALID
             encoding.target_default = opt_encoding

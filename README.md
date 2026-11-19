@@ -172,6 +172,11 @@ the machine's arithmetic unit, which makes programs smaller and a good deal
 faster.  `-cpu 6502` gives plain 6502 code for that machine.  It is a first
 version.
 
+On the MEGA65, and on a C64 with a SuperCPU (`-target c64 -cpu 65816`), data
+can be at an address of more than 16 bits: `&ubyte ATTIC = $8000000`,
+`@($40000)`, `peek` and `poke` with such a number.  That is p8p8's own
+([docs/DIFFERENCES.md](docs/DIFFERENCES.md), "Far memory").
+
 `-cpu 65816` writes code for that CPU on any 6502 machine (`-target cx16
 -cpu 65816`, for a Commander X16 that has one; `-target c64 -cpu 65816` for
 a C64 with a SuperCPU).  This is new: word arithmetic on variables uses

@@ -45,6 +45,11 @@ types {
 
     ; target properties, set by set_target()
     ubyte POINTER_SIZE = 8
+    ; A machine whose CPU reaches more memory than a pointer of the language names (the
+    ; 65816 with 24 bits, the MEGA65's 45GS02 with 28): how many bits an address in data
+    ; can have, or 0.  A long is such an address; pointers stay words.  (The driver sets
+    ; it from the target's far_address_bits when the CPU is one of the two.)
+    ubyte far_bits = 0
     ubyte FLOAT_SIZE = 8
     ubyte ADDRESS_TYPE = T_UQUAD    ; what the 'pointer' keyword and & give
 
