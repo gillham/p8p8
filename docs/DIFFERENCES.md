@@ -223,6 +223,12 @@ everywhere: there is no typed pointer to far memory, a far address does not
 go into a word, and a far array cannot be passed to a subroutine or
 searched with `in`.
 
+The library module `farmem` (for those two machines) copies and fills
+there: `farmem.copy(source, target, count)` and
+`farmem.fill(target, count, value)`, the addresses longs, with the
+MEGA65's DMA controller and the 65816's block moves.  The blocks may
+overlap; one block stays inside a 64 KB bank.
+
 ## Things upstream has that p8p8 does not
 
 - the virtual machine, and running a program in it;

@@ -174,7 +174,8 @@ version.
 
 On the MEGA65, and on a C64 with a SuperCPU (`-target c64 -cpu 65816`), data
 can be at an address of more than 16 bits: `&ubyte ATTIC = $8000000`,
-`@($40000)`, `peek` and `poke` with such a number or with a long variable.  That is p8p8's own
+`@($40000)`, `peek` and `poke` with such a number or with a long variable,
+and `farmem.copy` and `farmem.fill` from the library.  That is p8p8's own
 ([docs/DIFFERENCES.md](docs/DIFFERENCES.md), "Far memory").
 
 `-cpu 65816` writes code for that CPU on any 6502 machine (`-target cx16

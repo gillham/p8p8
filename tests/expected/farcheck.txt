@@ -22,6 +22,12 @@ BANK 2 IS MEMORY OF ITS OWN
 123 124 45678 -123456 10
 $00040400 4242 45 88
 77
+-- C64, SuperCPU: farlib, where the compiler writes the code
+1 2 3 4 5 6 7 8 9 10
+1 2 3 4 1 2 3 4 5 6 7 8 13 14
+3 4 1 2 3 4 5 6 5 6 7 8 13 14
+3 4 1 99 99 99 99 6 5 6
+1 99 99 99 99 6 7 8 77 0
 -- MEGA65
 [ZP],Z      $B1 $B2
 LDQ [ZP]    $C1 $C2 $C3 $C4
@@ -39,3 +45,9 @@ BANK 4 IS MEMORY OF ITS OWN
 123 124 45678 -123456 10
 $00040400 4242 45 88
 77
+-- MEGA65: farlib, where the compiler writes the code
+1 2 3 4 5 6 7 8 9 10
+1 2 3 4 1 2 3 4 5 6 7 8 13 14
+3 4 1 2 3 4 5 6 5 6 7 8 13 14
+3 4 1 99 99 99 99 6 5 6
+1 99 99 99 99 6 7 8 77 0

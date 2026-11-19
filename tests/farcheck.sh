@@ -4,7 +4,8 @@
 # tests/far/modes45.p8 on the MEGA65 (xmega65).  Then tests/far/fardata.p8 and
 # farcomputed.p8, where the compiler writes the code (memory mapped variables and arrays,
 # @(), peek and poke at far addresses that are constants, and at ones the program works
-# out), on the two machines that have far memory.  Prints what each program shows; the
+# out), on the two machines that have far memory; and farlib.p8, the library's copy
+# and fill there (farmem).  Prints what each program shows; the
 # Makefile compares with tests/expected/farcheck.txt.  A machine whose emulator is not
 # installed is left out with a line that says so.
 #
@@ -60,7 +61,7 @@ for row in range(0, len(data), 40):
     if line.startswith(('LONG', '[DP]', 'BANK')):
         print(line)
 PY
-    for program in fardata farcomputed; do
+    for program in fardata farcomputed farlib; do
         echo "-- C64, SuperCPU: $program, where the compiler writes the code"
         "$p8c" -lib "$lib" -target c64 -cpu 65816 -out "$work/c64" tests/far/$program.p8 || exit 1
         address=$(awk '$3 == ".p8_sys_startup:cleanup_at_exit" { print $2 }' "$work/c64/$program.vice-mon-list")
@@ -90,7 +91,7 @@ if command -v xmega65 > /dev/null; then
     (cd "$work/m65" && timeout 60 xmega65 -headless -sleepless -besure -prg modes45.prg -prgexit -dumpscreen screen.txt \
         > log.txt 2>&1 < /dev/null)
     grep -E '^(\[ZP\]|LDQ|ATTIC|BANK)' "$work/m65/screen.txt"
-    for program in fardata farcomputed; do
+    for program in fardata farcomputed farlib; do
         echo "-- MEGA65: $program, where the compiler writes the code"
         "$p8c" -lib "$lib" -target mega65 -out "$work/m65" tests/far/$program.p8 || exit 1
         (cd "$work/m65" && rm -f screen.txt && timeout 60 xmega65 -headless -sleepless -besure -prg $program.prg -prgexit -dumpscreen screen.txt \

@@ -524,12 +524,18 @@ left for later.  The 16-bit runs and the fusing of indexed patterns leave
 chunks with far operands alone (the runs had written to the low 16 bits of
 the address).
 
-`make farcheck` runs three programs: the instructions written by hand (the
+The library's part is the module `farmem` in the two machines' directories
+of `lib/targets`: `copy` and `fill` with long addresses, a DMA order on the
+MEGA65, `mvn`/`mvp` on the 65816 (the two bank numbers are in the
+instruction, so it is put together in a variable and called there; nothing
+is written into the program's code).
+
+`make farcheck` runs these programs: the instructions written by hand (the
 65816's absolute long, absolute long indexed, `[dp]`, `[dp],y` on the X16 and
 the SuperCPU; the 45GS02's `[zp],z` and `ldq`/`stq` through it on the MEGA65)
 and `tests/far/fardata.p8` (constant addresses) and `farcomputed.p8`
-(worked out ones), where the compiler writes the code, on the two machines
-with far memory.  On the X16 a bank other than 0 is bank 0 again in
+(worked out ones), where the compiler writes the code, and `farlib.p8`
+(the library), on the two machines with far memory.  On the X16 a bank other than 0 is bank 0 again in
 x16emu.
 
 Assembly text that switches the CPU for a few lines goes back with

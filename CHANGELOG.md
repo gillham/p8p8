@@ -60,6 +60,8 @@
   out (`@(base + i)`, `base[i]`); `&` of a far variable is a long.  The
   target's file says how many bits
   (`far_address_bits`).  `make farcheck` runs the test on both machines.
+- The library module `farmem` for those two machines: `copy` and `fill`
+  with long addresses (the MEGA65's DMA, the 65816's block moves).
 - Fixed: `pokel(address, -5)` stored 251: a value narrower than what is
   stored lost its sign.
 - Fixed: an address of more than 16 bits in `@(...)`, in `peek` and `poke`
