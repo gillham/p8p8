@@ -1546,6 +1546,12 @@ gen6502 {
             ; the machine brings its whole launcher and startup code
             raw("")
             raw("; ---- custom launcher assembler program ----")
+            ; (its text is the same for every program; this says whether this one leaves the
+            ; zero page as BASIC needs it, so that the launcher can return or reset)
+            if zp_safe
+                raw("prog8_zeropage_safe = 1")
+            else
+                raw("prog8_zeropage_safe = 0")
             put("* = ")
             puthex(load_address)
             nl()

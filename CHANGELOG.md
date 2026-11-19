@@ -60,6 +60,11 @@
   out (`@(base + i)`, `base[i]`); `&` of a far variable is a long.  The
   target's file says how many bits
   (`far_address_bits`).  `make farcheck` runs the test on both machines.
+- A target's custom launcher is told whether the program leaves the zero
+  page as BASIC needs it (the assembler symbol `prog8_zeropage_safe`), and
+  the MEGA65's resets the machine at the end when it does not, as on the
+  other machines; before, such a program fell back into a BASIC that could
+  not go on (`?SYNTAX ERROR`).
 - The library module `farmem` for those two machines: `copy` and `fill`
   with long addresses (the MEGA65's DMA, the 65816's block moves).
 - Fixed: `pokel(address, -5)` stored 251: a value narrower than what is

@@ -210,6 +210,16 @@ Options are upstream's where both have them, with one dash or two.
 - `%import` looks in the same places in the same order; the library has more
   layers.  `-traceimports` shows which file a module came from.
 
+## A custom launcher knows the zero page setting
+
+A target's `custom_launcher_code` is one text for every program.  p8p8
+defines `prog8_zeropage_safe` (1 or 0) in front of it, so that the launcher
+can do what the compiler's own startup code does: put the address of
+`sys.reset_system` on the stack when the program uses zero page that BASIC
+needs (`.if prog8_zeropage_safe == 0`).  The MEGA65's launcher does; a
+program built with `-D "prog8_exit_noreset:=1"` returns to BASIC all the
+same (the tests read the screen afterwards).
+
 ## Far memory
 
 On a machine with memory beyond 64 KB and a CPU that reaches it (the MEGA65;

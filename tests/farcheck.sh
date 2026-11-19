@@ -87,13 +87,13 @@ else
 fi
 echo "-- MEGA65"
 if command -v xmega65 > /dev/null; then
-    "$p8c" -lib "$lib" -target mega65 -out "$work/m65" tests/far/modes45.p8 || exit 1
+    "$p8c" -lib "$lib" -target mega65 -D "prog8_exit_noreset:=1" -out "$work/m65" tests/far/modes45.p8 || exit 1
     (cd "$work/m65" && timeout 60 xmega65 -headless -sleepless -besure -prg modes45.prg -prgexit -dumpscreen screen.txt \
         > log.txt 2>&1 < /dev/null)
     grep -E '^(\[ZP\]|LDQ|ATTIC|BANK)' "$work/m65/screen.txt"
     for program in fardata farcomputed farlib; do
         echo "-- MEGA65: $program, where the compiler writes the code"
-        "$p8c" -lib "$lib" -target mega65 -out "$work/m65" tests/far/$program.p8 || exit 1
+        "$p8c" -lib "$lib" -target mega65 -D "prog8_exit_noreset:=1" -out "$work/m65" tests/far/$program.p8 || exit 1
         (cd "$work/m65" && rm -f screen.txt && timeout 60 xmega65 -headless -sleepless -besure -prg $program.prg -prgexit -dumpscreen screen.txt \
             > log.txt 2>&1 < /dev/null)
         sed -n '/ RUN:/,$p' "$work/m65/screen.txt" | grep '^[0-9$]'

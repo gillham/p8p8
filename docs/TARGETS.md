@@ -85,7 +85,7 @@ Numbers are decimal, `$hex`, `0xhex` or `%binary`.  A list of addresses is
 | `bss_highram_start`, `bss_highram_end` | the same for `-varshigh N` (N: the RAM bank, for the library's startup code) |
 | `vars_address` | where those variables go when no option says so (`-varsaddress` on the command line) |
 | `library` | the directory of the machine's own library modules (syslib and so on).  Without it: `<lib>/<name>`.  The modules all machines share come from `-lib` |
-| `custom_launcher_code` | when not empty: the whole launcher and startup code, written after the `* = address` line as it is, instead of what p8p8 writes |
+| `custom_launcher_code` | when not empty: the whole launcher and startup code, written after the `* = address` line as it is, instead of what p8p8 writes.  The text is the same for every program, so p8p8 defines the assembler symbol `prog8_zeropage_safe` before it (an extension): 1 when the program leaves the zero page as BASIC needs it (`%zeropage basicsafe` or `dontuse`), 0 when the machine has to be reset at the end, as the compiler's own startup code does it |
 | `assembler_options` | more options for 64tass, before `--output` |
 
 Read by the upstream compiler and not used by p8p8 yet: `io_regions`,

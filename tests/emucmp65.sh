@@ -30,12 +30,12 @@ failed=0
 for f in "$@"; do
     name=$(basename "$f" .p8)
     rm -f "$work/6502/$name.prg" "$work/45gs02/$name.prg"
-    if ! "$p8c" -target mega65 -lib "$lib" -cpu 6502 -out "$work/6502" "$f" > "$work/6502.err" 2>&1 || [ ! -f "$work/6502/$name.prg" ]; then
+    if ! "$p8c" -target mega65 -D "prog8_exit_noreset:=1" -lib "$lib" -cpu 6502 -out "$work/6502" "$f" > "$work/6502.err" 2>&1 || [ ! -f "$work/6502/$name.prg" ]; then
         echo "skipped (not a program for the mega65): $f"
         continue
     fi
     total=$((total + 1))
-    if ! "$p8c" -target mega65 -lib "$lib" -cpu 45gs02 -out "$work/45gs02" "$f" > "$work/45.err" 2>&1 || [ ! -f "$work/45gs02/$name.prg" ]; then
+    if ! "$p8c" -target mega65 -D "prog8_exit_noreset:=1" -lib "$lib" -cpu 45gs02 -out "$work/45gs02" "$f" > "$work/45.err" 2>&1 || [ ! -f "$work/45gs02/$name.prg" ]; then
         echo "failed (no 45GS02 program): $f"
         grep -v '^$' "$work/45.err" | head -4 | cut -c1-200
         failed=$((failed + 1))
