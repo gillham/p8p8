@@ -1,0 +1,4 @@
+tests/bad_upstream_syntax.p8:3:20: error: Syntax error: cannot use both 'private' and 'public' on the same declaration near 'ubyte'
+tests/bad_upstream_syntax.p8:4:12: error: Syntax error: use [rows][cols] instead of [rows,cols] for 2D array syntax near ','
+tests/bad_upstream_syntax.p8:6:17: error: Syntax error: array field must have a specified size near IDENT 'data'
+tests/bad_upstream_syntax.p8:7:21: error: Syntax error: 2D arrays are not allowed as struct fields near IDENT 'grid'

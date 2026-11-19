@@ -1457,6 +1457,8 @@ irgen {
         }
     }
 
+    long option_address = -1        ; -address of the command line
+
     sub program_options() {
         if not target.loaded
             return              ; not a machine with a configuration: the neutral defaults
@@ -1550,6 +1552,22 @@ irgen {
             launcher = "NONE"
             zeropage = "DONTUSE"
             no_sysinit = true
+        }
+        if option_address >= 0
+            loadaddress = option_address        ; -address, in place of %address
+        if strings.compare(output, "PRG") == 0 and strings.compare(launcher, "BASIC") == 0 and target.text("custom_launcher_code") == 0
+            and loadaddress != target.number("load_address", $0801) and importer.modules != 0 and importer.modules.tree != 0 {
+            ; the BASIC line that starts the program is where BASIC programs are
+            ^^buf.Buf lb = buf.new(64)
+            buf.add_str(lb, "BASIC output must have load address $")
+            long basic_at = target.number("load_address", $0801)
+            ^^ubyte hexdigits = "0123456789abcdef"
+            buf.add_byte(lb, hexdigits[((basic_at >> 12) & 15) as ubyte])
+            buf.add_byte(lb, hexdigits[((basic_at >> 8) & 15) as ubyte])
+            buf.add_byte(lb, hexdigits[((basic_at >> 4) & 15) as ubyte])
+            buf.add_byte(lb, hexdigits[(basic_at & 15) as ubyte])
+            buf.add_byte(lb, 0)
+            error(importer.modules.tree, lb.data)
         }
         if loadaddress > memtop
             memtop = $ffff
@@ -6374,6 +6392,89 @@ irgen {
         return 0
     }
 
+    ; The text of the .bankedcalls file: the extsubs whose bank a selector subroutine
+    ; gives, with the ID each call hands it.  0 when the program has none.
+    sub banked_calls() -> ^^buf.Buf {
+        ^^buf.Buf out = 0
+        ubyte pass
+        long width = 4
+        for pass in 0 to 1 {
+            long id = 0
+            ^^importer.Module m = importer.modules
+            while m != 0 {
+                ^^ast.Node b = m.tree.a
+                while b != 0 {
+                    if b.kind == ast.N_BLOCK {
+                        ^^ast.Node st = b.a
+                        while st != 0 {
+                            if st.kind == ast.N_EXTSUB and st.d != 0 and st.d.kind == ast.N_IDENT and st.d.extra != 0 {
+                                ^^symtab.Sym sel = st.d.extra
+                                if sel.kind == symtab.K_SUB {
+                                    long namelen = buf.cstr_len(b.name) + 1 + buf.cstr_len(st.name)
+                                    if pass == 0 {
+                                        if namelen > width
+                                            width = namelen
+                                    }
+                                    else {
+                                        long start = out.len
+                                        buf.add_long(out, id)
+                                        while out.len < start + 4
+                                            buf.add_byte(out, ' ')
+                                        bool aok
+                                        quad address
+                                        aok, address = typer.const_eval(st.c)
+                                        buf.add_byte(out, '$')
+                                        ^^ubyte hexdigits = "0123456789abcdef"
+                                        byte shift
+                                        for shift in 12 downto 0 step -4
+                                            buf.add_byte(out, hexdigits[((address >> (shift as ubyte)) & 15) as ubyte])
+                                        while out.len < start + 12
+                                            buf.add_byte(out, ' ')
+                                        buf.add_str(out, b.name)
+                                        buf.add_byte(out, '.')
+                                        buf.add_str(out, st.name)
+                                        while out.len < start + 12 + width + 2
+                                            buf.add_byte(out, ' ')
+                                        ; the selector, with the block it is in
+                                        if sel.scope != 0 and sel.scope.owner != 0 and sel.scope.owner.kind == ast.N_BLOCK {
+                                            buf.add_str(out, sel.scope.owner.name)
+                                            buf.add_byte(out, '.')
+                                        }
+                                        buf.add_str(out, sel.name)
+                                        buf.add_byte(out, '\n')
+                                    }
+                                    id++
+                                }
+                            }
+                            st = st.next
+                        }
+                    }
+                    b = b.next
+                }
+                m = m.next
+            }
+            if id == 0
+                return 0
+            if pass == 0 {
+                out = buf.new(1024)
+                buf.add_str(out, "ID  Address Name")
+                long pad = width + 2 - 4
+                while pad > 0 {
+                    buf.add_byte(out, ' ')
+                    pad--
+                }
+                buf.add_str(out, "BankSelector\n")
+                long dashes = out.len - 1
+                while dashes > 0 {
+                    buf.add_byte(out, '-')
+                    dashes--
+                }
+                buf.add_byte(out, '\n')
+            }
+        }
+        return out
+    }
+
     sub call_expr(^^ast.Node e) -> uword, ubyte {
         ^^symtab.Sym s = e.a.extra
         ubyte t = irt(e.type)
@@ -6409,6 +6510,11 @@ irgen {
             if t == ir.T_NONE
                 return 0, t
             return convert(called_value(), ir.T_WORD, t, false), t
+        }
+        if s.kind == symtab.K_LABEL {
+            ; a label called like a subroutine: the code there returns
+            void ir.emit_call(chunk, sym_name(s))
+            return 0, t
         }
         unsupported(e, "call target")
         return ir.new_reg(t), t

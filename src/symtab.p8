@@ -237,6 +237,18 @@ symtab {
 
     bool merging = false            ; declaring the contents of a %option merge block
 
+    ; the same number of parameters with the same names: the signature a routine of a
+    ; merged block must have to take the place of the block's own
+    sub same_parameters(^^ast.Node a, ^^ast.Node b) -> bool {
+        while a != 0 and b != 0 {
+            if a.name != b.name
+                return false
+            a = a.next
+            b = b.next
+        }
+        return a == 0 and b == 0
+    }
+
     sub count_list(^^ast.Node n) -> uword {
         uword k = 0
         while n != 0 {
@@ -278,7 +290,7 @@ symtab {
                     ; of that name with the same parameters (upstream: "monkeypatched").
                     ^^Sym prior = find_in(scope, s.name)
                     if prior != 0 and prior.kind == K_SUB and prior.decl != 0 and prior.decl != s
-                            and count_list(prior.decl.a) == count_list(s.a) {
+                            and same_parameters(prior.decl.a, s.a) {
                         prior.decl.kind = ast.N_REMOVED
                         prior.decl = s
                         prior.module = current_module

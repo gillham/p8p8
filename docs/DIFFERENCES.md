@@ -149,6 +149,14 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
   colors.  Parse errors are worded differently (the parser is written by
   hand, not generated from the grammar).
 
+- **Declarations nothing uses are checked too.**  Upstream removes a
+  variable that nothing uses before some of its checks, so `ubyte u = 300`
+  or `ubyte[-1] a` passes there when `u` and `a` are never used; p8p8
+  reports them.
+- **Private means private.**  Upstream lets a private array of another
+  block be read with an index (`other.table[1]`), and a variable inside
+  another block's private subroutine be reached; p8p8 refuses both.
+
 ## The command line
 
 Options are upstream's where both have them, with one dash or two.
@@ -156,12 +164,16 @@ Options are upstream's where both have them, with one dash or two.
 - **Accepted and ignored**, because they only concern what upstream prints:
   `-plaintext`, `-quiet`, `-quietasm`, `-nosourcelines`, `-timings`,
   `-warnimplicitcasts`, `-ircomments`.
-- **Not there** (an error, not ignored): `-D`, `-address`, `-breakinstr`,
-  `-profiling`, `-noasm`, `-ignorefootguns`, `-newcodegen`, `-watch`,
-  `-daemon`, `-emu2`, and the tools that upstream has built in:
-  `-libsearch`, `-libdump`, `-dumpsymbols`, `-dumpvars`, `-gendoc`,
-  `-printast1`, `-printast2`, `-float2bytes`, `-bytes2float`, `-vm`,
-  `-vmtrace`, `-compareir`.
+- **Under upstream's name, p8p8's way:** `-noasm` is `-check` (the program
+  is checked and nothing is written), `-dumpsymbols` is `-symbols` (p8p8's
+  own listing), `-ignorefootguns` is accepted (p8p8 has no such warnings).
+- **Not there** (an error, not ignored): `-profiling`, `-newcodegen`,
+  `-watch`, `-daemon`, `-emu2`, and the tools that upstream has built in:
+  `-libsearch`, `-libdump`, `-dumpvars`, `-gendoc`, `-printast1`,
+  `-printast2`, `-float2bytes`, `-bytes2float`, `-vm`, `-vmtrace`,
+  `-compareir`.
+- `-O`, `-clang` and `-Xlink` apply to the programs clang builds for
+  llvm64 and llvm32; llvm16 keeps its own level.
 - **p8p8's own:** `-codegen own|upstream`, `-encoding`, `-lib`, `-libpath`,
   `-verbose`, `-ir`, `-llvm`, `-build`, `-run`, `-report` and
   `-reportnosource` (everything about one run in a directory, to attach to

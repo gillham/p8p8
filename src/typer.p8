@@ -687,14 +687,52 @@ typer {
     }
 
     ; A value of type vt (already inferred, of node v) is stored into type tt.
+    ; is this the plain name of a long variable?  (Where addresses are words such a value
+    ; does not go into one; an expression of constants that happens to be typed long may.)
+    sub long_variable(^^ast.Node v) -> bool {
+        if v.kind != ast.N_IDENT or v.extra == 0
+            return false
+        ^^symtab.Sym ls = v.extra
+        return (ls.kind == symtab.K_VAR or ls.kind == symtab.K_PARAM) and ls.type == types.T_LONG
+    }
+
+    long arg_checked = 0            ; the number of the argument check_assign looks at, or 0
+
+    ; a pointer type's name for a message, a struct with its block as upstream has it: ^^main.Node
+    sub pointer_name(uword t) {
+        if types.is_pointer(t) and types.is_struct(types.elem_of(t)) {
+            ^^types.Type st = types.get(types.elem_of(t))
+            ^^symtab.Sym ss = st.strct
+            buf.add_str(parser.scratch, "^^")
+            if ss != 0 and ss.scope != 0 and ss.scope.owner != 0 and ss.scope.owner.kind == ast.N_BLOCK and ss.scope.owner.name != 0 {
+                buf.add_str(parser.scratch, ss.scope.owner.name)
+                buf.add_byte(parser.scratch, '.')
+            }
+            if ss != 0
+                buf.add_str(parser.scratch, ss.name)
+            return
+        }
+        types.name_into(parser.scratch, t)
+    }
+
     sub check_assign(^^ast.Node v, uword vt, uword tt) {
         checks++
         if vt == 0 or tt == 0
             return
+        if types.POINTER_SIZE == 2 and tt == types.T_LONG and types.is_pointer(vt) {
+            error(v, "cannot use a pointer as a long, a pointer is an unsigned word")
+            return
+        }
         if v.kind == ast.N_BINARY and (v.op == token.T_AMP or v.op == token.T_PIPE or v.op == token.T_CARET)
             and types.size_of(vt) == types.size_of(tt) and types.is_integer(tt)
             return          ; a bitwise operation between different types of the same size
+        if v.kind == ast.N_UNARY and v.op == token.T_TILDE and types.is_integer(vt) and types.is_integer(tt) and types.size_of(vt) == types.size_of(tt)
+            return          ; and an inversion
         if v.kind == ast.N_INT {
+            if types.POINTER_SIZE == 2 and types.is_pointer(tt) and (v.value > 65535 or v.value < 0) {
+                error(v, "address out of range")
+                return
+            }
             if not literal_fits(v.value, tt) {
                 if types.is_numeric(tt) {
                     buf.clear(parser.scratch)
@@ -735,12 +773,29 @@ typer {
         if types.is_pointer(tt) and types.is_pointer(vt) and types.elem_of(tt) == types.T_UBYTE and types.is_pointer(types.elem_of(vt))
             return
         ; the untyped address type takes any pointer or address-sized integer
-        if tt == types.ADDRESS_TYPE and (types.is_pointer(vt) or vt == types.T_UWORD or vt == types.T_LONG)
+        if tt == types.ADDRESS_TYPE and (types.is_pointer(vt) or vt == types.T_UWORD or (vt == types.T_LONG and (types.POINTER_SIZE > 2 or not long_variable(v))))
             return
-        ; pointers to different things go into each other when one of them points to a
-        ; struct (upstream: only two different plain pointer types, ^^uword and ^^float, clash)
-        if types.is_pointer(tt) and types.is_pointer(vt) and (types.is_struct(types.elem_of(tt)) or types.is_struct(types.elem_of(vt)))
+        ; typed pointers to different things do not go into each other
+        if types.is_pointer(tt) and types.is_pointer(vt) and tt != types.ADDRESS_TYPE and vt != types.ADDRESS_TYPE {
+            buf.clear(parser.scratch)
+            if arg_checked != 0 {
+                buf.add_str(parser.scratch, "argument ")
+                buf.add_long(parser.scratch, arg_checked)
+                buf.add_str(parser.scratch, " type mismatch, was: ")
+                pointer_name(vt)
+                buf.add_str(parser.scratch, " expected: ")
+                pointer_name(tt)
+            }
+            else {
+                buf.add_str(parser.scratch, "cannot assign different pointer type, expected ")
+                pointer_name(tt)
+                buf.add_str(parser.scratch, " or uword but got ")
+                pointer_name(vt)
+            }
+            buf.add_byte(parser.scratch, 0)
+            diag.error_at(source.get(v.file), v.line, v.col, parser.scratch.data)
             return
+        }
         ; a typed pointer takes the same pointer type (checked above) or an untyped address
         if types.is_pointer(tt) and (vt == types.ADDRESS_TYPE or vt == types.T_UWORD or (vt == types.T_LONG and types.POINTER_SIZE > 2))
             return
@@ -750,6 +805,8 @@ typer {
     }
 
     ; True when the literal value is representable in the type (or the type isn't numeric).
+    bool sizing = false         ; inside sizeof(): a name has its declared type
+
     sub literal_fits(quad value, uword t) -> bool {
         when t {
             types.T_BOOL -> return value == 0 or value == 1
@@ -962,6 +1019,39 @@ typer {
         }
         bool ok
         quad value
+        if k == ast.N_CAST and e.a != 0 and e.a.kind == ast.N_INT and e.type != 0 and types.is_integer(e.type) {
+            ; a constant that needs more bytes than the type has is not cut down by a cast
+            quad cv = e.a.value
+            ubyte needs = 4
+            if cv >= -128 and cv <= 255
+                needs = 1
+            else if cv >= -32768 and cv <= 65535
+                needs = 2
+            if types.size_of(e.type) < needs {
+                buf.clear(parser.scratch)
+                buf.add_str(parser.scratch, "no cast available from ")
+                if needs == 4
+                    buf.add_str(parser.scratch, "LONG")
+                else if cv < 0
+                    buf.add_str(parser.scratch, "WORD")
+                else
+                    buf.add_str(parser.scratch, "UWORD")
+                buf.add_str(parser.scratch, " to ")
+                when e.type {
+                    types.T_UBYTE -> buf.add_str(parser.scratch, "UBYTE")
+                    types.T_BYTE -> buf.add_str(parser.scratch, "BYTE")
+                    types.T_UWORD -> buf.add_str(parser.scratch, "UWORD")
+                    types.T_WORD -> buf.add_str(parser.scratch, "WORD")
+                    else -> types.name_into(parser.scratch, e.type)
+                }
+                buf.add_str(parser.scratch, " for value ")
+                buf.add_long(parser.scratch, cv as long)
+                buf.add_str(parser.scratch, ".0")
+                buf.add_byte(parser.scratch, 0)
+                error(e, parser.scratch.data)
+                return
+            }
+        }
         ok, value = const_eval(e)
         if not ok
             return
@@ -1167,6 +1257,18 @@ typer {
             }
             ast.N_CALL -> {
                 ^^symtab.Sym cs = e.a.extra
+                if e.a != 0 and e.a.kind == ast.N_IDENT and e.a.name != 0 and e.b != 0 and cs != 0 and cs.kind == symtab.K_SUB {
+                    if buf.bytes_equal(e.a.name, "math.", 5) {
+                        ok, a = library_const(e.a.name + 5, e.b)
+                        return ok, a
+                    }
+                    if strings.compare(e.a.name, "strings.isdigit") == 0 {
+                        ok, a = const_eval(e.b)
+                        if ok
+                            return true, (a >= 48 and a <= 57) as quad
+                        return false, 0
+                    }
+                }
                 if cs == 0 or cs.kind != symtab.K_BUILTIN or e.b == 0
                     return false, 0
                 if cs.name == builtin_interned[15] {
@@ -1274,6 +1376,69 @@ typer {
             }
         }
         return false
+    }
+
+    ; The math library's functions of constants that upstream evaluates when it compiles:
+    ; the sines and cosines of the 256 (or, with an r, 180) step circle, log2, diff.
+    sub library_const(^^ubyte name, ^^ast.Node args) -> bool, quad {
+        bool ok
+        quad x
+        quad y
+        ok, x = const_eval(args)
+        if not ok
+            return false, 0
+        if strings.compare(name, "diff") == 0 or strings.compare(name, "diffw") == 0 {
+            if args.next == 0
+                return false, 0
+            ok, y = const_eval(args.next)
+            if not ok
+                return false, 0
+            if x > y
+                return true, x - y
+            return true, y - x
+        }
+        if args.next != 0
+            return false, 0
+        if strings.compare(name, "log2") == 0 or strings.compare(name, "log2w") == 0 {
+            if x <= 0
+                return false, 0
+            quad bits = 0
+            while x > 1 {
+                x >>= 1
+                bits++
+            }
+            return true, bits
+        }
+        ; sin8u cos8u sin8 cos8 sinr8u cosr8u sinr8 cosr8
+        bool cosine = name[0] == 'c'
+        if not ((name[0] == 's' and name[1] == 'i' and name[2] == 'n') or (cosine and name[1] == 'o' and name[2] == 's'))
+            return false, 0
+        float steps = 256.0
+        ubyte at = 3
+        if name[at] == 'r' {
+            steps = 180.0
+            at++
+        }
+        if name[at] != '8'
+            return false, 0
+        bool unsigned = name[at + 1] == 'u'
+        if (unsigned and name[at + 2] != 0) or (not unsigned and name[at + 1] != 0)
+            return false, 0
+        float angle = (x as float) / steps * 2.0 * 3.141592653589793
+        ^^ubyte fname = "sin"
+        if cosine
+            fname = "cos"
+        if not float_platform.evaluate(fname, angle, 0.0, 0.0)
+            return false, 0
+        float wave = float_platform.result
+        if unsigned
+            wave = 128.0 + 127.5 * wave
+        else
+            wave = 127.0 * wave
+        ; (towards zero)
+        if wave < 0.0
+            return true, 0 - ((0.0 - wave) as quad)
+        return true, wave as quad
     }
 
     ; msb, lsb, msw, lsw, mkword and mklong2 of constant arguments
@@ -1528,6 +1693,15 @@ typer {
                     return types.ADDRESS_TYPE          ; a routine used as a value is its address
                 if s.type == 0
                     type_symbol(s)
+                if s.kind == symtab.K_CONST and s.type == types.T_LONG and not sizing and s.decl != 0 and s.decl.kind == ast.N_VARDECL and s.decl.a == 0 and s.decl.b != 0 {
+                    ; a constant declared without a type is a long by itself, and in an
+                    ; expression its value, like the number written there
+                    bool uok
+                    quad uvalue
+                    uok, uvalue = const_eval(s.decl.b)
+                    if uok
+                        return types.literal_type(uvalue)
+                }
                 return s.type
             }
             ast.N_INDEX -> {
@@ -1641,8 +1815,11 @@ typer {
                 return types.T_UBYTE
             }
             ast.N_SIZEOF -> {
-                if e.a.kind != ast.N_TYPE and e.op != 1
+                if e.a.kind != ast.N_TYPE and e.op != 1 {
+                    sizing = true
                     void infer(e.a)
+                    sizing = false
+                }
                 return types.T_UBYTE
             }
             ast.N_IFEXPR -> {
@@ -1863,13 +2040,19 @@ typer {
             diag.error_at(source.get(e.file), e.line, e.col, parser.scratch.data)
         }
         else {
+            long arg_index = 0
             while p != 0 {
                 ^^symtab.Sym ps = p.extra
                 if ps != 0 {
                     if ps.type == 0
                         type_symbol(ps)
+                    arg_index++
+                    arg_checked = arg_index
                     check_assign(arg, arg.type, ps.type)
+                    arg_checked = 0
                 }
+                else
+                    arg_index++
                 p = p.next
                 arg = arg.next
             }

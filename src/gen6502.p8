@@ -44,6 +44,7 @@ gen6502 {
 
     ; the options of the program (the <OPTIONS> lines of the IR)
     long load_address = $0801
+    ^^ubyte break_instruction = 0       ; -breakinstr brk|stp
     long memtop = 0
     bool launcher_basic = true
     bool no_sysinit = false
@@ -5507,6 +5508,8 @@ gen6502 {
                 buf.add_long(nb, breakpoints)
                 buf.add_byte(nb, 0)
                 label(strtab.intern_cstr(nb.data))
+                if break_instruction != 0
+                    ins(break_instruction, 0)       ; -breakinstr: an instruction as well
             }
             ir.OP_SEI -> ins("sei", 0)
             ir.OP_CLI -> ins("cli", 0)

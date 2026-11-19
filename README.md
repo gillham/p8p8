@@ -206,6 +206,14 @@ p8p8 prints errors and warnings and nothing else.  `-verbose` also prints
 the commands it runs and lets the assembler print its summary of the
 program's sections and sizes.
 
+Of the reference compiler's options, these take a value: `-address <address>`
+(where the program is loaded, in place of `%address`), `-D <name>=<value>`
+(a symbol for the assembler), `-breakinstr brk|stp` (that instruction at
+every `%breakpoint`), and for programs of the llvm targets `-O <level>`,
+`-clang <path>`, `-Xcompile <argument>` and `-Xlink <argument>`.  With
+`-run`, what follows `--` goes to the program that is started.
+[docs/DIFFERENCES.md](docs/DIFFERENCES.md) lists the ones that are missing.
+
 Options p8p8 has that the reference compiler does not:
 
 | Option | What it does |

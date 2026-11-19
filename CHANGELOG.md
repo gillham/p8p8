@@ -40,6 +40,25 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- About seventy checks that upstream makes and p8p8 did not, with
+  upstream's messages (`tests/bad_upstream.p8` has a sample): a long used
+  as an address or a pointer used as a long where addresses are words, the
+  name of a subroutine used as a value, a cast that would cut a constant
+  down (`300 as ubyte`), pointers to different things assigned to each
+  other, struct and union initializers, enum values, `private public`,
+  `[rows,cols]`, a BASIC program that does not load at BASIC's address,
+  and more.  Of upstream's 1,362 unit test programs, 11 that it refuses
+  still build (7 of them are upstream failing, or 64-bit integers on the
+  6502, which p8p8 has).
+- New: a loop's own variable can be used before the loop; a label can be
+  called; `math.sin8u()` and its relatives, `math.log2()`, `math.diff()`
+  and `strings.isdigit()` of constants are worked out when compiling; the
+  `.bankedcalls` file; `-run program.p8 -- arguments`; the options
+  `-address`, `-D`, `-O`, `-Xlink`, `-clang`, `-breakinstr`, and upstream's
+  names `-noasm`, `-dumpsymbols`, `-ignorefootguns`.
+- A constant declared without a type counts as the number it is inside an
+  expression (`v + A` with `const A = 200` is byte arithmetic), as
+  upstream has it.
 - More from upstream's documentation.  New: `setlsb`, `setmsb`, `rsave`,
   `rrestore`, `memory("name")` alone, `for ... via .field until node` and
   such a loop without a declared variable, `%asminclude` and `%asmbinary`

@@ -155,11 +155,45 @@ resolver {
         return f
     }
 
+    ; the for loop among these statements (and the ones inside them) that declares its
+    ; own variable of this name
+    sub later_loop(^^ast.Node s, ^^ubyte name) -> ^^ast.Node {
+        ^^ast.Node found = 0
+        while s != 0 and found == 0 {
+            when s.kind {
+                ast.N_FOR -> {
+                    if (s.d == 0 or s.d.kind != ast.N_TYPE) and s.a != 0 and s.a.name != 0 and strings.compare(s.a.name, name) == 0
+                        found = s
+                    else
+                        found = later_loop(s.c, name)
+                }
+                ast.N_IF, ast.N_BRANCH -> {
+                    found = later_loop(s.b, name)
+                    if found == 0
+                        found = later_loop(s.c, name)
+                }
+                ast.N_WHILE, ast.N_REPEAT, ast.N_UNROLL -> found = later_loop(s.b, name)
+                ast.N_UNTIL -> found = later_loop(s.a, name)
+            }
+            s = s.next
+        }
+        return found
+    }
+
     ; Resolves the name of a node; returns its symbol or 0 (reported).
     sub lookup(^^ast.Node node) -> ^^symtab.Sym {
         ^^symtab.Sym s = lookup_name(node.name, node)
         if s == 0
             s = enum_member(node)
+        if s == 0 and nparts == 1 and scope != 0 and scope.owner != 0 and scope.owner.kind == ast.N_SUB {
+            ; the variable of a for loop further on, which the loop declares: it is the
+            ; subroutine's from its start, like any other
+            ^^ast.Node loop = later_loop(scope.owner.c, node.name)
+            if loop != 0 {
+                s = symtab.declare(scope, node.name, symtab.K_VAR, loop, 0)
+                loop.a.extra = s
+            }
+        }
         if s == 0
             error(node, "undefined symbol: ", node.name)
         else
@@ -227,6 +261,12 @@ resolver {
                     return f
                 }
             }
+            else if (local.kind == symtab.K_VAR or local.kind == symtab.K_PARAM) and local.scope != symtab.global
+                    and symtab.find_in(symtab.global, parts[0]) != 0 {
+                ; a variable in scope hides the block of that name
+                error(node, "ambiguous symbol name, block name expected but found variable", "")
+                return local
+            }
         }
         ; from the global namespace: a block, then its members
         ^^symtab.Sym s2 = symtab.find_in(symtab.global, parts[0])
@@ -251,6 +291,13 @@ resolver {
                 return 0
             }
             if inner.kind == symtab.K_ALIAS {
+                if (inner.flags & ast.F_PRIVATE) != 0 and block_of(inner.scope) != 0 and block_of(inner.scope) != current_block() {
+                    buf.clear(parser.scratch)
+                    buf.add_str(parser.scratch, "cannot access private alias '")
+                    buf.add_str(parser.scratch, inner.name)
+                    buf.add_str(parser.scratch, "' from outside its block")
+                    diag.error_at(module.file, node.line, node.col, parser.scratch.data)
+                }
                 ; alias inside another block: continue from its target with the rest of the name
                 inner = alias_target(inner, node, i + 1)
                 return inner
@@ -317,7 +364,7 @@ resolver {
             return
         if s.flags & ast.F_PRIVATE != 0
             error(node, "symbol is private: ", s.name)
-        else if s.scope.private_symbols and s.flags & ast.F_PUBLIC == 0
+        else if s.scope.kind == symtab.S_BLOCK and s.scope.private_symbols and s.flags & ast.F_PUBLIC == 0     ; (the block's own symbols, not what is inside its subroutines)
             error(node, "symbol is private (private_symbols): ", s.name)
     }
 

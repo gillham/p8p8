@@ -7,4 +7,4 @@ tests/bad_types.p8:10:9: error: wrong number of arguments: expected 1, got 2
 tests/bad_types.p8:11:13: error: value type uword doesn't match target type ubyte
 tests/bad_types.p8:12:13: error: value type void doesn't match target type ubyte
 tests/bad_types.p8:13:16: error: too many return values
-tests/bad_types.p8:15:21: error: value type ^^ubyte doesn't match target type ^^uword
+tests/bad_types.p8:15:21: error: cannot assign different pointer type, expected ^^uword or uword but got ^^ubyte

@@ -290,6 +290,8 @@ parser {
             advance()
             k = kind()
         }
+        if (flags & ast.F_PRIVATE) != 0 and (flags & ast.F_PUBLIC) != 0
+            error("Syntax error: cannot use both 'private' and 'public' on the same declaration")
         if k == token.T_DIRECTIVE {
             ^^token.Token t = cur()
             if is_asm_directive(t.text) and (kind_at(1) == token.T_ASMBLOCK or (kind_at(1) == token.T_EOL and kind_at(2) == token.T_ASMBLOCK))
@@ -527,6 +529,8 @@ parser {
             n.b = parse_tuple_or_expression()
         else if needs_init
             error("'=' and a value expected")
+        else if at_ident()
+            error("variable declaration must be on its own line (did you forget '=' or a newline?)")
         return n
     }
 
@@ -569,7 +573,11 @@ parser {
         }
         ; array dimensions
         ^^ast.Node tail = 0
+        ubyte dimensions = 0
         while kind() == token.T_LBRACKET {
+            dimensions++
+            if dimensions == 3
+                error("parse error: an array has one or two dimensions")
             advance()
             if accept(token.T_RBRACKET) {
                 t.flags |= ast.F_EMPTYARRAY
@@ -582,6 +590,8 @@ parser {
                 if t.a == 0
                     t.a = dim
                 tail = ast.link(tail, dim)
+                if kind() == token.T_COMMA
+                    error("Syntax error: use [rows][cols] instead of [rows,cols] for 2D array syntax")
                 if not accept(token.T_COMMA)
                     break
             }
@@ -774,6 +784,10 @@ parser {
                 break
             ^^ast.Node f = node(ast.N_VARDECL)
             f.a = parse_type()
+            if (f.a.flags & ast.F_EMPTYARRAY) != 0
+                error("Syntax error: array field must have a specified size")
+            else if f.a.a != 0 and f.a.a.next != 0
+                error("Syntax error: 2D arrays are not allowed as struct fields")
             ^^ast.Node nametail = 0
             repeat {
                 ^^ast.Node id = node(ast.N_IDENT)

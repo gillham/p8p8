@@ -1,0 +1,19 @@
+tests/bad_upstream.p8:16:26: error: cannot use a pointer as a long, a pointer is an unsigned word
+tests/bad_upstream.p8:19:13: error: value type long doesn't match target type uword
+tests/bad_upstream.p8:24:13: error: address out of range
+tests/bad_upstream.p8:25:20: error: no cast available from UWORD to UBYTE for value 300.0
+tests/bad_upstream.p8:26:20: error: no cast available from WORD to UBYTE for value -200.0
+tests/bad_upstream.p8:6:37: error: invalid enum sequence member value EXTREME = 1
+tests/bad_upstream.p8:12:5: error: non-declarative statement occurs in block scope, where it will never be executed. Move it to a subroutine instead.
+tests/bad_upstream.p8:20:20: error: invalid address type for memory access
+tests/bad_upstream.p8:21:20: error: indexing requires an iterable, address uword, or pointer variable
+tests/bad_upstream.p8:22:9: error: invalid assignment value
+tests/bad_upstream.p8:23:13: error: unclear pointer arithmetic in expression, perhaps you meant to just subtract addresses? Cast pointer to uword in that case.
+tests/bad_upstream.p8:27:19: error: missing & (address-of) on the operand
+tests/bad_upstream.p8:28:36: error: iterable must be an array, a string, or a range expression
+tests/bad_upstream.p8:30:9: error: Syntax error: multivalue assignment: number of values does not match number of targets
+tests/bad_upstream.p8:32:33: error: linked-list for loop cannot use 'step'
+tests/bad_upstream.p8:36:9: error: array size mismatch (expecting 3, got 4)
+tests/bad_upstream.p8:38:9: error: cannot assign arrays directly. Maybe use sys.memcopy instead.
+tests/bad_upstream.p8:40:9: error: wrong address variable datatype, expected uword
+tests/bad_upstream.p8:43:5: error: non-inline subroutine has result value(s) and thus must have at least one 'return' or external 'goto' in it (or the assembler equivalent in case of %asm)

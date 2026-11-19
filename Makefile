@@ -318,6 +318,12 @@ test:	$(TESTBIN) $(P8P8)
 	    [ $$? -eq 1 ] || { echo "expected exit status 1"; exit 1; }; \
 	    diff -u tests/expected/$(TARGET)_$$t.txt $(OUT)/$$t.out || exit 1; \
 	done
+	@for t in bad_upstream bad_upstream_syntax; do \
+	    echo "test $$t (upstream's checks, for the X16; must be rejected)"; \
+	    $(P8P8) -lib lib -target cx16 -check tests/$$t.p8 > $(OUT)/$$t.out 2>&1; \
+	    [ $$? -eq 1 ] || { echo "expected exit status 1"; exit 1; }; \
+	    diff -u tests/expected/$$t.txt $(OUT)/$$t.out || exit 1; \
+	done
 
 corpus:	$(P8P8)
 	@echo "$(words $(CORPUS)) files"

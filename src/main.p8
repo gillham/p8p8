@@ -50,6 +50,11 @@ main {
     bool opt_run = false            ; -run: and start it
     bool cross = false              ; -triple names the platform of an llvm64 program
     ^^buf.Buf xcompile = 0          ; -Xcompile: more arguments for clang
+    ^^buf.Buf run_args = 0          ; after "--": the arguments of the program that -run starts
+    ^^buf.Buf xlink = 0             ; -Xlink: more arguments for the link step
+    ^^buf.Buf asm_defines = 0       ; -D NAME=VALUE: symbols for the assembler
+    ^^ubyte opt_clang = 0           ; -clang: the clang that builds programs of the llvm targets
+    ^^ubyte opt_level = 0           ; -O: 0, 1, 2, 3, s or z
     ^^ubyte opt_target = 0          ; -target: a name, or a .properties file
     bool opt_own = false            ; p8p8's 6502 code generator, not prog8c-llvm's back end
     bool is_m68k = false            ; the target is a 68000 machine
@@ -68,6 +73,8 @@ main {
         return strings.compare(arg, "-srcdirs") == 0 or strings.compare(arg, "-lib") == 0
             or strings.compare(arg, "-target") == 0 or strings.compare(arg, "-codegen") == 0 or strings.compare(arg, "-cpu") == 0
             or strings.compare(arg, "-triple") == 0 or strings.compare(arg, "-Xcompile") == 0 or strings.compare(arg, "-encoding") == 0
+            or strings.compare(arg, "-Xlink") == 0 or strings.compare(arg, "-D") == 0 or strings.compare(arg, "-clang") == 0
+            or strings.compare(arg, "-O") == 0 or strings.compare(arg, "-address") == 0 or strings.compare(arg, "-breakinstr") == 0
             or strings.compare(arg, "-varshigh") == 0 or strings.compare(arg, "-varsaddress") == 0
             or strings.compare(arg, "-out") == 0 or strings.compare(arg, "-o") == 0
             or strings.compare(arg, "-output") == 0 or strings.compare(arg, "-report") == 0
@@ -104,6 +111,24 @@ main {
         io_platform.catch_crashes(&crashed)
         crumb.at("reading the command line")
         uword argc = sys.argc()
+        ; what follows "--" is for the program that -run starts
+        uword dd = 1
+        while dd < argc {
+            ^^ubyte darg = sys.argv(dd)
+            if darg[0] == '-' and darg[1] == '-' and darg[2] == 0 {
+                uword ra = dd + 1
+                run_args = buf.new(256)
+                while ra < argc {
+                    buf.add_str(run_args, " \"")
+                    buf.add_str(run_args, sys.argv(ra))
+                    buf.add_byte(run_args, '"')
+                    ra++
+                }
+                argc = dd
+                break
+            }
+            dd++
+        }
         uword files_done = 0
         uword i = 1
         while i < argc {
@@ -114,6 +139,11 @@ main {
             ; -emu is upstream's name for building the program and running it
             if strings.compare(arg, "-emu") == 0
                 arg = "-run"
+            ; and -noasm (no assembly is made) and -dumpsymbols are its names for these
+            if strings.compare(arg, "-noasm") == 0
+                arg = "-check"
+            if strings.compare(arg, "-dumpsymbols") == 0
+                arg = "-symbols"
             if strings.compare(arg, "-check") == 0 or strings.compare(arg, "-ir") == 0 or strings.compare(arg, "-llvm") == 0
                     or strings.compare(arg, "-build") == 0 or strings.compare(arg, "-run") == 0 or strings.compare(arg, "-modules") == 0
                     or strings.compare(arg, "-symbols") == 0 or strings.compare(arg, "-types") == 0 or strings.compare(arg, "-tokens") == 0
@@ -213,6 +243,15 @@ main {
                 opt_nolib = true
             else if strings.compare(arg, "-check") == 0
                 opt_check = true
+            else if strings.compare(arg, "-ignorefootguns") == 0 {
+                ; (upstream's: p8p8 has no such warnings to leave out)
+            }
+            else if strings.compare(arg, "-breakinstr") == 0 and value != 0 {
+                if strings.compare(value, "brk") != 0 and strings.compare(value, "stp") != 0
+                    usage()
+                gen6502.break_instruction = value
+                i++
+            }
             else if strings.compare(arg, "-ir") == 0
                 opt_ir = true
             else if strings.compare(arg, "-llvm") == 0
@@ -245,6 +284,39 @@ main {
                 bool hok
                 hok, gen6502.vars_high_bank = target.parse_number(value)
                 if not hok
+                    usage()
+                i++
+            }
+            else if strings.compare(arg, "-Xlink") == 0 and value != 0 {
+                if xlink == 0
+                    xlink = buf.new(256)
+                buf.add_str(xlink, " \"")
+                buf.add_str(xlink, value)
+                buf.add_byte(xlink, '"')
+                i++
+            }
+            else if strings.compare(arg, "-D") == 0 and value != 0 {
+                if asm_defines == 0
+                    asm_defines = buf.new(256)
+                buf.add_str(asm_defines, " -D \"")
+                buf.add_str(asm_defines, value)
+                buf.add_byte(asm_defines, '"')
+                i++
+            }
+            else if strings.compare(arg, "-clang") == 0 and value != 0 {
+                opt_clang = value
+                i++
+            }
+            else if strings.compare(arg, "-O") == 0 and value != 0 {
+                if value[1] != 0 or not (value[0] == '0' or value[0] == '1' or value[0] == '2' or value[0] == '3' or value[0] == 's' or value[0] == 'z')
+                    usage()
+                opt_level = value
+                i++
+            }
+            else if strings.compare(arg, "-address") == 0 and value != 0 {
+                bool adok
+                adok, irgen.option_address = target.parse_number(value)
+                if not adok
                     usage()
                 i++
             }
@@ -568,6 +640,15 @@ main {
 
     ubyte usage_status = 1
 
+    ; " -O" and the level of the command line, or the one given
+    sub add_level(^^ubyte usual) {
+        buf.add_str(cmd, " -O")
+        if opt_level != 0
+            buf.add_str(cmd, opt_level)
+        else
+            buf.add_str(cmd, usual)
+    }
+
     sub usage() {
         out.puts("usage: p8c [options] file.p8 ...")
         out.nl()
@@ -654,6 +735,20 @@ main {
         out.puts("  -varshigh N    in its high ram, bank N;  -varsaddress A: at address A ($hex or decimal)")
         out.nl()
         out.puts("  -noopt         with -codegen own: every IR instruction translated by itself, no value tracking")
+        out.nl()
+        out.puts("  -Xlink arg     one more argument for the link step of the llvm targets, such as -lfoo; can be repeated")
+        out.nl()
+        out.puts("  -O level       how clang optimizes programs of the llvm targets: 0, 1, 2 (the default), 3, s or z")
+        out.nl()
+        out.puts("  -clang path    the clang that builds programs of the llvm targets")
+        out.nl()
+        out.puts("  -address A     load the program at address A ($hex or decimal), in place of %address")
+        out.nl()
+        out.puts("  -D NAME=VALUE  a symbol for the assembler; can be repeated")
+        out.nl()
+        out.puts("  -breakinstr brk|stp   that instruction at every %breakpoint as well")
+        out.nl()
+        out.puts("  -noasm         as -check;  -dumpsymbols: as -symbols")
         out.nl()
         out.puts("  -h, -help      this text")
         out.nl()
@@ -1246,6 +1341,22 @@ main {
     ; "dir/name" of the output files, quoted for the shell, into cmd
     ; %breakpoint: after the labels in the file for VICE's monitor come the commands that
     ; set a breakpoint at each p8_breakpoint_N, as upstream writes them
+    ; <name>.bankedcalls: the call-site IDs of the extsubs with a bank selector subroutine
+    sub banked_calls_file(^^ubyte name) {
+        ^^buf.Buf text = irgen.banked_calls()
+        if text == 0
+            return
+        ^^buf.Buf path = buf.new(256)
+        if outdir != 0 {
+            buf.add_str(path, outdir)
+            buf.add_byte(path, '/')
+        }
+        buf.add_str(path, name)
+        buf.add_str(path, ".bankedcalls")
+        buf.add_byte(path, 0)
+        void io_platform.write_file(path.data, text.data, text.len)
+    }
+
     sub breakpoint_list(^^ubyte name) {
         ^^buf.Buf path = buf.new(256)
         if outdir != 0 {
@@ -1404,6 +1515,8 @@ main {
             ; (the options upstream gives 64tass for each output type)
             extension = ".prg"
             buf.add_str(cmd, "64tass")
+            if asm_defines != 0
+                buf.add_bytes(cmd, asm_defines.data, asm_defines.len)
             if strings.compare(gen6502.output_type, "XEX") == 0 {
                 buf.add_str(cmd, " --atari-xex")
                 extension = ".xex"
@@ -1480,10 +1593,15 @@ main {
                 ; there it is Homebrew's unless P8P8_WASM_CLANG names another.
                 if buf.bytes_equal(triple.name, "wasm", 4)
                     buf.add_str(cmd, "\"${P8P8_WASM_CLANG:-/opt/homebrew/opt/llvm/bin/clang}\" ")
+                else if opt_clang != 0 {
+                    buf.add_byte(cmd, '"')
+                    buf.add_str(cmd, opt_clang)
+                    buf.add_str(cmd, "\" ")
+                }
                 else
                     buf.add_str(cmd, "\"${P8P8_CLANG:-clang}\" ")
                 buf.add_str(cmd, triple.clang_args)
-                buf.add_str(cmd, " -O2")
+                add_level("2")
                 if xcompile != 0
                     buf.add_bytes(cmd, xcompile.data, xcompile.len)
                 if triple.getkey_source != 0 and (llvmgen.console_keys or llvmgen.console_size) {
@@ -1506,7 +1624,14 @@ main {
                 extension = ".sim"
             }
             else {
-                buf.add_str(cmd, "clang -O2")
+                if opt_clang != 0 {
+                    buf.add_byte(cmd, '"')
+                    buf.add_str(cmd, opt_clang)
+                    buf.add_byte(cmd, '"')
+                }
+                else
+                    buf.add_str(cmd, "clang")
+                add_level("2")
                 if cross {
                     buf.add_str(cmd, " --target=")
                     buf.add_str(cmd, importer.triple)
@@ -1537,11 +1662,14 @@ main {
             }
             if not llvm32 and not mos and importer.triple != 0 and buf.cstr_len(importer.triple) > 10 and buf.bytes_equal(importer.triple + buf.cstr_len(importer.triple) - 9, "linux-gnu", 9)
                 buf.add_str(cmd, " -lm")
+            if xlink != 0
+                buf.add_bytes(cmd, xlink.data, xlink.len)
         }
         run_cmd("building the program")
         built_ext = extension
         if opt_own and not is_llvm and gen6502.breakpoints != 0
             breakpoint_list(name)
+        banked_calls_file(name)
         if not opt_run
             return
         buf.clear(cmd)
@@ -1602,6 +1730,8 @@ main {
         if is_llvm and not mos and outdir == 0
             buf.add_str(cmd, "./")
         add_output(name, extension)
+        if is_llvm and run_args != 0
+            buf.add_bytes(cmd, run_args.data, run_args.len)
         run_cmd("running the program")
     }
 
