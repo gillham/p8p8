@@ -18,6 +18,8 @@
   fetched into a window of main memory (4 KB) when its code is called.
   `name.prg` is the program, and it reads its overlays from `name.non` into
   the REU at the first such call.
+- Overlays on the MEGA65: kept in bank 4 and 5 of its memory, and copied
+  into a window of 8 KB at $a000 by the DMA controller.
 
 - 65816: far memory at a known address is read and written with the CPU's
   24-bit addresses (`lda $040000`, `sta $040010,x`), not through a pointer,

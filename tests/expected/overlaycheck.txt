@@ -46,5 +46,25 @@ MAIN FIRST 42 SECOND FIRST 1238 2
 words.non
 words.prg
 1296 14677 33340 8616
+-- overlays, mega65, 45gs02
+overlays.non
+overlays.prg
+MAIN FIRST 42 SECOND FIRST 1238 2
+1234 3000000 TRUE THE TITLE
+77 3825 102
+-- words, mega65, 45gs02
+words.non
+words.prg
+1296 14677 33340 8616
+-- overlays, mega65, 6502
+overlays.non
+overlays.prg
+MAIN FIRST 42 SECOND FIRST 1238 2
+1234 3000000 TRUE THE TITLE
+77 3825 102
+-- words, mega65, 6502
+words.non
+words.prg
+1296 14677 33340 8616
 -- overlays, for a machine without them (pet32): one program
 overlays.prg

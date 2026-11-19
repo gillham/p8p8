@@ -601,11 +601,16 @@ into an overlay reads `name.non` (the overlays only) from the disk the
 program came from and puts each overlay into the REU, overlay n at
 (n - 1) * $1000.
 
+The MEGA65 has the same arrangement with its own memory: the overlays are
+kept from `overlay_store` on ($40000, bank 4) and the DMA controller copies
+one into the window at $a000-$bfff (`overlay_dma.asm`).  Nothing is banked
+or mapped, so the ROM stays where it is.
+
 Not there: an overlay of more than the window, code of the library in an
 overlay, overlays in an IR file (`-ir` does not write the directive).
 Assembly in an overlay block that calls another overlay by its label is not
 seen by the compiler.  `make overlaycheck` runs programs in x64sc and x128
-with an REU, and three programs in x16emu, as
+with an REU, in xmega65 (as 45GS02 and as 6502 code), and three programs in x16emu, as
 65C02 code and as 65816 code: there the program is in native mode when it
 goes through JSRFAR, and the 16-bit runs are in the overlays as anywhere.
 

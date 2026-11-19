@@ -233,6 +233,12 @@ from the same disk into the REU.  The overlays take the REU from its start,
 $1000 bytes each; a program's own data in the REU belongs behind them.
 Calls between two overlays in a loop fetch 4 KB each time.
 
+On the MEGA65 the overlays are in bank 4 and 5 of its memory ($40000 on, 8 KB
+each, so sixteen of them), and the DMA controller copies one into a window
+at $a000 to run; the program ends below that.  Nothing is banked or mapped.
+`name.prg` is the program and reads `name.non` from drive 8 at the first
+call into an overlay.
+
 On a machine without overlays the directive is ignored and the program is
 built in one piece.  Upstream has no such directive.
 

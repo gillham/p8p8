@@ -4,10 +4,11 @@
 # directory they were built in, as 65C02 code and as 65816 code (x16emu -c816 runs
 # both); what they print is printed.  Then two of them for the C64 and the C128, where
 # the overlays are in a RAM Expansion Unit (x64sc and x128 with one, the directory as
-# drive 8).  overlays.p8 is also built for the PET, which has no overlays: one program.
+# drive 8), and for the MEGA65, where they are in far memory (xmega65, the file on a
+# disk image).  overlays.p8 is also built for the PET, which has no overlays: one program.
 # The Makefile compares with tests/expected/overlaycheck.txt.
 #
-# Usage: tests/overlaycheck.sh <p8c>         (needs 64tass, x16emu, x64sc and x128 in the path)
+# Usage: tests/overlaycheck.sh <p8c>         (needs 64tass, x16emu, x64sc, x128, xmega65 and c1541 in the path)
 p8c=${1:-build/llvm64/p8c}
 lib=${P8P8_LIB:-lib}
 seconds=${OVERLAYCHECK_SECONDS:-8}
@@ -63,6 +64,20 @@ for row in range(0, len(data), 40):
     if line and (line[0].isdigit() or line.startswith(('MAIN', '?'))):
         print(line)
 PY
+    done
+done
+# the MEGA65: overlays in memory beyond 64 KB, brought in by DMA; the file on a disk image
+for cpu in 45gs02 6502; do
+    for program in overlays words; do
+        echo "-- $program, mega65, $cpu"
+        rm -rf "$work/$program"
+        mkdir -p "$work/$program"
+        "$p8c" -lib "$lib" -target mega65 -cpu $cpu -out "$work/$program" tests/overlay/$program.p8 || exit 1
+        ls "$work/$program" | grep -E '\.(prg|non)$'
+        (cd "$work/$program" && c1541 -format "overlays,p8" d81 disk.d81 -write $program.non $program.non > c1541.log 2>&1 \
+            && timeout 90 xmega65 -headless -sleepless -besure -8 disk.d81 -prg $program.prg -prgexit -dumpscreen screen.txt \
+            > run.log 2>&1 < /dev/null)
+        sed -n '/ RUN:/,$p' "$work/$program/screen.txt" | grep '^[0-9M?]'
     done
 done
 echo "-- overlays, for a machine without them (pet32): one program"
