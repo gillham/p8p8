@@ -4872,6 +4872,22 @@ gen6502 {
         return mask
     }
 
+    ; The 45GS02 counts a word in the zero page up or down in one instruction (inw, dew:
+    ; two bytes of code, where the 6502 has six for the one and seventeen for the other).
+    ; For a variable that is there.
+    sub word_step(^^ir.Instr i, str mnemonic, ubyte size) -> bool {
+        if not c45 or size != 2 or i.mode != ir.M_M or i.sym == 0 or i.scale >= 200
+            return false
+        ^^ir.Var v = prog.vars
+        while v != 0 and v.name != i.sym and strings.compare(v.name, i.sym) != 0
+            v = v.next
+        if v == 0 or v.zpaddr == 0 or v.kind != ir.V_VAR
+            return false
+        memory_operand(i)
+        q_text(mnemonic, mem_symbol, mem_offset)
+        return true
+    }
+
     ; ---- the 45GS02's 32-bit instructions ----
     ; A, X, Y and Z together are the register Q.  A long is loaded, combined and stored
     ; in one instruction each: "ldq a / clc / adq b / stq a" where the 6502 has four
@@ -6107,6 +6123,8 @@ gen6502 {
                 combine_memory("sbc", i, size)
             }
             ir.OP_INC, ir.OP_INCM -> {
+                if word_step(i, "inw", size)
+                    return
                 location(i)
                 if size == 1 and not loc_mem {
                     ; in A: the value is there more often than not, and so is what wants the result
@@ -6129,6 +6147,8 @@ gen6502 {
                     anon_label("+")
             }
             ir.OP_DEC, ir.OP_DECM -> {
+                if word_step(i, "dew", size)
+                    return
                 location(i)
                 if size == 1 and not loc_mem {
                     lda_reg(i.r1, 0)

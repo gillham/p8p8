@@ -462,6 +462,11 @@ EMUTESTS64=$(filter-out %/swirl-float.p8 %/numbergame.p8 %/maze.p8 %/bitshift.p8
 emucmp65:	$(P8P8)
 	@tests/emucmp65.sh $(P8P8) $(EMUTESTS64)
 
+# addresses of more than 16 bits, in assembly written by hand: the 65816's four long
+# addressing modes (x16emu -c816, xscpu64) and the 45GS02's [zp],z (xmega65)
+farcheck:	$(P8P8)
+	@tests/farcheck.sh $(P8P8) | diff -u tests/expected/farcheck.txt -
+
 emucmp64:	$(P8P8)
 	@EMUCMP_TARGET=c64 tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS64)
 

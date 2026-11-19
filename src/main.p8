@@ -1599,8 +1599,14 @@ main {
             ; (the options upstream gives 64tass for each output type)
             extension = ".prg"
             buf.add_str(cmd, "64tass")
+            ; (the CPU on the command line too: it is what ".cpu 'default'" goes back to after
+            ; assembly text that switched to another for a few lines)
             if gen6502.c45
-                buf.add_str(cmd, " --m45gs02")      ; (what ".cpu 'default'" in library assembly goes back to)
+                buf.add_str(cmd, " --m45gs02")
+            else if gen6502.c816
+                buf.add_str(cmd, " --m65816")
+            else if gen6502.c02
+                buf.add_str(cmd, " --m65c02")
             if asm_defines != 0
                 buf.add_bytes(cmd, asm_defines.data, asm_defines.len)
             if strings.compare(gen6502.output_type, "XEX") == 0 {

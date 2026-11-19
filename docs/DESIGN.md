@@ -474,9 +474,32 @@ bytes: multiplication 40 and 9, 13 and 6; division with remainder 72 and 13,
 version, which made Z zero after every instruction and did everything with
 Q, was slower than the 6502 code on two of the four.
 
+**Words in the zero page** are counted up and down with `inw` and `dew`
+(`word_step`): one instruction of two bytes.  For variables; where a
+temporary will be is not known yet when the code is written.
+
+**Z is not an index register** of the generated code.  It is left for the
+28-bit pointers, `[zp],z`.
+
 There is no other compiler to compare with: `make emucmp65` runs each test
 program on the MEGA65 (xmega65, without a window) as 6502 code and as 45GS02
 code and compares the screens.
+
+## Addresses of more than 16 bits
+
+The compiler writes none yet.  What the CPUs have was tried by hand first
+(`make farcheck`, two programs with the instructions in assembly, run on
+three emulators): the 65816's absolute long, absolute long indexed by X,
+`[dp]` and `[dp],y` all work on the Commander X16 and on the C64 with a
+SuperCPU; on the X16 a bank other than 0 is bank 0 again (in x16emu), on the
+SuperCPU with memory it is memory of its own.  On the MEGA65 a pointer of
+four bytes in the zero page with `[zp],z`, and `ldq`/`stq` through it, reach
+bank 4 and the attic RAM at `$8000000`.  How Prog8 source is to name such
+memory is open.
+
+Assembly text that switches the CPU for a few lines goes back with
+`.cpu "default"`, so p8c gives 64tass the program's CPU on its command line
+whatever it is (`--m65c02`, `--m65816`, `--m45gs02`), not only in the file.
 
 ## Machines and the library
 

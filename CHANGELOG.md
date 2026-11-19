@@ -53,6 +53,13 @@
   multiplications 1 against 18.  Bytes and words are multiplied and
   divided by the machine's arithmetic unit too (a loop of word
   multiplications: 9 frames against 40; of divisions: 13 against 72).
+- 45GS02: a word variable in the zero page is counted with `inw` and `dew`.
+- `make farcheck`: the 65816's four long addressing modes and the 45GS02's
+  `[zp],z`, tried by hand in assembly on three emulators.  The compiler does
+  not write them yet.
+- Fixed: a program for the 65C02 or the 65816 with assembly text that ends
+  in `.cpu "default"` was plain 6502 from there on and did not assemble;
+  64tass gets the program's CPU on its command line now.
 - Fixed: a program with more than 65,535 IR registers was compiled wrongly
   without a word (the numbers began again at zero).  p8p8's own source had
   reached that size.  For the llvm targets subroutines now share register
