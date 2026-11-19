@@ -2042,15 +2042,33 @@ gen6502 {
                     raw("    .word  0")
             }
             raw("p8_overlay_file  .macro")
-            put("    .text  \"")
-            put(prog.name)
-            raw(".non\"")
+            put("    .byte  ")
+            petscii_name(w(), prog.name)
+            raw("")
             raw("    .endm")
             put("    .include \"")
             put(support)
             raw("\"")
         }
         raw("")
+    }
+
+    ; "name.non" as the bytes a Commodore DOS takes for it, for .byte: small letters are
+    ; its unshifted ones and capitals its shifted ones; everything else is as it is (an
+    ; underscore is $5f, which is what the key gives and what the X16's DOS takes for it)
+    sub petscii_name(^^buf.Buf dest, ^^ubyte name) {
+        long k = 0
+        while name[k] != 0 {
+            ubyte c = name[k]
+            if c >= 'a' and c <= 'z'
+                c -= 32
+            else if c >= 'A' and c <= 'Z'
+                c += 128
+            buf.add_long(dest, c)
+            buf.add_byte(dest, ',')
+            k++
+        }
+        buf.add_str(dest, "46,78,79,78")       ; ".NON"
     }
 
     sub overlay_used(ubyte n) -> bool {

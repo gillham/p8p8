@@ -1793,9 +1793,9 @@ main {
         buf.add_str(ov_file, name)
         buf.add_str(ov_file, ": written by p8c\np8_entry = ")
         buf.add_long(ov_file, entry)
-        buf.add_str(ov_file, "\np8_file  .macro\n    .text  \"")
-        buf.add_str(ov_file, name)
-        buf.add_str(ov_file, ".non\"\n    .endm\n    .include \"")
+        buf.add_str(ov_file, "\np8_file  .macro\n    .byte  ")
+        gen6502.petscii_name(ov_file, name)
+        buf.add_str(ov_file, "\n    .endm\n    .include \"")
         buf.add_str(ov_file, loader)
         buf.add_str(ov_file, "\"\n")
         if not io_platform.write_file(ov_output(name, ".loader.asm"), ov_file.data, ov_file.len) {
