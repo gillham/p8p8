@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `-meminfo` (and `-verbose`) prints after a 6502 program is built where
+  the main program is, how many bytes it takes and how many are free below
+  the machine's top of memory, and the same for each overlay with the
+  sizes of the loader and of the program's file.
+
 - Overlays, an extension, on the Commander X16: a block with `%overlay n`
   has its code in RAM bank n.  The compiler writes the calls into an
   overlay, between overlays and back; the block's variables and strings

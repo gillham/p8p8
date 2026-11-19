@@ -344,6 +344,8 @@ main {
             }
             else if strings.compare(arg, "-verbose") == 0
                 opt_verbose = true
+            else if strings.compare(arg, "-meminfo") == 0
+                opt_meminfo = true
             else if strings.compare(arg, "-traceimports") == 0
                 importer.trace = true
             else if strings.compare(arg, "-warnunused") == 0
@@ -713,6 +715,8 @@ main {
         out.nl()
         out.puts("  -verbose       print the commands that are run, and let the assembler print its summary of the program")
         out.nl()
+        out.puts("  -meminfo       for a 6502 machine: print what the program takes of main memory and of each overlay, and what is left")
+        out.nl()
         out.puts("  -ir            generate the IR and write it as <module>.p8ir (-out dir: where, default .)")
         out.nl()
         out.puts("  -llvm          generate the IR and write it as LLVM IR text <module>.ll")
@@ -1029,6 +1033,7 @@ main {
     ^^ubyte out_ext = 0
     ^^ubyte built_ext = 0           ; the extension build() gave the program
     bool opt_warnshadow = false     ; -warnshadow: the assembler's warnings about symbols that hide others
+    bool opt_meminfo = false        ; -meminfo: after a 6502 program is built, how much memory it takes and leaves
     bool opt_verbose = false        ; -verbose: say what is run, and let the assembler print its summary
 
     sub output_file(^^ubyte path) {
@@ -1527,6 +1532,122 @@ main {
     ^^buf.Buf ov_path = 0
     ^^buf.Buf ov_file = 0
     ^^buf.Buf ov_ext = 0
+    long[256] ov_sizes              ; the bytes of each overlay's code
+    long ov_loader_size = 0
+    long ov_file_size = 0
+
+    ; the value of a label in the assembler's list ("al C:0817 .name"), or -1
+    sub label_value(^^ubyte data, long size, str name) -> long {
+        long length = strings.length(name)
+        long k = 0
+        while k < size - length - 1 {
+            if data[k] == '.' and buf.bytes_equal(data + k + 1, name, length) and (data[k + 1 + length] == '\n' or data[k + 1 + length] == '\r') {
+                long e = k - 1
+                while e > 0 and data[e] == ' '
+                    e--
+                long first = e
+                while first > 0 and hex_value(data[first - 1]) >= 0
+                    first--
+                long value = 0
+                while first <= e {
+                    value = value * 16 + hex_value(data[first])
+                    first++
+                }
+                return value
+            }
+            k++
+        }
+        return -1
+    }
+
+    sub report_number(long value, ubyte width) {
+        buf.clear(ov_ext)
+        buf.add_long(ov_ext, value)
+        long pad = width as long - ov_ext.len
+        while pad > 0 {
+            out.putc(' ')
+            pad--
+        }
+        buf.add_byte(ov_ext, 0)
+        out.puts(ov_ext.data)
+    }
+
+    sub report_hex(long value) {
+        out.putc('$')
+        byte shift = 12
+        while shift >= 0 {
+            out.putc(buf.hex_digit(((value >> shift) & 15) as ubyte))
+            shift -= 4
+        }
+    }
+
+    ; -meminfo (and -verbose): what the program that was just built takes and leaves
+    sub memory_report(^^ubyte name) {
+        if ov_front == 0 {
+            ov_front = buf.new(4096)
+            ov_path = buf.new(1024)
+            ov_ext = buf.new(64)
+            ov_file = buf.new(65536)
+        }
+        ^^ubyte data
+        long size
+        if io_platform.file_size(ov_output(name, ".vice-mon-list")) <= 0
+            return
+        data, size = ov_read(ov_path.data)
+        long first = label_value(data, size, "prog8_program_start")
+        long last = label_value(data, size, "prog8_program_end")
+        if first < 0 or last < 0
+            return
+        out.puts("memory of ")
+        out.puts(name)
+        out.puts(" (")
+        out.puts(importer.target)
+        out.puts("):")
+        out.nl()
+        out.puts("  main program  ")
+        report_hex(first)
+        out.putc('-')
+        report_hex(last - 1)
+        report_number(last - first, 7)
+        out.puts(" bytes")
+        if gen6502.memtop > 0 {
+            out.puts(", ")
+            report_number(gen6502.memtop - last, 1)
+            out.puts(" free below ")
+            report_hex(gen6502.memtop)
+        }
+        out.nl()
+        if gen6502.overlay_max == 0
+            return
+        long window = gen6502.overlay_end - gen6502.overlay_start
+        ubyte n
+        for n in 1 to gen6502.overlay_max {
+            if ov_sizes[n] != 0 {
+                out.puts("  overlay ")
+                report_number(n, 3)
+                out.puts("   ")
+                report_hex(gen6502.overlay_start)
+                out.putc('-')
+                report_hex(gen6502.overlay_start + ov_sizes[n] - 1)
+                report_number(ov_sizes[n], 7)
+                out.puts(" bytes, ")
+                report_number(window - ov_sizes[n], 1)
+                out.puts(" free of ")
+                report_number(window, 1)
+                out.nl()
+            }
+        }
+        out.puts("  files: ")
+        out.puts(name)
+        out.puts(".prg (the loader) ")
+        report_number(ov_loader_size, 1)
+        out.puts(" bytes, ")
+        out.puts(name)
+        out.puts(".non ")
+        report_number(ov_file_size, 1)
+        out.puts(" bytes")
+        out.nl()
+    }
 
     sub ov_extension(str text, ubyte n) -> ^^ubyte {
         buf.clear(ov_ext)
@@ -1608,7 +1729,9 @@ main {
         for n in 1 to gen6502.overlay_max {
             data, size = ov_read(ov_output(name, ov_extension(".ov", n)))
             long skip = window - load + 2
+            ov_sizes[n] = 0
             if size > skip {
+                ov_sizes[n] = size - skip
                 ov_word(1)
                 ov_word(select)
                 buf.add_byte(ov_file, n)
@@ -1622,6 +1745,7 @@ main {
         ov_word(select)
         buf.add_byte(ov_file, 1)
         ov_word(0)
+        ov_file_size = ov_file.len
         if not io_platform.write_file(ov_output(name, ".non"), ov_file.data, ov_file.len) {
             out.err()
             out.puts("cannot write ")
@@ -1631,26 +1755,7 @@ main {
         }
         ; where the program begins: the assembler's list of labels says
         data, size = ov_read(ov_output(name, ".vice-mon-list"))
-        long entry = -1
-        long k = 0
-        while k < size - 18 {
-            if data[k] == '.' and buf.bytes_equal(data + k, ".prog8_entrypoint", 17) and (data[k + 17] == '\n' or data[k + 17] == '\r') {
-                ; "al C:0817 .prog8_entrypoint": the hex digits in front of it
-                long e = k - 1
-                while e > 0 and data[e] == ' '
-                    e--
-                long first = e
-                while first > 0 and hex_value(data[first - 1]) >= 0
-                    first--
-                entry = 0
-                while first <= e {
-                    entry = entry * 16 + hex_value(data[first])
-                    first++
-                }
-                break
-            }
-            k++
-        }
+        long entry = label_value(data, size, "prog8_entrypoint")
         if entry < 0 {
             out.err()
             out.puts("a program with overlays needs a launcher: no prog8_entrypoint in ")
@@ -1698,6 +1803,7 @@ main {
         buf.add_byte(cmd, ' ')
         add_output(name, ".loader.asm")
         run_cmd("building the program's loader")
+        ov_loader_size = io_platform.file_size(ov_output(name, ".prg"))
     }
 
     sub hex_value(ubyte c) -> byte {
@@ -1856,6 +1962,11 @@ main {
                 ; file that holds them all and the loader that reads it
                 overlay_build(name)
                 built_ext = ".prg"
+                if opt_meminfo or opt_verbose
+                    memory_report(name)
+                if gen6502.breakpoints != 0
+                    breakpoint_list(name)
+                banked_calls_file(name)
                 return
             }
             buf.add_str(cmd, " --output ")
@@ -1972,6 +2083,8 @@ main {
         }
         run_cmd("building the program")
         built_ext = extension
+        if opt_own and not is_llvm and (opt_meminfo or opt_verbose)
+            memory_report(name)
         if opt_own and not is_llvm and gen6502.breakpoints != 0
             breakpoint_list(name)
         banked_calls_file(name)
