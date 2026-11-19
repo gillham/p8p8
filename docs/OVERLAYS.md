@@ -90,7 +90,8 @@ On every other machine `%overlay` is ignored and the program is built in one
 piece, if it fits.  That is also a way to try a program on the host
 (`-target llvm64`) or to compare.
 
-**Commander X16.**  Overlay n is RAM bank n.  `game.prg` is a small loader:
+**Commander X16.**  Overlay n is RAM bank n, so the numbers choose the
+banks: `%overlay 10` and `%overlay 11` leave banks 1 to 9 alone.  `game.prg` is a small loader:
 it reads `game.non`, which has the main program and all overlays in it, and
 starts the program.  The banks above the last overlay are the program's.
 
@@ -101,6 +102,9 @@ overlays take the REU from its start, $1000 bytes each; what the program
 keeps there itself belongs behind the last one.  The main program ends
 below the window: it has up to $c000 on the C64 and up to $b000 on the
 C128.
+
+On the C64 and the C128 a program whose overlays are numbered from 1 uses
+the REU from its start; a gap in the numbers is a gap there.
 
 **MEGA65.**  As on the C64, with the machine's own memory in place of an
 REU: `game.prg` is the program, and the first call into an overlay reads
@@ -148,12 +152,20 @@ nothing more than any call.
 
 Into an overlay from outside it:
 
-- on the X16, the ROM's far call: it chooses the bank, calls, and puts back
-  the bank that was there;
-- on the C64, the C128 and the MEGA65, a copy of the whole window when
-  another overlay is in it (4 KB from the REU, 8 KB by DMA), and nothing but
-  a few instructions when the overlay is there already.  After the call the
-  caller's overlay is brought back if the caller was in one.
+- on the X16, a dozen instructions that choose the bank, call, and put back
+  the bank that was there: about twice a plain call;
+- on the C64, the C128 and the MEGA65, about twice a plain call when the
+  overlay is in the window already, and a copy of the overlay's code (as
+  many bytes as it has) when another one is.  After the call the caller's
+  overlay is brought back if the caller was in one.
+
+Measured, 20,000 calls of a subroutine that adds one to a byte, in jiffies:
+
+| | plain call | into an overlay that is there | 4,000 calls, two overlays in turn |
+|---|---|---|---|
+| X16 | 8 | 15 | 3 |
+| C64 with an REU | 76 | 150 | 72 |
+| C128 with an REU | 77 | 156 | 74 |
 
 ## When it does not work
 
@@ -185,13 +197,8 @@ xmega65 -8 game.d81 -prg game.prg
 
 - An overlay larger than its window, and a window of another size than the
   target file gives.
-- Choosing where the overlays begin: on the X16 they are banks 1, 2, 3...,
-  and bank 1 is also the one for variables that are moved to high memory.
 - Library code in an overlay.
-- A check that the REU or the MEGA65's store is large enough for the number
-  of overlays.
+- A check that the REU is large enough for the number of overlays (the
+  MEGA65 has room for sixteen, and a higher number is an error).
 - Another drive than 8 on the X16 and the MEGA65.
 - Overlays in an IR file (`-ir` does not write the directive).
-
-The build leaves `name.ov0`, `name.ov1`... in the output directory: what the
-assembler wrote for each part.  They are not needed to run the program.

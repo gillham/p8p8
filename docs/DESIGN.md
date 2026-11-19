@@ -573,7 +573,12 @@ the ROM's JSRFAR, which keeps the registers and flags and puts back the bank
 that was there, so a program that chooses banks for its data is not
 disturbed).  The address of a subroutine in an overlay is its thunk's.
 Every subroutine of an overlay block gets a thunk; the assembler leaves out
-the ones nothing names.
+the ones nothing names.  A target may give two thunks: `overlay_thunk`
+keeps A, X, Y and the flags both ways, which a subroutine in assembly may
+need, and `overlay_thunk_fast` keeps A, X and Y, which is all an ordinary
+subroutine takes and gives.  The X16's are written out for each subroutine
+(save the bank, choose, call, put back), without the ROM's JSRFAR: 20,000
+calls take 15 jiffies where JSRFAR took 37 and a plain call takes 8.
 
 In the assembly the overlay blocks come last, each overlay as a segment
 that is placed at the window's address when `prog8_overlay` is its number
@@ -599,12 +604,21 @@ another is in the window, calls, and fetches the caller's overlay back.
 There is no loader: `name.prg` is the main program, and the first call
 into an overlay reads `name.non` (the overlays only) from the disk the
 program came from and puts each overlay into the REU, overlay n at
-(n - 1) * $1000.
+(n - 1) * $1000.  The generator gives the support file a table of the
+overlays' sizes (`p8_overlay_sizes`, from labels the assembler works out),
+so that a fetch moves the overlay's bytes and not the window's: two
+overlays in turn, 4,000 calls, take 72 jiffies on a C64 where whole windows
+took 1,162.  The fast thunk looks itself whether the overlay is in the
+window and calls the support code only when it is not (20,000 calls: 150
+jiffies; 398 through the general routine; 76 for a plain call).
 
 The MEGA65 has the same arrangement with its own memory: the overlays are
 kept from `overlay_store` on ($40000, bank 4) and the DMA controller copies
 one into the window at $a000-$bfff (`overlay_dma.asm`).  Nothing is banked
 or mapped, so the ROM stays where it is.
+
+After the build the driver removes what the assembler wrote for each part
+(`name.ov0`, `name.ov1`...).
 
 Not there: an overlay of more than the window, code of the library in an
 overlay, overlays in an IR file (`-ir` does not write the directive).

@@ -34,6 +34,10 @@ io_platform {
         }
     }
 
+    sub delete_file(str path) {
+        void remove(path)
+    }
+
     ; Gives a file another name, in place of a file of that name if there is one.
     sub move_file(str oldname, str newname) -> bool {
         void remove(newname)

@@ -1913,6 +1913,11 @@ gen6502 {
             }
             bl = bl.next
         }
+        long most = target.number("overlay_max", 255)
+        if overlay_max > most {
+            error("the target has no room for an overlay of that number", target.text("overlay_max"))
+            overlay_max = most as ubyte
+        }
         ; (a window in main memory: the program itself ends below it)
         if overlay_max != 0 and memtop > overlay_start and load_address < overlay_start
             memtop = overlay_start
@@ -1966,7 +1971,10 @@ gen6502 {
     sub overlay_thunks() {
         if overlay_max == 0
             return
-        ^^ubyte template = target.text("overlay_thunk")
+        ^^ubyte full = target.text("overlay_thunk")
+        ^^ubyte fast = target.text("overlay_thunk_fast")
+        if fast == 0
+            fast = full
         raw("; ---- the ways into the overlays ----")
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
@@ -1974,6 +1982,10 @@ gen6502 {
                 ^^ir.Sub s = bl.subs
                 while s != 0 {
                     if parent_of(bl, s) == 0 and not (s.is_asm and s.is_inline) {
+                        ; (a subroutine in assembly may take and give anything, flags too)
+                        ^^ubyte template = fast
+                        if s.is_asm
+                            template = full
                         put(thunk_name(s.name))
                         raw("  .proc")
                         long k = 0
@@ -2018,6 +2030,17 @@ gen6502 {
             put("p8_overlay_store = ")
             puthex(target.number("overlay_store", 0))
             nl()
+            raw("p8_overlay_sizes:")
+            ubyte sn
+            for sn in 1 to overlay_max {
+                if overlay_used(sn) {
+                    put("    .word  p8ov_size_")
+                    putn(sn)
+                    nl()
+                }
+                else
+                    raw("    .word  0")
+            }
             raw("p8_overlay_file  .macro")
             put("    .text  \"")
             put(prog.name)
@@ -2028,6 +2051,16 @@ gen6502 {
             raw("\"")
         }
         raw("")
+    }
+
+    sub overlay_used(ubyte n) -> bool {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if bl.overlay == n
+                return true
+            bl = bl.next
+        }
+        return false
     }
 
     ; the overlays themselves, after everything else in the file
@@ -2079,12 +2112,22 @@ gen6502 {
                 put(" is too large by \", * - ")
                 puthex(overlay_end)
                 raw(", \" bytes\"")
+                put("p8ov_size_")
+                putn(n)
+                put(" = * - ")
+                puthex(overlay_start)
+                nl()
                 raw("    .else")
                 put("    .virtual ")
                 puthex(overlay_start)
                 nl()
                 put("    #p8ov_part_")
                 putn(n)
+                nl()
+                put("p8ov_size_")
+                putn(n)
+                put(" = * - ")
+                puthex(overlay_start)
                 nl()
                 raw("    .endv")
                 raw("    .endif")

@@ -1772,6 +1772,9 @@ main {
             out.nl()
             out.exit(1)
         }
+        ; (what the assembler wrote for each part has been used)
+        for n in 0 to gen6502.overlay_max
+            io_platform.delete_file(ov_output(name, ov_extension(".ov", n)))
         if loader == 0
             return
         ; where the program begins: the assembler's list of labels says

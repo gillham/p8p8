@@ -20,6 +20,12 @@
   the REU at the first such call.
 - Overlays on the MEGA65: kept in bank 4 and 5 of its memory, and copied
   into a window of 8 KB at $a000 by the DMA controller.
+- A call into an overlay is about twice a plain call: on the X16 without
+  the ROM's far call (20,000 calls: 15 jiffies, from 37; 8 for plain
+  calls), on the C64 150 jiffies from 398 (76 plain).  An overlay that is
+  brought in is copied by its size, not the window's (4,000 calls into two
+  overlays in turn on a C64: 72 jiffies, from 1,162).
+- [docs/OVERLAYS.md](docs/OVERLAYS.md): a guide to overlays.
 
 - 65816: far memory at a known address is read and written with the CPU's
   24-bit addresses (`lda $040000`, `sta $040010,x`), not through a pointer,
