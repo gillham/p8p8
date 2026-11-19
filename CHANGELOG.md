@@ -3,10 +3,13 @@
 ## Unreleased
 
 - 65816: far memory at a known address is read and written with the CPU's
-  24-bit addresses (`lda $040000`, `sta $040010,x`), not through a pointer.
-  A loop that fills and sums a far array of 200 bytes 300 times takes 13
-  jiffies on a C64 with a SuperCPU where it took 24, and the test of far
-  data is 1,994 bytes where it was 2,989.
+  24-bit addresses (`lda $040000`, `sta $040010,x`), not through a pointer,
+  and plain loads and stores go straight between the register and far
+  memory.  A loop that fills and sums a far array of 200 bytes 300 times
+  takes 11 jiffies on a C64 with a SuperCPU where it took 24, and the test
+  of far data is 1,789 bytes where it was 2,989.
+- 45GS02: a long in far memory is fetched and put back with one 32-bit
+  instruction each (the test of far data: 3,199 bytes, from 3,345).
 - The launchers of the VIC-20 with 8 KB or more (`vic20plus8`,
   `vic20plus24`) reset the machine at the end of a program that used zero
   page BASIC needs, as the unexpanded VIC-20's and the other machines' do;

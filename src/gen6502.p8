@@ -4380,6 +4380,16 @@ gen6502 {
         ins("tay", 0)
     }
 
+    ; the same in X (for the 65816's 24-bit addresses, which only X indexes)
+    sub index_to_x(^^ir.Instr i) {
+        if i.scale <= 1 {
+            ins("ldx", cell(i.r2, 0))
+            return
+        }
+        index_to_y(i)
+        ins("tyx", 0)
+    }
+
     ; ---- floats ----
     ;
     ; A float is five bytes in Microsoft's format, in a cell or a variable like any
@@ -5014,10 +5024,8 @@ gen6502 {
         if far_long {
             far_long_address = address
             far_long_x = indexed
-            if indexed {
-                index_to_y(i)
-                far_line("tyx")         ; (only x indexes an address of 24 bits)
-            }
+            if indexed
+                index_to_x(i)           ; (only x indexes an address of 24 bits)
             return
         }
         ubyte bytes = 3
@@ -5046,13 +5054,15 @@ gen6502 {
     ; A = byte k behind the pointer, or the other way round
     sub far_byte(str mnemonic, ubyte k) {
         if far_long {
-            put("    ")
-            put(mnemonic)
-            put("  ")
-            puthex(far_long_address + k)
+            ; (an instruction like any other for the peephole passes: they see what
+            ; becomes of A)
+            buf.clear(nb)
+            buf.add_str(nb, "@l ")
+            buf.add_long(nb, far_long_address + k)
             if far_long_x
-                put(",x")
-            nl()
+                buf.add_str(nb, ",x")
+            buf.add_byte(nb, 0)
+            ins(mnemonic, strtab.intern_cstr(nb.data))
             return
         }
         if c45 {
@@ -5098,7 +5108,12 @@ gen6502 {
             nl()
         }
         if i.op == ir.OP_LOADI {
-            for k in 0 to size - 1 {
+            if c45 and size == 4 {
+                far_line("ldz  #0")
+                far_line("ldq  [P8ZP_SCRATCH_W1],z")
+                far_cell("stq", 0)
+            }
+            else for k in 0 to size - 1 {
                 far_byte("lda", k)
                 far_cell("sta", k)
             }
@@ -5146,9 +5161,47 @@ gen6502 {
             far_long = false
             return
         }
-        if not only_writes {
+        if far_long and (i.op == ir.OP_STOREM or i.op == ir.OP_STOREX) and i.type != ir.T_FLOAT {
+            ; a plain store: from the register into far memory
             far_pointer(address, i, indexed)
             for k in 0 to size - 1 {
+                lda_reg(i.r1, k)
+                far_byte("sta", k)
+            }
+            far_long = false
+            return
+        }
+        if far_long and (i.op == ir.OP_STOREZM or i.op == ir.OP_STOREZX) and i.type != ir.T_FLOAT {
+            far_pointer(address, i, indexed)
+            ins_imm("lda", 0)
+            for k in 0 to size - 1
+                far_byte("sta", k)
+            far_long = false
+            return
+        }
+        if far_long and i.op == ir.OP_STOREIM and i.type != ir.T_FLOAT {
+            ; a constant: each byte, and one that is the byte before it is in A already
+            far_pointer(address, i, false)
+            ubyte before = 0
+            for k in 0 to size - 1 {
+                ubyte part = ((i.value >> (k * 8)) & 255) as ubyte
+                if k == 0 or part != before
+                    ins_imm("lda", part)
+                before = part
+                far_byte("sta", k)
+            }
+            far_long = false
+            return
+        }
+        if not only_writes {
+            far_pointer(address, i, indexed)
+            if c45 and size == 4 {
+                ; four bytes are one load and one store on this CPU
+                far_line("ldz  #0")
+                far_line("ldq  [P8ZP_SCRATCH_W1],z")
+                far_cell("stq", 0)
+            }
+            else for k in 0 to size - 1 {
                 far_byte("lda", k)
                 far_cell("sta", k)
             }
@@ -5186,7 +5239,11 @@ gen6502 {
         if not only_reads {
             ; (the pointer again: the instruction may have used the scratch words)
             far_pointer(address, i, indexed)
-            for k in 0 to size - 1 {
+            if c45 and size == 4 {
+                far_cell("ldq", 0)
+                far_line("stq  [P8ZP_SCRATCH_W1]")
+            }
+            else for k in 0 to size - 1 {
                 far_cell("lda", k)
                 far_byte("sta", k)
             }

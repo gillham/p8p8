@@ -518,13 +518,19 @@ four and `[zp],z` on the 45GS02; the index of an array is added in), the
 value is fetched through it into a few bytes of the register file, the
 instruction is written as for a variable there, and what it changed is
 stored back.  That is not fast (a byte read is some ten instructions) but
-whatever can be done to a variable can be done to a far one at once.  On the 65816 a far operand at a known address needs no pointer: the fetch
-and the store name the address themselves (`lda $040000`, and `,x` for an
-element; `far_long`), and a plain load goes straight into the register.  A
-loop that fills and sums a far array of 200 bytes 300 times takes 13
-jiffies on a SuperCPU where the pointer took 24.  An address the program
-works out still goes through the pointer, as everything does on the
-45GS02.  The 16-bit runs and the fusing of indexed patterns leave
+whatever can be done to a variable can be done to a far one at once.  On the 65816 a far operand at a known address needs no pointer: the
+instruction names the address itself (`lda @l 262144`, and `,x` for an
+element; `far_long`).  A plain load or store, of a register, of zero or of
+a constant, goes straight between the register and far memory; anything
+else still fetches the value, works on it and puts it back, without the
+pointer.  These lines are instructions like any other for the peephole
+passes, which have to know what becomes of A; the `@l` in front marks the
+operand as one that only the accumulator's instructions take, so no pass
+makes an `ldy`, `stx` or `stz` of it.  A loop that fills and sums a far
+array of 200 bytes 300 times takes 11 jiffies on a SuperCPU where the
+pointer took 24.  An address the program works out still goes through the
+pointer, as everything does on the 45GS02; there a long is fetched and put
+back with one `ldq`/`stq` through the pointer.  The 16-bit runs and the fusing of indexed patterns leave
 chunks with far operands alone (the runs had written to the low 16 bits of
 the address).
 

@@ -349,6 +349,8 @@ peep6502 {
             return s
         uword m = s.mark | K_SCANNED
         long k = 0
+        if t[0] == '@'
+            m |= K_INDIRECT         ; ("@l address": a 24-bit address, which only a few instructions take)
         while t[k] != 0 {
             if t[k] == '(' or t[k] == ','
                 m |= K_INDIRECT
