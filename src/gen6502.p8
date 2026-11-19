@@ -5002,8 +5002,24 @@ gen6502 {
         nl()
     }
 
+    ; On the 65816 an instruction can name an address of 24 bits itself ("lda $040000",
+    ; and with ",x"), so a far operand at a known address needs no pointer: far_byte
+    ; writes that address while far_long is set.
+    bool far_long = false
+    bool far_long_x = false
+    long far_long_address = 0
+
     ; the pointer to the operand of i: its address, and the index when it has one
     sub far_pointer(long address, ^^ir.Instr i, bool indexed) {
+        if far_long {
+            far_long_address = address
+            far_long_x = indexed
+            if indexed {
+                index_to_y(i)
+                far_line("tyx")         ; (only x indexes an address of 24 bits)
+            }
+            return
+        }
         ubyte bytes = 3
         if c45
             bytes = 4
@@ -5029,6 +5045,16 @@ gen6502 {
 
     ; A = byte k behind the pointer, or the other way round
     sub far_byte(str mnemonic, ubyte k) {
+        if far_long {
+            put("    ")
+            put(mnemonic)
+            put("  ")
+            puthex(far_long_address + k)
+            if far_long_x
+                put(",x")
+            nl()
+            return
+        }
         if c45 {
             put("    ldz  #")
             putn(k)
@@ -5109,6 +5135,17 @@ gen6502 {
         ^^ubyte saved_sym = i.sym
         if c45
             q_flush()               ; (nothing in the 32-bit register across this)
+        far_long = not c45
+        if far_long and (i.op == ir.OP_LOADM or i.op == ir.OP_LOADX) and i.type != ir.T_FLOAT {
+            ; a plain load: from far memory into the register
+            far_pointer(address, i, indexed)
+            for k in 0 to size - 1 {
+                far_byte("lda", k)
+                sta_reg(i.r1, k)
+            }
+            far_long = false
+            return
+        }
         if not only_writes {
             far_pointer(address, i, indexed)
             for k in 0 to size - 1 {
@@ -5156,6 +5193,7 @@ gen6502 {
             if c45
                 far_line("ldz  #0")
         }
+        far_long = false
     }
 
     ; ---- the 45GS02's 32-bit instructions ----

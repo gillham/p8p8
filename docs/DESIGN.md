@@ -518,9 +518,13 @@ four and `[zp],z` on the 45GS02; the index of an array is added in), the
 value is fetched through it into a few bytes of the register file, the
 instruction is written as for a variable there, and what it changed is
 stored back.  That is not fast (a byte read is some ten instructions) but
-whatever can be done to a variable can be done to a far one at once.  The
-65816 could name a constant far address in the instruction itself; that is
-left for later.  The 16-bit runs and the fusing of indexed patterns leave
+whatever can be done to a variable can be done to a far one at once.  On the 65816 a far operand at a known address needs no pointer: the fetch
+and the store name the address themselves (`lda $040000`, and `,x` for an
+element; `far_long`), and a plain load goes straight into the register.  A
+loop that fills and sums a far array of 200 bytes 300 times takes 13
+jiffies on a SuperCPU where the pointer took 24.  An address the program
+works out still goes through the pointer, as everything does on the
+45GS02.  The 16-bit runs and the fusing of indexed patterns leave
 chunks with far operands alone (the runs had written to the low 16 bits of
 the address).
 
