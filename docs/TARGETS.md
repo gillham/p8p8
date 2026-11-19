@@ -82,7 +82,8 @@ Numbers are decimal, `$hex`, `0xhex` or `%binary`.  A list of addresses is
 | `overlay_window_start`, `overlay_window_end` | (optional) where an overlay's code is while it runs (the end is the first address after it); with `overlay_thunk` this gives the machine overlays (`%overlay n`) |
 | `overlay_thunk` | the code a call into an overlay goes through, in main memory: `%t` is the subroutine, `%n` the overlay's number; it has to keep A, X, Y and the flags both ways |
 | `overlay_select` | the address where one byte chooses the overlay that the next record of the program's file is loaded into |
-| `overlay_loader` | an assembly file beside the target file: the loader of a program with overlays, assembled with `p8_entry` and the macro `p8_file` defined |
+| `overlay_loader` | (optional) an assembly file beside the target file: the loader of a program with overlays, assembled as `name.prg` with `p8_entry` and the macro `p8_file` defined; `name.non` then has the main program in it too.  Without it `name.prg` is the main program and `name.non` has the overlays only |
+| `overlay_support` | (optional) an assembly file that is included in a program with overlays (what the thunk calls), after `p8_overlay_window`, `p8_overlay_size`, `p8_overlay_select` and the macro `p8_overlay_file` |
 | `far_address_bits` | (optional) how many bits an address of data can have on a machine with memory beyond 64 KB (24, 28); a long is such an address when the program's CPU is the 65816 or the 45GS02 |
 | `virtual_registers_zp` | (optional) the zero page address R0-R15 are moved to when the program has the zero page to itself (`%zeropage kernalsafe` or `full`) |
 | `bss_goldenram_start`, `bss_goldenram_end` | the memory `-varsgolden` puts the variables without an initial value in |

@@ -588,10 +588,24 @@ program's entry (read from the assembler's list of labels): on the X16 a
 loader that moves itself to $0400 and reads the file, after the X16 Golden
 Loader.
 
+On the C64 and the C128 the overlays are in a RAM Expansion Unit and run in
+a window of main memory, one at a time ($c000-$cfdf on the C64, $b000-$bfff
+on the C128; the program itself then ends below the window).  The thunk is
+`jsr p8_overlay.call` with the overlay's number and the subroutine's
+address behind it.  That routine is in `overlay_reu.asm`, the target's
+`overlay_support`, which the generator includes in such a program: it keeps
+the registers and flags, fetches the wanted overlay from the REU when
+another is in the window, calls, and fetches the caller's overlay back.
+There is no loader: `name.prg` is the main program, and the first call
+into an overlay reads `name.non` (the overlays only) from the disk the
+program came from and puts each overlay into the REU, overlay n at
+(n - 1) * $1000.
+
 Not there: an overlay of more than the window, code of the library in an
 overlay, overlays in an IR file (`-ir` does not write the directive).
 Assembly in an overlay block that calls another overlay by its label is not
-seen by the compiler.  `make overlaycheck` runs three programs in x16emu, as
+seen by the compiler.  `make overlaycheck` runs programs in x64sc and x128
+with an REU, and three programs in x16emu, as
 65C02 code and as 65816 code: there the program is in native mode when it
 goes through JSRFAR, and the 16-bit runs are in the overlays as anywhere.
 

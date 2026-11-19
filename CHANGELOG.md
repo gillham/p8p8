@@ -14,6 +14,10 @@
   program with all overlays as `name.non`.  On other machines the
   directive is ignored.  `make overlaycheck` runs the tests in x16emu, as
   65C02 code and as 65816 code.
+- Overlays on the C64 and the C128, in a RAM Expansion Unit: an overlay is
+  fetched into a window of main memory (4 KB) when its code is called.
+  `name.prg` is the program, and it reads its overlays from `name.non` into
+  the REU at the first such call.
 
 - 65816: far memory at a known address is read and written with the CPU's
   24-bit addresses (`lda $040000`, `sta $040010,x`), not through a pointer,

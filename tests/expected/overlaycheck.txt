@@ -26,5 +26,25 @@ banks.prg
 words.non
 words.prg
 1296 14677 33340 8616
--- overlays, for a machine without them (c64): one program
+-- overlays, c64 with an REU
+overlays.non
+overlays.prg
+MAIN FIRST 42 SECOND FIRST 1238 2
+1234 3000000 TRUE THE TITLE
+77 3825 102
+-- words, c64 with an REU
+words.non
+words.prg
+1296 14677 33340 8616
+-- overlays, c128 with an REU
+overlays.non
+overlays.prg
+MAIN FIRST 42 SECOND FIRST 1238 2
+1234 3000000 TRUE THE TITLE
+77 3825 102
+-- words, c128 with an REU
+words.non
+words.prg
+1296 14677 33340 8616
+-- overlays, for a machine without them (pet32): one program
 overlays.prg

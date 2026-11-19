@@ -1639,7 +1639,10 @@ main {
         }
         out.puts("  files: ")
         out.puts(name)
-        out.puts(".prg (the loader) ")
+        if target.text("overlay_loader") != 0
+            out.puts(".prg (the loader) ")
+        else
+            out.puts(".prg ")
         report_number(ov_loader_size, 1)
         out.puts(" bytes, ")
         out.puts(name)
@@ -1721,9 +1724,23 @@ main {
         long size
         data, size = ov_read(ov_output(name, ov_extension(".ov", 0)))
         long load = data[0] + (data[1] as long << 8)
-        ov_word(size - 2)
-        ov_word(load)
-        buf.add_bytes(ov_file, data + 2, size - 2)
+        ^^ubyte loader = target.text("overlay_loader")
+        if loader != 0 {
+            ov_word(size - 2)
+            ov_word(load)
+            buf.add_bytes(ov_file, data + 2, size - 2)
+        }
+        else {
+            ; no loader: the main program is the .prg itself, and brings its overlays in
+            if not io_platform.write_file(ov_output(name, ".prg"), data, size) {
+                out.err()
+                out.puts("cannot write ")
+                out.puts(ov_path.data)
+                out.nl()
+                out.exit(1)
+            }
+            ov_loader_size = size
+        }
         long select = target.number("overlay_select", 0)
         long window = gen6502.overlay_start
         for n in 1 to gen6502.overlay_max {
@@ -1740,10 +1757,12 @@ main {
                 buf.add_bytes(ov_file, data + skip, size - skip)
             }
         }
-        ; (and the bank that a program finds when it is started)
-        ov_word(1)
-        ov_word(select)
-        buf.add_byte(ov_file, 1)
+        if loader != 0 {
+            ; (and the bank that a program finds when it is started)
+            ov_word(1)
+            ov_word(select)
+            buf.add_byte(ov_file, 1)
+        }
         ov_word(0)
         ov_file_size = ov_file.len
         if not io_platform.write_file(ov_output(name, ".non"), ov_file.data, ov_file.len) {
@@ -1753,6 +1772,8 @@ main {
             out.nl()
             out.exit(1)
         }
+        if loader == 0
+            return
         ; where the program begins: the assembler's list of labels says
         data, size = ov_read(ov_output(name, ".vice-mon-list"))
         long entry = label_value(data, size, "prog8_entrypoint")
@@ -1764,9 +1785,6 @@ main {
             out.exit(1)
         }
         ; the loader: a few lines that name the file and the entry, and the target's code
-        ^^ubyte loader = target.text("overlay_loader")
-        if loader == 0
-            return
         buf.clear(ov_file)
         buf.add_str(ov_file, "; the loader of ")
         buf.add_str(ov_file, name)

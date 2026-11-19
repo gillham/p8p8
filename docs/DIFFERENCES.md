@@ -225,6 +225,14 @@ is in that window itself: what reads and writes a program's own banks (a
 text buffer, say) belongs in a block without `%overlay`.  The bank a
 program chose is the same after a call into an overlay.
 
+On the C64 and the C128 the overlays are in a RAM Expansion Unit, and one
+at a time is fetched into a window of main memory to run: 4 KB at $c000 on
+the C64, at $b000 on the C128, and the program itself ends below that.
+`name.prg` is the program; the first call into an overlay reads `name.non`
+from the same disk into the REU.  The overlays take the REU from its start,
+$1000 bytes each; a program's own data in the REU belongs behind them.
+Calls between two overlays in a loop fetch 4 KB each time.
+
 On a machine without overlays the directive is ignored and the program is
 built in one piece.  Upstream has no such directive.
 

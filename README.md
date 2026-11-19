@@ -185,9 +185,10 @@ can be at an address of more than 16 bits: `&ubyte ATTIC = $8000000`,
 and `farmem.copy` and `farmem.fill` from the library.  That is p8p8's own
 ([docs/DIFFERENCES.md](docs/DIFFERENCES.md), "Far memory").
 
-A program for the Commander X16 can have parts of its code in banks of high
-memory: a block with `%overlay 1` is in bank 1, and so on.  `p8c` writes
-the calls, a loader (`name.prg`) and the file it loads (`name.non`).  That
+A program can have parts of its code outside main memory: a block with
+`%overlay 1` is in bank 1 of a Commander X16's high memory, or in the RAM
+Expansion Unit of a C64 or C128, and so on for 2, 3...  `p8c` writes the
+calls and two files that belong together, `name.prg` and `name.non`.  That
 is p8p8's own ([docs/DIFFERENCES.md](docs/DIFFERENCES.md), "Overlays").
 
 `-cpu 65816` writes code for that CPU on any 6502 machine (`-target cx16

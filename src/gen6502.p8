@@ -1913,6 +1913,9 @@ gen6502 {
             }
             bl = bl.next
         }
+        ; (a window in main memory: the program itself ends below it)
+        if overlay_max != 0 and memtop > overlay_start and load_address < overlay_start
+            memtop = overlay_start
     }
 
     ; the overlay that the block of this symbol is in (0: none)
@@ -1999,6 +2002,27 @@ gen6502 {
                 }
             }
             bl = bl.next
+        }
+        ^^ubyte support = target.text("overlay_support")
+        if support != 0 {
+            ; the target's code that brings an overlay in, and what it needs to know
+            put("p8_overlay_window = ")
+            puthex(overlay_start)
+            nl()
+            put("p8_overlay_size = ")
+            puthex(overlay_end - overlay_start)
+            nl()
+            put("p8_overlay_select = ")
+            puthex(target.number("overlay_select", 0))
+            nl()
+            raw("p8_overlay_file  .macro")
+            put("    .text  \"")
+            put(prog.name)
+            raw(".non\"")
+            raw("    .endm")
+            put("    .include \"")
+            put(support)
+            raw("\"")
         }
         raw("")
     }
