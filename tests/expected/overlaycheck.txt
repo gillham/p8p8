@@ -1,12 +1,30 @@
--- overlays
+-- overlays, 65c02
 overlays.non
 overlays.prg
 MAIN FIRST 42 SECOND FIRST 1238 2
 1234 3000000 TRUE THE TITLE
 77 3825 102
--- banks
+-- banks, 65c02
 banks.non
 banks.prg
 8 5 55 66
+-- words, 65c02
+words.non
+words.prg
+1296 14677 33340 8616
+-- overlays, 65816
+overlays.non
+overlays.prg
+MAIN FIRST 42 SECOND FIRST 1238 2
+1234 3000000 TRUE THE TITLE
+77 3825 102
+-- banks, 65816
+banks.non
+banks.prg
+8 5 55 66
+-- words, 65816
+words.non
+words.prg
+1296 14677 33340 8616
 -- overlays, for a machine without them (c64): one program
 overlays.prg

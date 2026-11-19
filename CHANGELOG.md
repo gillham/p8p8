@@ -7,7 +7,8 @@
   overlay, between overlays and back; the block's variables and strings
   stay in main memory.  `p8c` writes a loader as `name.prg` and the main
   program with all overlays as `name.non`.  On other machines the
-  directive is ignored.  `make overlaycheck` runs the tests in x16emu.
+  directive is ignored.  `make overlaycheck` runs the tests in x16emu, as
+  65C02 code and as 65816 code.
 
 - 65816: far memory at a known address is read and written with the CPU's
   24-bit addresses (`lda $040000`, `sta $040010,x`), not through a pointer,

@@ -591,7 +591,9 @@ Loader.
 Not there: an overlay of more than the window, code of the library in an
 overlay, overlays in an IR file (`-ir` does not write the directive).
 Assembly in an overlay block that calls another overlay by its label is not
-seen by the compiler.  `make overlaycheck` runs two programs in x16emu.
+seen by the compiler.  `make overlaycheck` runs three programs in x16emu, as
+65C02 code and as 65816 code: there the program is in native mode when it
+goes through JSRFAR, and the 16-bit runs are in the overlays as anywhere.
 
 ## Machines and the library
 

@@ -1340,8 +1340,11 @@ gen6502 {
         buf.clear(codebuf)
         o = codebuf
         code()
-        if wide_enabled
+        if wide_enabled {
             join_runs(codebuf)
+            if overlay_max != 0
+                join_runs(ovlbuf)
+        }
         if wide_enabled and io_platform.env("P8P8_WIDESTATS") != 0 {
             ; (for the work on the generator: how much of the word code is 16 bits wide)
             buf.add_str(codebuf, "; 65816: ")
