@@ -65,6 +65,13 @@ checker {
         if main_name == 0
             init()
         set_target(importer.target)
+        ^^ast.Node wide = typer.wide_integer()
+        if no_quads and wide != 0 {
+            ; (a number of more than 32 bits, even where it was folded away)
+            begin_message("64-bit integer types (quad/uquad) are not supported on target ")
+            buf.add_str(parser.scratch, target_name)
+            error_scratch(wide)
+        }
         program_structure()
         ^^importer.Module m = importer.modules
         while m != 0 {

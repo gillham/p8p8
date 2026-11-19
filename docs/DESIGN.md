@@ -65,6 +65,17 @@ For the 6502 machines the IR is already in their conventions: register
 arguments of `asmsub`s, split word arrays, the symbol prefixes (`p8b_`,
 `p8s_`, `p8v_`) that library assembly expects.
 
+Register numbers are words, one row of them for the whole program, each with
+one type.  The code generators for real machines need that: every register
+has a place of its own.  On the llvm targets a subroutine is a function with
+registers to itself, so there a subroutine takes the numbers that earlier
+ones had, and only those of the type it asks for (`ir.new_reg`: a list of
+numbers for each type, and how many the subroutine in hand has taken), so the
+table of types holds for all of them.  Without that the compiler could not
+compile itself any more: it had passed 65,000 registers, and has under 2,000
+numbers now.  On the other targets running out is an error, not a silent
+start from zero.
+
 An IR file can be the input too (`p8c program.p8ir`): `irread.p8` reads the
 whole file into the same structures `irgen` builds, with `irparse.p8` (which
 was there for the libraries' `%ir` blocks) for the instruction lines, and the
@@ -208,6 +219,15 @@ so that assembly can use one as a pointer: `irgen.zeropage_registers` gives
 `cx16`'s memory mapped variables new addresses from the target file's
 `virtual_registers_zp` before anything is declared, and those 32 bytes are
 not given to variables.
+
+### The order of the blocks
+
+`main` is first, then the blocks without an address in the order the program
+and the libraries have them, then the blocks with an address of their own,
+lowest first (`irgen.addressed_blocks_last`; upstream's order).  A block's
+address becomes `* = address` in the assembly, and what follows it in the
+file is assembled from there: so nothing may follow but blocks that say
+where they go themselves.
 
 ### Programs for ROM
 

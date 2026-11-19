@@ -813,7 +813,7 @@ llvmgen {
 
     ; collects the register types of a subroutine; marks mixed and LONG registers as i64 slots
     sub scan_registers(^^ir.Sub s) {
-        long needed = ir.regcount + 2
+        long needed = (ir.regmax as long) + 2
         if needed > slot_cap {
             slot_type = mem.grow(slot_type, slot_cap, needed)
             slot_cap = needed

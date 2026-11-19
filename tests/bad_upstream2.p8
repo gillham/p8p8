@@ -35,6 +35,7 @@ main {
         on address goto (first, second)         ; error: the index is a byte
         cx16.r0L = sizeof(start)                ; error: of a subroutine
         cx16.r1L = 3.5 * 100 as ubyte           ; error: 350 does not fit
+        cx16.r2L = lsb($1_0000_0012)            ; error: no 64 bits on this machine
 first:
 second:
     }

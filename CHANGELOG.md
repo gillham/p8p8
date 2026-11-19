@@ -40,6 +40,21 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
+- Fixed: a program with more than 65,535 IR registers was compiled wrongly
+  without a word (the numbers began again at zero).  p8p8's own source had
+  reached that size.  For the llvm targets subroutines now share register
+  numbers, so the size of a program does not matter; for the others it is an
+  error.  The seed is new: the one before cannot compile this source.
+- Fixed: a block with an address of its own (`data $9000 { ... }`) that
+  was not the last block of the program took everything after it along
+  to that address.  Such blocks now come after all the others, lowest
+  address first, as upstream orders them.
+- Constants as upstream works them out: `&`, `|` and `^` of signed byte
+  or word constants give the unsigned pattern (`-1 & -15` is 241), a long
+  written past its range wraps (`-2147483649` is 2147483647),
+  `math.atan2()` of constants is a constant, and `1.0 to 3.0` fills an
+  array of floats.  A number of more than 32 bits is refused on the 6502
+  machines also where it is folded away (`lsb($1_0000_0012)`).
 - An IR file as input: `p8c program.p8ir` builds the program from the IR
   that `p8c -ir` wrote, to the same bytes as from the source
   (`make irroundtrip`).  IR written by upstream mostly does not build: it
@@ -60,7 +75,7 @@
   down (`300 as ubyte`), pointers to different things assigned to each
   other, struct and union initializers, enum values, `private public`,
   `[rows,cols]`, a BASIC program that does not load at BASIC's address,
-  and more.  Of upstream's 1,362 unit test programs, 11 that it refuses
+  and more.  Of upstream's 1,362 unit test programs, 9 that it refuses
   still build, 5 of them because upstream itself fails on them.
 - New: a loop's own variable can be used before the loop; a label can be
   called; `math.sin8u()` and its relatives, `math.log2()`, `math.diff()`

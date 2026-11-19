@@ -771,6 +771,8 @@ typer {
             diag.error_at(source.get(v.file), v.line, v.col, parser.scratch.data)
             return
         }
+        if v.kind == ast.N_INT and tt == types.T_FLOAT
+            v.flags |= AS_FLOAT
         if v.kind == ast.N_INT {
             if types.POINTER_SIZE == 2 and types.is_pointer(tt) and (v.value > 65535 or v.value < 0) {
                 error(v, "address out of range")
@@ -848,6 +850,24 @@ typer {
     }
 
     ; True when the literal value is representable in the type (or the type isn't numeric).
+    ; the first numbers in the program that need more than 32 bits; one that is a
+    ; floating point value where it stands (float f = 5000000000) is marked AS_FLOAT
+    const ubyte WIDE_MAX = 16
+    ^^pointer wide_literals = 0         ; (WIDE_MAX of them, allocated when the first is met)
+    ubyte wide_count = 0
+    const ubyte AS_FLOAT = ast.F_VOID       ; (a flag that means nothing else on a number)
+
+    sub wide_integer() -> ^^ast.Node {
+        ubyte wk = 0
+        while wk < wide_count {
+            ^^ast.Node wn = wide_literals[wk]
+            if (wn.flags & AS_FLOAT) == 0
+                return wn
+            wk++
+        }
+        return 0
+    }
+
     bool sizing = false         ; inside sizeof(): a name has its declared type
 
     sub literal_fits(quad value, uword t) -> bool {
@@ -857,7 +877,7 @@ typer {
             types.T_BYTE -> return value >= -128 and value <= 127
             types.T_UWORD -> return value >= 0 and value <= 65535
             types.T_WORD -> return value >= -32768 and value <= 32767
-            types.T_LONG -> return value >= -2147483648 and value <= 4294967295       ; a 32-bit pattern is a long too
+            types.T_LONG -> return value >= -4294967295 and value <= 4294967295       ; a 32-bit pattern is a long too, whichever way it is written
             types.T_UQUAD -> return true
             types.T_QUAD, types.T_FLOAT -> return true
             else -> return true
@@ -1154,6 +1174,19 @@ typer {
             return
         if (k == ast.N_CALL or k == ast.N_SIZEOF) and e.type != types.T_BOOL
             e.type = types.literal_type(value)      ; a builtin's constant result takes the smallest type, as upstream does
+        else if k == ast.N_BINARY and (e.op == token.T_AMP or e.op == token.T_PIPE or e.op == token.T_CARET) and value < 0
+                and e.a != 0 and e.b != 0 and types.is_integer(e.a.type) and types.is_integer(e.b.type)
+                and types.size_of(e.a.type) <= 2 and types.size_of(e.b.type) <= 2 {
+            ; bits have no sign: of signed bytes or words the result is the unsigned pattern
+            if types.size_of(e.a.type) == 2 or types.size_of(e.b.type) == 2 {
+                value &= $ffff
+                e.type = types.T_UWORD
+            }
+            else {
+                value &= $ff
+                e.type = types.T_UBYTE
+            }
+        }
         else if (k == ast.N_BINARY or k == ast.N_UNARY) and types.is_integer(e.type) {
             ; folded arithmetic takes the larger of its own type and the
             ; smallest type holding the value, as upstream does (so
@@ -1492,6 +1525,44 @@ typer {
                 return true, x - y
             return true, y - x
         }
+        if strings.compare(name, "atan2") == 0 {
+            ; the direction from (x1, y1) to (x2, y2) on the 256 step circle
+            quad x2
+            quad y2
+            if args.next == 0 or args.next.next == 0 or args.next.next.next == 0 or args.next.next.next.next != 0
+                return false, 0
+            ok, y = const_eval(args.next)
+            if not ok
+                return false, 0
+            ok, x2 = const_eval(args.next.next)
+            if not ok
+                return false, 0
+            ok, y2 = const_eval(args.next.next.next)
+            if not ok
+                return false, 0
+            float dx = (x2 - x) as float
+            float dy = (y2 - y) as float
+            float radians = 0.0
+            if dx == 0.0 {
+                if dy > 0.0
+                    radians = 3.141592653589793 / 2.0
+                else if dy < 0.0
+                    radians = 3.141592653589793 * 1.5
+            }
+            else {
+                if not float_platform.evaluate("atan", dy / dx, 0.0, 0.0)
+                    return false, 0
+                radians = float_platform.result
+                if dx < 0.0
+                    radians += 3.141592653589793
+                else if radians < 0.0
+                    radians += 2.0 * 3.141592653589793
+            }
+            quad step = (radians / 2.0 / 3.141592653589793 * 256.0) as quad
+            if step < 0 or step > 255
+                return false, 0
+            return true, step
+        }
         if args.next != 0
             return false, 0
         if strings.compare(name, "log2") == 0 or strings.compare(name, "log2w") == 0 {
@@ -1637,15 +1708,31 @@ typer {
 
     ; The element count of an array or string expression, or 0 when not known.
     ; how many values a constant range has; 0 when it is not constant
+    ; a constant that is a whole number, written as an integer or as a float (1.0 to 3.0
+    ; fills an array of floats)
+    sub whole_const(^^ast.Node e) -> bool, quad {
+        bool ok
+        quad v
+        ok, v = const_eval(e)
+        if ok
+            return true, v
+        if e != 0 and e.type == types.T_FLOAT and float_eval(e) {
+            v = float_value as quad
+            if (v as float) == float_value
+                return true, v
+        }
+        return false, 0
+    }
+
     sub range_length(^^ast.Node r) -> long {
         bool ok
         quad from
         quad to_value
         quad stride = 1
-        ok, from = const_eval(r.a)
+        ok, from = whole_const(r.a)
         if not ok
             return 0
-        ok, to_value = const_eval(r.b)
+        ok, to_value = whole_const(r.b)
         if not ok
             return 0
         if r.c != 0 {
@@ -1761,6 +1848,18 @@ typer {
     sub infer_kind(^^ast.Node e) -> uword {
         when e.kind {
             ast.N_INT -> {
+                if e.name != 0 and (e.value > 4294967295 or e.value < -4294967296) and wide_count < WIDE_MAX {
+                    ; (for the checker: not every target has 64 bits)
+                    if wide_literals == 0
+                        wide_literals = mem.alloc(WIDE_MAX as long * sizeof(pointer))
+                    ubyte wk = 0
+                    while wk < wide_count and wide_literals[wk] != e
+                        wk++
+                    if wk == wide_count {
+                        wide_literals[wide_count] = e
+                        wide_count++
+                    }
+                }
                 if e.name[0] == '$' or e.name[0] == '%'
                     if e.value < 0
                         return types.T_UQUAD       ; a 64-bit hex or binary literal with the top bit set
@@ -2080,6 +2179,10 @@ typer {
         uword lt = infer(e.a)
         uword rt = infer(e.b)
         ubyte op = e.op
+        if lt == types.T_FLOAT and e.b.kind == ast.N_INT
+            e.b.flags |= AS_FLOAT
+        if rt == types.T_FLOAT and e.a.kind == ast.N_INT
+            e.a.flags |= AS_FLOAT
         if is_bool_op(op)
             return types.T_BOOL
         if lt == 0 or rt == 0

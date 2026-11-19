@@ -91,6 +91,7 @@ irgen {
         else
             address_irt = ir.T_LONG
         ; variables, constants and structs of every scope
+        ir.reuse_numbers = buf.bytes_equal(importer.target, "llvm", 4)
         zeropage_registers()
         declare_scope(symtab.global)
         defer_setup()
@@ -114,7 +115,63 @@ irgen {
         if program_defers
             gen_defer_block()
         main_block_first()
+        addressed_blocks_last()
         return prog
+    }
+
+    ; The blocks that have an address of their own come after all the others, lowest
+    ; address first, as upstream orders them: what follows "* = address" in the assembly
+    ; is at that address, and that must not be the rest of the program.  (The main block
+    ; stays first whatever it has.)
+    sub addressed_blocks_last() {
+        ^^ir.Block plain_first = 0
+        ^^ir.Block plain_last = 0
+        ^^ir.Block placed = 0           ; the ones with an address, kept in ascending order
+        ^^ir.Block b = prog.blocks
+        bool first = true
+        while b != 0 {
+            ^^ir.Block following = b.next
+            b.next = 0
+            bool ok = false
+            long address = 0
+            if b.address != 0 and not first
+                ok, address = target.parse_number(b.address)
+            if ok {
+                ; insert after the placed blocks whose address is not higher
+                ^^ir.Block before = 0
+                ^^ir.Block at = placed
+                while at != 0 {
+                    bool aok
+                    long other
+                    aok, other = target.parse_number(at.address)
+                    if other > address
+                        break
+                    before = at
+                    at = at.next
+                }
+                b.next = at
+                if before == 0
+                    placed = b
+                else
+                    before.next = b
+            }
+            else {
+                if plain_first == 0
+                    plain_first = b
+                else
+                    plain_last.next = b
+                plain_last = b
+            }
+            first = false
+            b = following
+        }
+        if plain_last != 0
+            plain_last.next = placed
+        prog.blocks = plain_first
+        ^^ir.Block last = plain_first
+        while last != 0 and last.next != 0
+            last = last.next
+        prog.lastblock = last
     }
 
     ; The block main leads the program, whatever the source has before it: the
@@ -1174,10 +1231,10 @@ irgen {
         quad from
         quad to_value
         quad stride = 1
-        ok, from = typer.const_eval(r.a)
+        ok, from = typer.whole_const(r.a)
         if not ok
             return 0
-        ok, to_value = typer.const_eval(r.b)
+        ok, to_value = typer.whole_const(r.b)
         if not ok
             return 0
         if r.c != 0 {
@@ -2178,6 +2235,9 @@ irgen {
         loop_depth = 0
         cursub = ir.add_sub(block, sym_name(ss), pos_text(n))
         crumb.name = cursub.name
+        ; (on the llvm targets a subroutine uses the register numbers of the ones before
+        ; it again: ir.new_reg)
+        ^^uword numbers_before = ir.begin_numbers()
         ; parameters
         ^^ast.Node p = n.a
         while p != 0 {
@@ -2241,6 +2301,7 @@ irgen {
         if defer_count != 0
             gen_invoke_defers(n)
         defer_count = 0
+        ir.end_numbers(numbers_before)
         cursub = saved_sub
         chunk = saved_chunk
         subsym = saved_sym
@@ -4884,7 +4945,7 @@ irgen {
         ubyte t = plain(to_t)
         if f == t {
             if to_t == ir.T_POINTER
-                ir.regtypes[r] = ir.T_POINTER
+                ir.retype(r, ir.T_POINTER)
             return r
         }
         if f == ir.T_FLOAT or t == ir.T_FLOAT

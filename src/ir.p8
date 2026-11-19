@@ -386,6 +386,7 @@ ir {
     ^^ubyte regtypes = 0
     long regcap = 0
     uword regcount = 0
+    uword regmax = 0            ; the highest register number given out (regcount goes back where numbers are used again)
     long instr_count = 0
     long chunk_count = 0
 
@@ -398,12 +399,102 @@ ir {
         p.initglobals = mem.alloc(sizeof(Chunk))
         p.vars_address = -1
         regcount = 0
+        regmax = 0
+        pool = 0
+        pinned = 0
+        pinned_cap = 0
         instr_count = 0
         chunk_count = 0
         return p
     }
 
+    ; Where every subroutine is a function with registers of its own (the llvm targets),
+    ; a subroutine uses the numbers of the ones before it again, and a number is only
+    ; ever a register of one type: so the one table of types stays true for all of them.
+    ; (A program the size of this compiler has more registers than there are numbers.)
+    ; For each type the numbers given out so far, and how many of them the subroutine
+    ; being generated has taken.
+    const ubyte POOLS = 8
+    bool reuse_numbers = false
+    ^^pointer pool = 0              ; POOLS tables of register numbers
+    uword[POOLS] pool_count
+    uword[POOLS] pool_cap
+    uword[POOLS] pool_taken
+    ^^ubyte pinned = 0              ; per register: its type was changed, it is not given out again
+    long pinned_cap = 0
+
+    ; begin a subroutine: the numbers taken so far, to give back to end_numbers
+    sub begin_numbers() -> ^^uword {
+        if not reuse_numbers
+            return 0
+        ^^uword taken = mem.alloc(POOLS * sizeof(uword))
+        ubyte k = 0
+        while k < POOLS {
+            taken[k] = pool_taken[k]
+            pool_taken[k] = 0
+            k++
+        }
+        return taken
+    }
+
+    sub end_numbers(^^uword taken) {
+        if taken == 0
+            return
+        ubyte k = 0
+        while k < POOLS {
+            pool_taken[k] = taken[k]
+            k++
+        }
+    }
+
+    ; a register changes its type (an address-sized integer that is a pointer from here on)
+    sub retype(uword r, ubyte type) {
+        regtypes[r] = type
+        if reuse_numbers {
+            if (r as long) >= pinned_cap {
+                long newcap = regcap
+                if newcap <= (r as long)
+                    newcap = (r as long) + 256
+                pinned = mem.grow(pinned, pinned_cap, newcap)
+                long z = pinned_cap
+                while z < newcap {
+                    pinned[z] = 0
+                    z++
+                }
+                pinned_cap = newcap
+            }
+            pinned[r] = 1
+        }
+    }
+
     sub new_reg(ubyte type) -> uword {
+        if reuse_numbers and type < POOLS {
+            if pool == 0 {
+                pool = mem.alloc(POOLS as long * sizeof(pointer))
+                ubyte pk = 0
+                while pk < POOLS {
+                    pool[pk] = 0
+                    pool_count[pk] = 0
+                    pool_cap[pk] = 0
+                    pool_taken[pk] = 0
+                    pk++
+                }
+            }
+            ^^uword numbers = pool[type]
+            while pool_taken[type] < pool_count[type] {
+                uword again = numbers[pool_taken[type]]
+                pool_taken[type]++
+                if (again as long) >= pinned_cap or pinned[again] == 0
+                    return again
+            }
+        }
+        if regcount == 65535 {
+            ; (register numbers are words; counting on would begin again at 0, without a word)
+            out.err()
+            out.puts("error: the program needs more than 65535 IR registers")
+            out.nl()
+            out.exit(1)
+        }
         regcount++
         if regcount >= regcap {
             long newcap = regcap * 2
@@ -413,6 +504,22 @@ ir {
             regcap = newcap
         }
         regtypes[regcount] = type
+        if regcount > regmax
+            regmax = regcount
+        if reuse_numbers and type < POOLS {
+            ; (a new number: the first of its type that this subroutine did not find)
+            if pool_count[type] == pool_cap[type] {
+                long morecap = (pool_cap[type] as long) * 2
+                if morecap < 64
+                    morecap = 64
+                pool[type] = mem.grow(pool[type], (pool_cap[type] as long) * sizeof(uword), morecap * sizeof(uword))
+                pool_cap[type] = morecap as uword
+            }
+            ^^uword grown = pool[type]
+            grown[pool_count[type]] = regcount
+            pool_count[type]++
+            pool_taken[type] = pool_count[type]
+        }
         return regcount
     }
 
@@ -437,6 +544,8 @@ ir {
             regtypes[r] = type
         if r > regcount
             regcount = r
+        if r > regmax
+            regmax = r
     }
 
     sub add_block(^^Program p, ^^ubyte name, ^^ubyte pos, bool library) -> ^^Block {
@@ -1377,7 +1486,7 @@ ir {
         }
         add("\" REGTYPES=\"")
         uword rr = 1
-        while rr <= regcount and rr != 0 {
+        while rr <= regmax and rr != 0 {        ; (regmax: where numbers are used again regcount is not the last)
             if regtypes[rr] == T_NONE
                 buf.add_byte(text, '-')
             else

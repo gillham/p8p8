@@ -2,6 +2,7 @@ tests/bad_upstream2.p8:21:16: error: value type ubyte doesn't match target type 
 tests/bad_upstream2.p8:30:14: error: cannot assign different pointer type, expected ^^uword or uword but got ^^ubyte
 tests/bad_upstream2.p8:36:20: error: Syntax error: sizeof argument should be an identifier, number, or type name
 tests/bad_upstream2.p8:37:20: error: no cast available from FLOAT to UBYTE for value 350.0
+tests/bad_upstream2.p8:38:24: error: 64-bit integer types (quad/uquad) are not supported on target cx16
 tests/bad_upstream2.p8:4:5: error: Syntax error: invalid variable tag '@fast'
 tests/bad_upstream2.p8:5:5: error: @nosplit is for word or pointer arrays only
 tests/bad_upstream2.p8:6:5: error: only string and array variables can have an alignment option
@@ -15,7 +16,7 @@ tests/bad_upstream2.p8:33:19: error: invalid assignment value
 tests/bad_upstream2.p8:34:19: error: invalid number of arguments: expected 1 but got 2
 tests/bad_upstream2.p8:34:19: error: can't call this indirectly, just use normal function call syntax
 tests/bad_upstream2.p8:35:12: error: on..goto index must be an unsigned byte
-tests/bad_upstream2.p8:46:12: error: inline subroutine 'twice' must contain only one body statement, optionally followed by an empty return, otherwise it cannot be inlined
-tests/bad_upstream2.p8:55:5: error: a register is used multiple times in the parameters
-tests/bad_upstream2.p8:59:18: error: parameter 'value' should be of type bool
-tests/bad_upstream2.p8:65:5: error: asmsub seems to never return as it doesn't end with rts/jmp/branch. If this is intended, add a '; !notreached!' comment at the end
+tests/bad_upstream2.p8:47:12: error: inline subroutine 'twice' must contain only one body statement, optionally followed by an empty return, otherwise it cannot be inlined
+tests/bad_upstream2.p8:56:5: error: a register is used multiple times in the parameters
+tests/bad_upstream2.p8:60:18: error: parameter 'value' should be of type bool
+tests/bad_upstream2.p8:66:5: error: asmsub seems to never return as it doesn't end with rts/jmp/branch. If this is intended, add a '; !notreached!' comment at the end
