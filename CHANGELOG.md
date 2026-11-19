@@ -53,6 +53,10 @@
   multiplications 1 against 18.  Bytes and words are multiplied and
   divided by the machine's arithmetic unit too (a loop of word
   multiplications: 9 frames against 40; of divisions: 13 against 72).
+- Fixed: an address of more than 16 bits in `@(...)`, in `peek` and `poke`
+  and their relatives, or as an indexed constant was accepted on the 6502
+  machines and cut to 16 bits without a word.  It is refused, as upstream
+  refuses it ("invalid address type for memory access").
 - 45GS02: a word variable in the zero page is counted with `inw` and `dew`.
 - `make farcheck`: the 65816's four long addressing modes and the 45GS02's
   `[zp],z`, tried by hand in assembly on three emulators.  The compiler does

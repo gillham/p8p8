@@ -1106,7 +1106,8 @@ checker {
                         }
                     }
                     else if i >= 13 and i <= 22 {
-                        if at == types.T_FLOAT or at == types.T_BOOL
+                        ; (a long is no address where addresses are words: it would be cut to 16 bits)
+                        if at == types.T_FLOAT or at == types.T_BOOL or (types.POINTER_SIZE == 2 and at == types.T_LONG)
                             error(e, "invalid address type for memory access")
                     }
                 }
@@ -2528,6 +2529,8 @@ checker {
         quad v
         if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_IDENT and e.a.type == types.T_LONG
             error(e, "invalid address type for memory access")      ; (an address is a word here)
+        else if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_INT and (e.a.value > 65535 or e.a.value < 0)
+            error(e, "invalid address type for memory access")      ; (a number that does not fit one)
         else if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_BINARY and e.a.type == types.T_LONG
                 and (long_var(e.a.a) or long_var(e.a.b))
             error(e, "invalid address type for memory access")
@@ -2554,6 +2557,8 @@ checker {
                 uword bt = e.a.type
                 if bt == types.T_BOOL or bt == types.T_UBYTE or bt == types.T_BYTE or bt == types.T_WORD or bt == types.T_FLOAT
                     error(e, "indexing requires an iterable, address uword, or pointer variable")
+                else if types.POINTER_SIZE == 2 and e.a.kind == ast.N_INT and (e.a.value > 65535 or e.a.value < 0)
+                    error(e, "invalid address type for memory access")
                 else if types.POINTER_SIZE == 2 and bt == types.T_LONG and e.a.kind == ast.N_IDENT {
                     ; a long is no address where addresses are words
                     ^^symtab.Sym ls = e.a.extra

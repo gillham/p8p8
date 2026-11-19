@@ -19,6 +19,8 @@ main {
         w = big                                 ; error: a long into a word
         cx16.r0L = @(big)                       ; error: a long is no address
         cx16.r0L = big[2]                       ; error: nor can it be indexed
+        cx16.r0L = @($8000000)                  ; error: nor is a number of that size
+        poke($8000000, 1)                       ; error
         w = start                               ; error: the address is &start
         w = w - p                               ; error: which way round?
         p = $12345                              ; error: no such address
