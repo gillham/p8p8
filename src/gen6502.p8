@@ -6346,24 +6346,32 @@ gen6502 {
                     lda_reg(wordreg, 1)
                     ins("sta", "P8ZP_SCRATCH_W1+1")
                     lda_reg(bytereg, 0)
-                    ins("jsr", "prog8_math.multiply_ubyte_word")
+                    ins("jsr", math_routine("prog8_math.multiply_ubyte_word", 2))
                     sta_reg(i.r1, 0)
                     ins("sty", cell(i.r1, 1))
                 }
                 else if size == 1 {
                     lda_reg(i.r1, 0)
                     operand_ins("ldy", 0)
-                    ins("jsr", "prog8_math.multiply_bytes")
+                    ins("jsr", math_routine("prog8_math.multiply_bytes", 0))
                     sta_reg(i.r1, 0)
                 }
                 else if size == 2 {
+                    ; (the second number where the routine wants it: the library's variable, or
+                    ; the MEGA65's multiplier itself)
                     operand_ins("lda", 0)
-                    ins("sta", "prog8_math.multiply_words.multiplier")
+                    if hardware_math
+                        ins("sta", "$d774")
+                    else
+                        ins("sta", "prog8_math.multiply_words.multiplier")
                     operand_ins("lda", 1)
-                    ins("sta", "prog8_math.multiply_words.multiplier+1")
+                    if hardware_math
+                        ins("sta", "$d775")
+                    else
+                        ins("sta", "prog8_math.multiply_words.multiplier+1")
                     lda_reg(i.r1, 0)
                     ins("ldy", cell(i.r1, 1))
-                    ins("jsr", "prog8_math.multiply_words")
+                    ins("jsr", math_routine("prog8_math.multiply_words", 1))
                     sta_reg(i.r1, 0)
                     ins("sty", cell(i.r1, 1))
                 }
@@ -6415,7 +6423,7 @@ gen6502 {
                     if signed_div
                         ins("jsr", "prog8_math.divmod_b_asm")
                     else
-                        ins("jsr", "prog8_math.divmod_ub_asm")
+                        ins("jsr", math_routine("prog8_math.divmod_ub_asm", 3))
                     if want_mod
                         sta_reg(i.r1, 0)
                     else {
@@ -6435,7 +6443,7 @@ gen6502 {
                     if signed_div
                         ins("jsr", "prog8_math.divmod_w_asm")
                     else
-                        ins("jsr", "prog8_math.divmod_uw_asm")
+                        ins("jsr", math_routine("prog8_math.divmod_uw_asm", 4))
                     if not want_mod {
                         sta_reg(i.r1, 0)
                         ins("sty", cell(i.r1, 1))
@@ -7265,6 +7273,124 @@ gen6502 {
 
     long data_size = 1          ; the size of the elements that put_value writes
 
+    ; The library's multiplication and division routines for bytes and words, or on the
+    ; MEGA65 routines of the program's own that take and give the same but leave the work
+    ; to the machine's multiplier and divider.  Which of them the program uses:
+    ; (their names begin with prog8_: by that the peephole passes know a routine that takes
+    ; the scratch words, as the library's do)
+    bool[5] hw_used
+    ^^ubyte[5] hw_names = ["prog8_hw_mulb", "prog8_hw_mulw", "prog8_hw_mulbw", "prog8_hw_divb", "prog8_hw_divw"]
+
+    sub math_routine(^^ubyte library, ubyte which) -> ^^ubyte {
+        if not hardware_math
+            return library
+        hw_used[which] = true
+        return hw_names[which]
+    }
+
+    sub hw_zero(str a, str b, str c) {
+        raw("    lda  #0")
+        put("    sta  ")
+        raw(a)
+        put("    sta  ")
+        raw(b)
+        if c[0] != 0 {
+            put("    sta  ")
+            raw(c)
+        }
+    }
+
+    sub hw_wait() {
+        raw("-   bit  $d70f")
+        raw("    bmi  -")
+    }
+
+    sub hw_routines() {
+        if hw_used[0] or hw_used[1] or hw_used[2] or hw_used[3] or hw_used[4] {
+            raw("")
+            raw("; multiplication and division with the MEGA65's arithmetic unit: two 32-bit numbers at")
+            raw("; $d770 and $d774, their product at $d778, their quotient at $d76c when bit 7 of $d70f is off")
+        }
+        if hw_used[0] {
+            raw("prog8_hw_mulb:             ; A times Y, in A")
+            raw("    sta  $d770")
+            raw("    sty  $d774")
+            hw_zero("$d771", "$d772", "$d773")
+            raw("    sta  $d775")
+            raw("    sta  $d776")
+            raw("    sta  $d777")
+            raw("    lda  $d778")
+            raw("    rts")
+        }
+        if hw_used[1] {
+            raw("prog8_hw_mulw:             ; AY times the word at $d774, in AY")
+            raw("    sta  $d770")
+            raw("    sty  $d771")
+            hw_zero("$d772", "$d773", "$d776")
+            raw("    sta  $d777")
+            raw("    lda  $d778")
+            raw("    ldy  $d779")
+            raw("    rts")
+        }
+        if hw_used[2] {
+            raw("prog8_hw_mulbw:            ; the word in P8ZP_SCRATCH_W1 times A, in AY")
+            raw("    sta  $d774")
+            hw_zero("$d775", "$d776", "$d777")
+            raw("    sta  $d772")
+            raw("    sta  $d773")
+            raw("    lda  P8ZP_SCRATCH_W1")
+            raw("    sta  $d770")
+            raw("    lda  P8ZP_SCRATCH_W1+1")
+            raw("    sta  $d771")
+            raw("    lda  $d778")
+            raw("    ldy  $d779")
+            raw("    rts")
+        }
+        if hw_used[3] {
+            raw("prog8_hw_divb:             ; A divided by Y: the quotient in Y, the remainder in A")
+            raw("    sta  $d770")
+            raw("    sty  $d774")
+            raw("    pha")
+            hw_zero("$d771", "$d772", "$d773")
+            raw("    sta  $d775")
+            raw("    sta  $d776")
+            raw("    sta  $d777")
+            hw_wait()
+            raw("    ldy  $d76c")
+            raw("    sty  $d770          ; (quotient times divisor is at $d778 now)")
+            raw("    pla")
+            raw("    sec")
+            raw("    sbc  $d778")
+            raw("    rts")
+        }
+        if hw_used[4] {
+            raw("prog8_hw_divw:             ; P8ZP_SCRATCH_W1 divided by AY: the quotient in AY, the remainder in P8ZP_SCRATCH_W2")
+            raw("    sta  $d774")
+            raw("    sty  $d775")
+            raw("    lda  P8ZP_SCRATCH_W1")
+            raw("    sta  $d770")
+            raw("    lda  P8ZP_SCRATCH_W1+1")
+            raw("    sta  $d771")
+            hw_zero("$d772", "$d773", "$d776")
+            raw("    sta  $d777")
+            hw_wait()
+            raw("    lda  $d76c")
+            raw("    ldy  $d76d")
+            raw("    pha")
+            raw("    sta  $d770          ; (quotient times divisor is at $d778 now)")
+            raw("    sty  $d771")
+            raw("    sec")
+            raw("    lda  P8ZP_SCRATCH_W1")
+            raw("    sbc  $d778")
+            raw("    sta  P8ZP_SCRATCH_W2")
+            raw("    lda  P8ZP_SCRATCH_W1+1")
+            raw("    sbc  $d779")
+            raw("    sta  P8ZP_SCRATCH_W2+1")
+            raw("    pla")
+            raw("    rts")
+        }
+    }
+
     ; "    mnemonic  p8_regfile+N" for byte n of the division routine's cells
     sub qdiv_line(str mnemonic, long n) {
         put("    ")
@@ -7314,6 +7440,7 @@ gen6502 {
     sub data() {
         if qdiv_used
             qdiv_routine()
+        hw_routines()
         ubyte qk = 0
         while qk < qconst_count {
             ; (the long constants that are operands of the 45GS02's 32-bit instructions)

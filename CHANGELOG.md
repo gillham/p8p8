@@ -50,7 +50,9 @@
   `make emucmp65` compares the two kinds of code for every test program in
   xmega65, and `tools/benchmega65.sh` times loops on longs: additions take
   48 frames where the 6502 code takes 65, comparisons 63 against 71,
-  multiplications 1 against 18.
+  multiplications 1 against 18.  Bytes and words are multiplied and
+  divided by the machine's arithmetic unit too (a loop of word
+  multiplications: 9 frames against 40; of divisions: 13 against 72).
 - Fixed: a program with more than 65,535 IR registers was compiled wrongly
   without a word (the numbers began again at zero).  p8p8's own source had
   reached that size.  For the llvm targets subroutines now share register

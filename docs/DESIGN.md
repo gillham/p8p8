@@ -443,7 +443,15 @@ bit of `$d70f` is off.  A long multiplication is five 32-bit instructions.
 The divider is unsigned and prog8's longs are not, so a division calls
 `p8_qdivs`, which the generator writes into a program that divides longs:
 it makes both numbers positive, divides, and gives the quotient its sign
-(18 bytes of the register file are its cells).  `P8P8_45_NOMATH` leaves both
+(18 bytes of the register file are its cells).  Bytes and words go the same
+way: where the 6502 code calls the library's `multiply_bytes`,
+`multiply_words`, `multiply_ubyte_word`, `divmod_ub_asm` or `divmod_uw_asm`,
+the 45GS02 code calls `prog8_hw_mulb` and its like, routines the generator
+writes into the program that take and give the same but put the numbers into
+the arithmetic unit (`math_routine`, `hw_routines`).  Their names begin with
+`prog8_` because the peephole passes go by that for "a routine that reads the
+scratch words"; under another name the stores of a dividend were removed.
+Signed division is still the library's.  `P8P8_45_NOMATH` leaves all of it
 to the library's routines.
 
 The lines are written as text the peephole passes do not look into, and a
@@ -460,7 +468,9 @@ program is 45GS02 code).
 `tools/benchmega65.sh` times four loops on longs both ways (by the VIC-IV's
 frame counter; the jiffy clock stands still in xmega65).  Frames for the
 6502 code and the 45GS02 code: addition 65 and 48, multiplication 18 and 1,
-division 12 and 0, comparisons 71 and 63; 1,841 and 1,243 bytes.  The first
+division 12 and 0, comparisons 71 and 63; 1,841 and 1,243 bytes.  Words and
+bytes: multiplication 40 and 9, 13 and 6; division with remainder 72 and 13,
+14 and 6.  The first
 version, which made Z zero after every instruction and did everything with
 Q, was slower than the 6502 code on two of the four.
 
