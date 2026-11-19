@@ -379,9 +379,9 @@ words is six instructions on a 65C02 and three on a 65816.
 
 ## The 45GS02
 
-The MEGA65's CPU (`-cpu 45gs02`; for now it has to be asked for: the target's
-file says 6502, because the reference compilers read that file too and know
-no 45GS02).  It is the 6502 generator with two differences.
+The MEGA65's CPU, and what `-target mega65` writes code for (the target's
+file says `cpu = 45gs02`; `-cpu 6502` gives plain 6502 code for the machine).
+It is the 6502 generator with two differences.
 
 **Two 65C02 instructions mean something else.**  `stz` stores the Z register,
 and `(zp)` is `(zp),z`.  With Z at zero they are the 65C02's.  The generated

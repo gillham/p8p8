@@ -69,7 +69,7 @@ Numbers are decimal, `$hex`, `0xhex` or `%binary`.  A list of addresses is
 
 | Key | Meaning |
 |-----|---------|
-| `cpu` | `6502`, `65c02` or `65816` (`-cpu` on the command line chooses another) |
+| `cpu` | `6502`, `65c02`, `65816` or `45gs02` (the MEGA65; `-cpu` on the command line chooses another) |
 | `native65816` | `rest`: with a 65816 the program runs in native mode from start to end, because the machine's ROM allows it.  Without the key it stays in emulation mode, and the 16-bit runs of the code switch to native mode and back |
 | `encoding` | the default text encoding: `petscii`, `iso`, `atascii`, ... |
 | `output_type` | `PRG`, `RAW`, `XEX` or `LIBRARY`: the default of `%output`, and what the assembler is asked to write |

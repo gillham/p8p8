@@ -40,8 +40,8 @@
   additions in line, not a call of the general routine.  A loop over a word
   array that multiplies by 37 went from 168 to 63 jiffies on an X16 (the
   reference compiler's code takes 64); `tools/bench65.sh` measures this.
-- A first code generator for the 45GS02, the MEGA65's CPU: `-target mega65
-  -cpu 45gs02`.  Longs are loaded, combined, compared and stored with the
+- A first code generator for the 45GS02, the MEGA65's CPU, which
+  `-target mega65` now writes code for (`-cpu 6502` for plain 6502 code).  Longs are loaded, combined, compared and stored with the
   32-bit instructions (`c = a + b` is four instructions), which makes a test
   of long arithmetic 876 bytes where the 6502 code is 1,501.
   Long results and returns go through the 32-bit register, and long

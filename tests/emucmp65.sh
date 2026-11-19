@@ -2,7 +2,7 @@
 # The 45GS02, on the MEGA65.  No other compiler writes code for that CPU, so the
 # reference is p8p8's own 6502 code for the same machine (which the other suites
 # compare with the reference compiler's on the C64 and the X16): each program is built
-# for the mega65 target as 6502 code and with -cpu 45gs02, both run in xmega65 (Xemu)
+# for the mega65 target with -cpu 6502 and as 45GS02 code (the target's CPU), both run in xmega65 (Xemu)
 # without a window, and the text screens they leave are compared.
 #
 # Usage: tests/emucmp65.sh <p8c> <file.p8>...
@@ -30,7 +30,7 @@ failed=0
 for f in "$@"; do
     name=$(basename "$f" .p8)
     rm -f "$work/6502/$name.prg" "$work/45gs02/$name.prg"
-    if ! "$p8c" -target mega65 -lib "$lib" -out "$work/6502" "$f" > "$work/6502.err" 2>&1 || [ ! -f "$work/6502/$name.prg" ]; then
+    if ! "$p8c" -target mega65 -lib "$lib" -cpu 6502 -out "$work/6502" "$f" > "$work/6502.err" 2>&1 || [ ! -f "$work/6502/$name.prg" ]; then
         echo "skipped (not a program for the mega65): $f"
         continue
     fi

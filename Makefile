@@ -457,8 +457,8 @@ emucmp:	$(P8P8)
 #  stopped is not the same in both builds)
 EMUTESTS64=$(filter-out %/swirl-float.p8 %/numbergame.p8 %/maze.p8 %/bitshift.p8 %/animalgame.p8,$(EMUTESTS_COMMON)) \
 	$(addprefix .prog8-reference/examples/c64/,banking.p8 charset.p8)
-# the 45GS02, on the MEGA65 in xmega65 (Xemu): p8p8's 6502 code for that machine against
-# its code for that CPU (-cpu 45gs02); no other compiler has one to compare with
+# the 45GS02, on the MEGA65 in xmega65 (Xemu): p8p8's 6502 code for that machine (-cpu 6502)
+# against its code for the machine's own CPU; no other compiler has one to compare with
 emucmp65:	$(P8P8)
 	@tests/emucmp65.sh $(P8P8) $(EMUTESTS64)
 
