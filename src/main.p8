@@ -1514,6 +1514,202 @@ main {
         buf.add_byte(cmd, '"')
     }
 
+    ; ---- a program with overlays (gen6502, "overlays") ----
+    ; cmd holds the assembler's command up to its output.  The assembly is assembled once
+    ; for every overlay and last for the main program (prog8_overlay = n: that part is
+    ; there, the others are virtual).  The run for overlay n writes the main program too,
+    ; with the overlay behind it at the window's address; its bytes are cut out of that.
+    ; Then name.non is written, the main program and the overlays as records of 64tass's
+    ; nonlinear format (length, address, bytes), each overlay after a record of one byte
+    ; that chooses it (the target's "overlay_select": on the X16 the RAM bank's
+    ; register), and the target's loader is assembled as name.prg.
+    ^^buf.Buf ov_front = 0
+    ^^buf.Buf ov_path = 0
+    ^^buf.Buf ov_file = 0
+    ^^buf.Buf ov_ext = 0
+
+    sub ov_extension(str text, ubyte n) -> ^^ubyte {
+        buf.clear(ov_ext)
+        buf.add_str(ov_ext, text)
+        if n != 255
+            buf.add_long(ov_ext, n)
+        buf.add_byte(ov_ext, 0)
+        return ov_ext.data
+    }
+
+    ; the path of an output file, in ov_path
+    sub ov_output(^^ubyte name, ^^ubyte extension) -> ^^ubyte {
+        buf.clear(ov_path)
+        if outdir != 0 {
+            buf.add_str(ov_path, outdir)
+            buf.add_byte(ov_path, '/')
+        }
+        buf.add_str(ov_path, name)
+        buf.add_str(ov_path, extension)
+        buf.add_byte(ov_path, 0)
+        return ov_path.data
+    }
+
+    ; a file's bytes, in memory that is the program's from now on
+    sub ov_read(^^ubyte path) -> ^^ubyte, long {
+        long size = io_platform.file_size(path)
+        if size <= 0 {
+            out.err()
+            out.puts("cannot read ")
+            out.puts(path)
+            out.nl()
+            out.exit(1)
+        }
+        ^^ubyte data = mem.alloc(size + 1)
+        void io_platform.read_file(path, data, size)
+        return data, size
+    }
+
+    sub ov_word(long value) {
+        buf.add_byte(ov_file, (value & 255) as ubyte)
+        buf.add_byte(ov_file, ((value >> 8) & 255) as ubyte)
+    }
+
+    sub overlay_build(^^ubyte name) {
+        if ov_front == 0 {
+            ov_front = buf.new(4096)
+            ov_path = buf.new(1024)
+            ov_ext = buf.new(64)
+            ov_file = buf.new(65536)
+        }
+        buf.clear(ov_front)
+        buf.add_bytes(ov_front, cmd.data, cmd.len)
+        ubyte n = gen6502.overlay_max
+        repeat {
+            buf.clear(cmd)
+            buf.add_bytes(cmd, ov_front.data, ov_front.len)
+            buf.add_str(cmd, " -D prog8_overlay=")
+            buf.add_long(cmd, n)
+            buf.add_str(cmd, " --output ")
+            add_output(name, ov_extension(".ov", n))
+            buf.add_byte(cmd, ' ')
+            add_output(name, ".asm")
+            run_cmd("building the program")
+            if n == 0
+                break
+            n--
+        }
+        ; the file with everything in it
+        buf.clear(ov_file)
+        ^^ubyte data
+        long size
+        data, size = ov_read(ov_output(name, ov_extension(".ov", 0)))
+        long load = data[0] + (data[1] as long << 8)
+        ov_word(size - 2)
+        ov_word(load)
+        buf.add_bytes(ov_file, data + 2, size - 2)
+        long select = target.number("overlay_select", 0)
+        long window = gen6502.overlay_start
+        for n in 1 to gen6502.overlay_max {
+            data, size = ov_read(ov_output(name, ov_extension(".ov", n)))
+            long skip = window - load + 2
+            if size > skip {
+                ov_word(1)
+                ov_word(select)
+                buf.add_byte(ov_file, n)
+                ov_word(size - skip)
+                ov_word(window)
+                buf.add_bytes(ov_file, data + skip, size - skip)
+            }
+        }
+        ; (and the bank that a program finds when it is started)
+        ov_word(1)
+        ov_word(select)
+        buf.add_byte(ov_file, 1)
+        ov_word(0)
+        if not io_platform.write_file(ov_output(name, ".non"), ov_file.data, ov_file.len) {
+            out.err()
+            out.puts("cannot write ")
+            out.puts(ov_path.data)
+            out.nl()
+            out.exit(1)
+        }
+        ; where the program begins: the assembler's list of labels says
+        data, size = ov_read(ov_output(name, ".vice-mon-list"))
+        long entry = -1
+        long k = 0
+        while k < size - 18 {
+            if data[k] == '.' and buf.bytes_equal(data + k, ".prog8_entrypoint", 17) and (data[k + 17] == '\n' or data[k + 17] == '\r') {
+                ; "al C:0817 .prog8_entrypoint": the hex digits in front of it
+                long e = k - 1
+                while e > 0 and data[e] == ' '
+                    e--
+                long first = e
+                while first > 0 and hex_value(data[first - 1]) >= 0
+                    first--
+                entry = 0
+                while first <= e {
+                    entry = entry * 16 + hex_value(data[first])
+                    first++
+                }
+                break
+            }
+            k++
+        }
+        if entry < 0 {
+            out.err()
+            out.puts("a program with overlays needs a launcher: no prog8_entrypoint in ")
+            out.puts(ov_path.data)
+            out.nl()
+            out.exit(1)
+        }
+        ; the loader: a few lines that name the file and the entry, and the target's code
+        ^^ubyte loader = target.text("overlay_loader")
+        if loader == 0
+            return
+        buf.clear(ov_file)
+        buf.add_str(ov_file, "; the loader of ")
+        buf.add_str(ov_file, name)
+        buf.add_str(ov_file, ": written by p8c\np8_entry = ")
+        buf.add_long(ov_file, entry)
+        buf.add_str(ov_file, "\np8_file  .macro\n    .text  \"")
+        buf.add_str(ov_file, name)
+        buf.add_str(ov_file, ".non\"\n    .endm\n    .include \"")
+        buf.add_str(ov_file, loader)
+        buf.add_str(ov_file, "\"\n")
+        if not io_platform.write_file(ov_output(name, ".loader.asm"), ov_file.data, ov_file.len) {
+            out.err()
+            out.puts("cannot write ")
+            out.puts(ov_path.data)
+            out.nl()
+            out.exit(1)
+        }
+        buf.clear(cmd)
+        buf.add_str(cmd, "64tass")
+        if gen6502.c816
+            buf.add_str(cmd, " --m65816")
+        else if gen6502.c02
+            buf.add_str(cmd, " --m65c02")
+        buf.add_str(cmd, " --cbm-prg --ascii --case-sensitive --no-monitor")
+        if not opt_verbose
+            buf.add_str(cmd, " --quiet")
+        if target.dir != 0 {
+            buf.add_str(cmd, " -I \"")
+            buf.add_str(cmd, target.dir)
+            buf.add_byte(cmd, '"')
+        }
+        buf.add_str(cmd, " --output ")
+        add_output(name, ".prg")
+        buf.add_byte(cmd, ' ')
+        add_output(name, ".loader.asm")
+        run_cmd("building the program's loader")
+    }
+
+    sub hex_value(ubyte c) -> byte {
+        if c >= '0' and c <= '9'
+            return (c - '0') as byte
+        if c >= 'a' and c <= 'f'
+            return (c - 'a' + 10) as byte
+        if c >= 'A' and c <= 'F'
+            return (c - 'A' + 10) as byte
+        return -1
+    }
+
     sub run_cmd(str what) {
         buf.add_byte(cmd, 0)
         if opt_verbose {
@@ -1654,6 +1850,13 @@ main {
             if target.text("assembler_options") != 0 {
                 buf.add_byte(cmd, ' ')
                 buf.add_str(cmd, target.text("assembler_options"))
+            }
+            if gen6502.overlay_max != 0 {
+                ; a program with overlays: the assembler once for each part, then the
+                ; file that holds them all and the loader that reads it
+                overlay_build(name)
+                built_ext = ".prg"
+                return
             }
             buf.add_str(cmd, " --output ")
             add_output(name, extension)

@@ -79,6 +79,10 @@ Numbers are decimal, `$hex`, `0xhex` or `%binary`.  A list of addresses is
 | `zp_scratch_b1`, `zp_scratch_reg`, `zp_scratch_w1`, `zp_scratch_w2`, `zp_scratch_ptr` | the zero page cells the library's assembly code uses (`P8ZP_SCRATCH_...`); `zp_scratch_reg` is `zp_scratch_b1` + 1 |
 | `zp_fullsafe`, `zp_kernalsafe`, `zp_basicsafe` | the free zero page locations for `%zeropage full`, `kernalsafe` and `basicsafe` |
 | `virtual_registers` | where the library has the 32 bytes of R0-R15; when that is in the zero page they are not given to variables |
+| `overlay_window_start`, `overlay_window_end` | (optional) where an overlay's code is while it runs (the end is the first address after it); with `overlay_thunk` this gives the machine overlays (`%overlay n`) |
+| `overlay_thunk` | the code a call into an overlay goes through, in main memory: `%t` is the subroutine, `%n` the overlay's number; it has to keep A, X, Y and the flags both ways |
+| `overlay_select` | the address where one byte chooses the overlay that the next record of the program's file is loaded into |
+| `overlay_loader` | an assembly file beside the target file: the loader of a program with overlays, assembled with `p8_entry` and the macro `p8_file` defined |
 | `far_address_bits` | (optional) how many bits an address of data can have on a machine with memory beyond 64 KB (24, 28); a long is such an address when the program's CPU is the 65816 or the 45GS02 |
 | `virtual_registers_zp` | (optional) the zero page address R0-R15 are moved to when the program has the zero page to itself (`%zeropage kernalsafe` or `full`) |
 | `bss_goldenram_start`, `bss_goldenram_end` | the memory `-varsgolden` puts the variables without an initial value in |

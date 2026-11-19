@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Overlays, an extension, on the Commander X16: a block with `%overlay n`
+  has its code in RAM bank n.  The compiler writes the calls into an
+  overlay, between overlays and back; the block's variables and strings
+  stay in main memory.  `p8c` writes a loader as `name.prg` and the main
+  program with all overlays as `name.non`.  On other machines the
+  directive is ignored.  `make overlaycheck` runs the tests in x16emu.
+
 - 65816: far memory at a known address is read and written with the CPU's
   24-bit addresses (`lda $040000`, `sta $040010,x`), not through a pointer,
   and plain loads and stores go straight between the register and far

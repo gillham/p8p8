@@ -185,6 +185,11 @@ can be at an address of more than 16 bits: `&ubyte ATTIC = $8000000`,
 and `farmem.copy` and `farmem.fill` from the library.  That is p8p8's own
 ([docs/DIFFERENCES.md](docs/DIFFERENCES.md), "Far memory").
 
+A program for the Commander X16 can have parts of its code in banks of high
+memory: a block with `%overlay 1` is in bank 1, and so on.  `p8c` writes
+the calls, a loader (`name.prg`) and the file it loads (`name.non`).  That
+is p8p8's own ([docs/DIFFERENCES.md](docs/DIFFERENCES.md), "Overlays").
+
 `-cpu 65816` writes code for that CPU on any 6502 machine (`-target cx16
 -cpu 65816`, for a Commander X16 that has one; `-target c64 -cpu 65816` for
 a C64 with a SuperCPU).  This is new: word arithmetic on variables uses
@@ -307,6 +312,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make emucmp816`, `make emucmp64816` | the same with p8p8's 65816 code, in `x16emu -c816` and VICE's `xscpu64` |
 | `make emucmp65` | programs for the MEGA65 print the same as 6502 code and as 45GS02 code, in xmega65 |
 | `make farcheck` | memory beyond 64 KB on the X16's 65816, the SuperCPU and the MEGA65: the addressing modes by hand, the compiler's code and the library's |
+| `make overlaycheck` | programs with overlays (`%overlay n`), with their loader, in x16emu |
 | `make irroundtrip` | a program built from the IR file that `p8c -ir` wrote is the same bytes as from its source |
 | `tools/benchmega65.sh` | loops of long, word and byte arithmetic on the MEGA65 as 6502 code and as 45GS02 code |
 | `make qemucmpir` | the same programs built from p8p8's IR by `prog8c-llvm`'s 68000 back end (`-codegen upstream`) |

@@ -335,6 +335,7 @@ ir {
         bool library
         bool force_output
         bool chipram        ; %option amiga_chipram: its code and variables go in the Amiga's chip memory
+        ubyte overlay       ; %overlay n: its code goes into that overlay (0: the main program)
         bool no_prefixing
         bool ignore_unused
     }

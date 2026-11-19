@@ -1279,6 +1279,7 @@ gen6502 {
         if cpu_option == 0 and target.loaded and not c02 and not target.is("cpu", "6502") and not target.is("cpu", "cpu6502")
             error("this code generator has no instructions for the target's cpu", target.text("cpu"))
         read_options()
+        overlay_prepare()
         far_prepare()
         wide_prepare()
         assign_cells()
@@ -1371,6 +1372,8 @@ gen6502 {
             rom_requirements()
             rom_guard(output)
         }
+        if overlay_max != 0
+            buf.add_bytes(o, ovlbuf.data, ovlbuf.len)
     }
 
     sub fixed_longs_in(^^ir.Chunk c) {
@@ -1860,6 +1863,208 @@ gen6502 {
         ; cartridge's main block sets the assembler's address around its header.
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
+            if bl.overlay == 0
+                block_code(bl)
+            bl = bl.next
+        }
+        overlay_thunks()
+        global_inits_code()
+        overlay_code()
+    }
+
+    ; ---- overlays ----
+    ; A block with "%overlay n" has its code in overlay n: on the Commander X16 a bank of
+    ; high memory, which is in the window at $a000 only while its code runs.  The
+    ; variables, strings and arrays of such a block are in main memory like all others,
+    ; so an overlay is code only and never has to be written back.  A call within an
+    ; overlay, and from an overlay into the main program, is a plain jsr.  A call into an
+    ; overlay from outside it goes to a thunk in main memory that brings the overlay in,
+    ; calls, and puts back what was there (the target's "overlay_thunk"); the address of
+    ; a subroutine in an overlay is its thunk's.
+    ; The assembly has every overlay at the window's address.  It is assembled once for
+    ; the main program and once for each overlay (prog8_overlay = 0, 1, 2...): the part
+    ; that is wanted is there, the others are virtual, so every run has the same labels.
+    ubyte overlay_max = 0
+    ubyte cur_overlay = 0
+    long overlay_start = 0
+    long overlay_end = 0
+    ^^buf.Buf ovlbuf = 0
+
+    sub overlay_prepare() {
+        overlay_max = 0
+        cur_overlay = 0
+        overlay_start = target.number("overlay_window_start", 0)
+        overlay_end = target.number("overlay_window_end", 0)
+        bool possible = overlay_start != 0 and target.text("overlay_thunk") != 0
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if not possible
+                bl.overlay = 0          ; (a machine without them: one program, as if nothing was said)
+            else if bl.overlay != 0 {
+                if strings.compare(bl.name, "p8b_main") == 0 {
+                    error("the main block cannot be in an overlay", 0)
+                    bl.overlay = 0
+                }
+                else if bl.overlay > overlay_max
+                    overlay_max = bl.overlay
+            }
+            bl = bl.next
+        }
+    }
+
+    ; the overlay that the block of this symbol is in (0: none)
+    sub overlay_of(^^ubyte sym) -> ubyte {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if bl.overlay != 0 {
+                ubyte k = 0
+                while bl.name[k] != 0 and bl.name[k] == sym[k]
+                    k++
+                if bl.name[k] == 0 and sym[k] == '.'
+                    return bl.overlay
+            }
+            bl = bl.next
+        }
+        return 0
+    }
+
+    ; "p8ovt_" and the subroutine's name with its dots as underscores
+    sub thunk_name(^^ubyte sym) -> ^^ubyte {
+        buf.clear(nb)
+        buf.add_str(nb, "p8ovt_")
+        long k = 0
+        while sym[k] != 0 {
+            if sym[k] == '.'
+                buf.add_byte(nb, '_')
+            else
+                buf.add_byte(nb, sym[k])
+            k++
+        }
+        buf.add_byte(nb, 0)
+        return strtab.intern_cstr(nb.data)
+    }
+
+    ; What a call of this subroutine names: itself, or its thunk when it is in an overlay
+    ; that the code being written is not in.
+    sub overlay_entry(^^ubyte sym) -> ^^ubyte {
+        if overlay_max == 0 or sym == 0
+            return sym
+        ubyte ov = overlay_of(sym)
+        if ov == 0 or ov == cur_overlay
+            return sym
+        return thunk_name(sym)
+    }
+
+    ; a thunk for every subroutine of the overlay blocks (the assembler leaves out the
+    ; ones nothing calls)
+    sub overlay_thunks() {
+        if overlay_max == 0
+            return
+        ^^ubyte template = target.text("overlay_thunk")
+        raw("; ---- the ways into the overlays ----")
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if bl.overlay != 0 {
+                ^^ir.Sub s = bl.subs
+                while s != 0 {
+                    if parent_of(bl, s) == 0 and not (s.is_asm and s.is_inline) {
+                        put(thunk_name(s.name))
+                        raw("  .proc")
+                        long k = 0
+                        put("    ")
+                        while template[k] != 0 {
+                            if template[k] == '%' and template[k + 1] == 't' {
+                                put(s.name)
+                                k++
+                            }
+                            else if template[k] == '%' and template[k + 1] == 'n' {
+                                putn(bl.overlay)
+                                k++
+                            }
+                            else if template[k] == '\n' {
+                                nl()
+                                put("    ")
+                            }
+                            else
+                                buf.add_byte(w(), template[k])
+                            k++
+                        }
+                        nl()
+                        raw("    .pend")
+                    }
+                    s = s.next
+                }
+            }
+            bl = bl.next
+        }
+        raw("")
+    }
+
+    ; the overlays themselves, after everything else in the file
+    sub overlay_code() {
+        if overlay_max == 0
+            return
+        if ovlbuf == 0
+            ovlbuf = buf.new(65536)
+        buf.clear(ovlbuf)
+        ^^buf.Buf main_o = o
+        o = ovlbuf
+        raw("")
+        raw("; ---- the overlays ----")
+        ubyte n
+        for n in 1 to overlay_max {
+            bool any = false
+            ^^ir.Block bl = prog.blocks
+            while bl != 0 {
+                if bl.overlay == n
+                    any = true
+                bl = bl.next
+            }
+            if any {
+                put("p8ov_part_")
+                putn(n)
+                raw("  .segment")
+                cur_overlay = n
+                bl = prog.blocks
+                while bl != 0 {
+                    if bl.overlay == n
+                        block_code(bl)
+                    bl = bl.next
+                }
+                cur_overlay = 0
+                raw("    .endm")
+                put("    .if prog8_overlay == ")
+                putn(n)
+                nl()
+                put("* = ")
+                puthex(overlay_start)
+                nl()
+                put("    #p8ov_part_")
+                putn(n)
+                nl()
+                put("    .cerror * > ")
+                puthex(overlay_end)
+                put(", \"overlay ")
+                putn(n)
+                put(" is too large by \", * - ")
+                puthex(overlay_end)
+                raw(", \" bytes\"")
+                raw("    .else")
+                put("    .virtual ")
+                puthex(overlay_start)
+                nl()
+                put("    #p8ov_part_")
+                putn(n)
+                nl()
+                raw("    .endv")
+                raw("    .endif")
+            }
+        }
+        o = main_o
+    }
+
+    sub block_code(^^ir.Block bl) {
+        if true {
             if bl.address != 0 {
                 put("* = ")
                 put(bl.address)
@@ -1900,9 +2105,7 @@ gen6502 {
             else
                 raw("  .pend")
             raw("")
-            bl = bl.next
         }
-        global_inits_code()
     }
 
     sub asm_text(^^ubyte text, long length) {
@@ -6234,10 +6437,13 @@ gen6502 {
                     return
                 }
                 if i.sym != 0 {
-                    ; the address of a symbol
-                    ins_half("lda", '<', i.sym, i.offset)
+                    ; the address of a symbol (of a subroutine in an overlay: its thunk's)
+                    ^^ubyte lsym = i.sym
+                    if overlay_max != 0 and i.offset == 0 and overlay_of(lsym) != 0 and find_sub(lsym) != 0
+                        lsym = thunk_name(lsym)
+                    ins_half("lda", '<', lsym, i.offset)
                     sta_reg(i.r1, 0)
-                    ins_half("lda", '>', i.sym, i.offset)
+                    ins_half("lda", '>', lsym, i.offset)
                     sta_reg(i.r1, 1)
                 }
                 else {
@@ -7156,7 +7362,7 @@ gen6502 {
                         raw("    sec")
                         raw("    xce")
                     }
-                    ins("jsr", i.sym)
+                    ins("jsr", overlay_entry(i.sym))
                     ubyte used = call_uses(i, in_registers)
                     ^^ir.Sub callee = find_sub(i.sym)
                     if callee == 0 or callee.is_asm

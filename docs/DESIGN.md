@@ -552,6 +552,47 @@ Assembly text that switches the CPU for a few lines goes back with
 `.cpu "default"`, so p8c gives 64tass the program's CPU on its command line
 whatever it is (`--m65c02`, `--m65816`, `--m45gs02`), not only in the file.
 
+## Overlays
+
+An extension: a block with `%overlay n` has its code in overlay n, on a
+machine whose target file describes overlays (the Commander X16: a bank of
+high memory, in the window at $a000 while its code runs).  Anywhere else the
+directive says nothing and the program is built in one piece.
+
+Only code is in an overlay.  The variables, strings and arrays of such a
+block are in main memory with all the others (the code generator writes them
+outside the blocks anyway), so an overlay is never written back, a value is
+there whichever overlay is in, and the same would do for banks of ROM.
+
+The program is still compiled as one: one zero page, one set of names.  The
+generator knows for every call where it is and where it goes
+(`overlay_entry`): within an overlay and from an overlay into the main
+program it is a plain `jsr`; into an overlay from outside it is a `jsr` to a
+thunk in main memory, written from the target's `overlay_thunk` (on the X16
+the ROM's JSRFAR, which keeps the registers and flags and puts back the bank
+that was there, so a program that chooses banks for its data is not
+disturbed).  The address of a subroutine in an overlay is its thunk's.
+Every subroutine of an overlay block gets a thunk; the assembler leaves out
+the ones nothing names.
+
+In the assembly the overlay blocks come last, each overlay as a segment
+that is placed at the window's address when `prog8_overlay` is its number
+and is virtual otherwise.  So the driver runs the assembler once for each
+overlay and once for the main program (`overlay_build` in `main.p8`), every
+run with the same labels, and cuts the overlay's bytes out of its run.  It
+writes `name.non`: the main program and the overlays as records of length,
+address and bytes (64tass's nonlinear format), an overlay after a record of
+one byte at `overlay_select` that chooses it.  Then it assembles the
+target's `overlay_loader` as `name.prg`, with the file's name and the
+program's entry (read from the assembler's list of labels): on the X16 a
+loader that moves itself to $0400 and reads the file, after the X16 Golden
+Loader.
+
+Not there: an overlay of more than the window, code of the library in an
+overlay, overlays in an IR file (`-ir` does not write the directive).
+Assembly in an overlay block that calls another overlay by its label is not
+seen by the compiler.  `make overlaycheck` runs two programs in x16emu.
+
 ## Machines and the library
 
 Nothing about a particular machine is in the compiler.  A 6502 machine is a

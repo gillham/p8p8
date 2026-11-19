@@ -1691,6 +1691,12 @@ irgen {
             block.ignore_unused = symtab.has_option(b.a, strtab.intern_cstr("ignore_unused")) or symtab.has_option(module.tree.a, strtab.intern_cstr("ignore_unused"))
             block.force_output = symtab.has_option(b.a, strtab.intern_cstr("force_output"))
             block.chipram = symtab.has_option(b.a, strtab.intern_cstr("amiga_chipram"))
+            ^^ast.Node od = b.a
+            while od != 0 {
+                if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0
+                    block.overlay = od.a.value as ubyte
+                od = od.next
+            }
             block.no_prefixing = symtab.has_option(b.a, strtab.intern_cstr("no_symbol_prefixing")) or symtab.has_option(module.tree.a, strtab.intern_cstr("no_symbol_prefixing"))
         }
         if b.b != 0 {

@@ -318,6 +318,8 @@ test:	$(TESTBIN) $(P8P8)
 	    [ $$? -eq 1 ] || { echo "expected exit status 1"; exit 1; }; \
 	    diff -u tests/expected/$(TARGET)_$$t.txt $(OUT)/$$t.out || exit 1; \
 	done
+	@echo "test bad_overlay (%overlay: where it may stand)"
+	@$(P8P8) -lib lib -target cx16 -check tests/bad_overlay.p8 2>&1 | diff -u tests/expected/bad_overlay.txt -
 	@echo "test bad_far (far memory on the MEGA65: what is refused)"
 	@$(P8P8) -lib lib -target mega65 -check tests/bad_far.p8 2>&1 | diff -u tests/expected/bad_far.txt -
 	@for t in bad_upstream bad_upstream2 bad_upstream_syntax; do \
@@ -468,6 +470,11 @@ emucmp65:	$(P8P8)
 # addressing modes (x16emu -c816, xscpu64) and the 45GS02's [zp],z (xmega65)
 farcheck:	$(P8P8)
 	@tests/farcheck.sh $(P8P8) | diff -u tests/expected/farcheck.txt -
+
+# make overlaycheck: programs with overlays (%overlay n) on the Commander X16, built with
+# their loader and run in x16emu
+overlaycheck:	$(P8P8)
+	@tests/overlaycheck.sh $(P8P8) | diff -u tests/expected/overlaycheck.txt - && echo "overlay check: as expected"
 
 emucmp64:	$(P8P8)
 	@EMUCMP_TARGET=c64 tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS64)

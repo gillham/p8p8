@@ -80,7 +80,7 @@ checker {
     str[] once_only = ["output", "launcher", "zeropage", "address", "memtop", "varsaddress", "encoding"]
     str[] not_in_module = ["align", "breakpoint", "asminclude", "asmbinary"]
     str[] known_directives = ["address", "align", "asm", "asmbinary", "asminclude", "assert", "breakpoint", "bssaddress", "encoding",
-        "import", "ir", "jmptable", "launcher", "link", "memtop", "option", "output", "slabsaddress", "varsaddress",
+        "import", "ir", "jmptable", "launcher", "link", "memtop", "option", "output", "overlay", "slabsaddress", "varsaddress",
         "zeropage", "zpallowed", "zpreserved"]
     str[] option_names = ["enable_floats", "force_output", "no_sysinit", "merge", "verafxmuls", "no_symbol_prefixing", "ignore_unused", "romable", "amiga_chipram", "private_symbols", "noframe"]
     str[] block_options = ["force_output", "merge", "verafxmuls", "no_symbol_prefixing", "ignore_unused", "amiga_chipram", "private_symbols"]
@@ -361,6 +361,13 @@ checker {
                 error(d, "requires two addresses (start, end)")
             else if arg.value > 255 or arg.next.value > 255
                 error(d, "start and end addresss must be in Zeropage so 0..255")
+        }
+        else if strings.compare(nm, "overlay") == 0 {
+            ; (p8p8's own: the block's code goes into that overlay, on a machine that has them)
+            if level != L_BLOCK
+                error(d, "%overlay may only occur in a block")
+            else if nargs != 1 or arg.kind != ast.N_INT or arg.value < 1 or arg.value > 255
+                error(d, "invalid overlay directive, expected a number from 1 to 255")
         }
         else if strings.compare(nm, "breakpoint") == 0 {
             if nargs != 0

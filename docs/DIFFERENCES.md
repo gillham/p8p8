@@ -210,6 +210,24 @@ Options are upstream's where both have them, with one dash or two.
 - `%import` looks in the same places in the same order; the library has more
   layers.  `-traceimports` shows which file a module came from.
 
+## Overlays
+
+`%overlay 1` in a block puts the block's code into overlay 1; on the
+Commander X16 that is RAM bank 1, overlay 2 is bank 2, and so on.  The
+block's variables, strings and arrays stay in main memory.  Calls into an
+overlay, between overlays and back are written by the compiler; nothing
+else in the program changes.  `p8c` then writes two files, `name.prg` (a
+small loader) and `name.non` (the main program and the overlays), which
+belong together on the disk.  An overlay holds 8 KB of code.
+
+Code in an overlay cannot look into another bank of high memory, since it
+is in that window itself: what reads and writes a program's own banks (a
+text buffer, say) belongs in a block without `%overlay`.  The bank a
+program chose is the same after a call into an overlay.
+
+On a machine without overlays the directive is ignored and the program is
+built in one piece.  Upstream has no such directive.
+
 ## A custom launcher knows the zero page setting
 
 A target's `custom_launcher_code` is one text for every program.  p8p8
