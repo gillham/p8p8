@@ -248,6 +248,8 @@ types {
             return elem_of(id)
         if id == T_STR or id == T_UWORD or id == ADDRESS_TYPE
             return T_UBYTE
+        if id == T_LONG and far_bits != 0
+            return T_UBYTE          ; (a long is an address on a machine with far memory)
         return 0
     }
 

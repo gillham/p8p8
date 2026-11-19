@@ -1141,7 +1141,7 @@ checker {
                     }
                     else if i >= 13 and i <= 22 {
                         ; (a long is no address where addresses are words: it would be cut to 16 bits)
-                        if at == types.T_FLOAT or at == types.T_BOOL or (types.POINTER_SIZE == 2 and at == types.T_LONG and not far_constant(e.b))
+                        if at == types.T_FLOAT or at == types.T_BOOL or (types.POINTER_SIZE == 2 and at == types.T_LONG and types.far_bits == 0)
                             error(e, "invalid address type for memory access")
                     }
                 }
@@ -2561,11 +2561,11 @@ checker {
             return
         bool ok
         quad v
-        if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_IDENT and e.a.type == types.T_LONG
+        if types.POINTER_SIZE == 2 and types.far_bits == 0 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_IDENT and e.a.type == types.T_LONG
             error(e, "invalid address type for memory access")      ; (an address is a word here)
         else if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_INT and (e.a.value > max_data_address() or e.a.value < 0)
             error(e, "invalid address type for memory access")      ; (a number that does not fit one)
-        else if types.POINTER_SIZE == 2 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_BINARY and e.a.type == types.T_LONG
+        else if types.POINTER_SIZE == 2 and types.far_bits == 0 and e.kind == ast.N_MEMREAD and e.a != 0 and e.a.kind == ast.N_BINARY and e.a.type == types.T_LONG
                 and (long_var(e.a.a) or long_var(e.a.b))
             error(e, "invalid address type for memory access")
         when e.kind {
@@ -2593,7 +2593,7 @@ checker {
                     error(e, "indexing requires an iterable, address uword, or pointer variable")
                 else if types.POINTER_SIZE == 2 and e.a.kind == ast.N_INT and (e.a.value > max_data_address() or e.a.value < 0)
                     error(e, "invalid address type for memory access")
-                else if types.POINTER_SIZE == 2 and bt == types.T_LONG and e.a.kind == ast.N_IDENT {
+                else if types.POINTER_SIZE == 2 and types.far_bits == 0 and bt == types.T_LONG and e.a.kind == ast.N_IDENT {
                     ; a long is no address where addresses are words
                     ^^symtab.Sym ls = e.a.extra
                     if ls != 0 and ls.kind == symtab.K_CONST
@@ -2625,8 +2625,15 @@ checker {
                     error(e, "cannot type cast to string or array type")
             }
             ast.N_ADDROF -> {
-                if far_variable(e.a)
-                    error(e, "the address of a variable in far memory does not fit a pointer (taking it is not supported yet)")
+                if far_variable(e.a) and e.op != token.T_AMP
+                    error(e, "the address of a variable in far memory is a long: there is no pointer to it")
+                else if far_variable(e.a) and e.b != 0 {
+                    bool fiok
+                    quad fiv
+                    fiok, fiv = typer.const_eval(e.b)
+                    if not fiok
+                        error(e, "the address of an element in far memory needs a constant index for now")
+                }
                 if e.op == token.T_AMPAMP and e.a.kind == ast.N_IDENT and e.a.extra != 0 {
                     ^^symtab.Sym tps = e.a.extra
                     if tps.kind == symtab.K_SUB

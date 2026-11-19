@@ -216,10 +216,12 @@ On a machine with memory beyond 64 KB and a CPU that reaches it (the MEGA65;
 the C64 with a SuperCPU and `-cpu 65816`), a long constant is an address:
 `&ubyte ATTIC = $8000000`, `ATTIC[i]`, `@($40000)`, `peek($40000)`,
 `pokew($40000, w)`.  Upstream has no such targets and refuses an address of
-more than 16 bits; so does p8p8 everywhere else.  Pointers are words there
-as everywhere: the address of a far variable cannot be taken, and a far
-array cannot be passed to a subroutine or searched with `in`.  A long
-variable as the address is not there yet.
+more than 16 bits; so does p8p8 everywhere else.  A long variable or
+expression is an address too: `@(base + i)`, `peek(base)`, `base[i]`; and
+`&` of a variable in far memory is a long.  Pointers are words there as
+everywhere: there is no typed pointer to far memory, a far address does not
+go into a word, and a far array cannot be passed to a subroutine or
+searched with `in`.
 
 ## Things upstream has that p8p8 does not
 

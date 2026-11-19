@@ -3102,7 +3102,7 @@ irgen {
                 uword ar
                 ubyte at
                 ar, at = expression(target.a)
-                ar = convert(ar, at, ir.T_POINTER, false)
+                ar = convert(ar, at, address_type(target.a), false)
                 void ir.emit_rp(chunk, ir.OP_STOREI, ir.T_BYTE, r, ar, 0)
             }
             else -> unsupported(target, "assignment target")
@@ -3160,6 +3160,19 @@ irgen {
         return convert(r, t, ir.T_WORD, false)
     }
 
+    ; is the value of this expression an address in far memory: a long, on a machine that
+    ; has such memory?  (Then the register that holds it stays a long, and the code
+    ; generator goes through it with its far pointer.)
+    sub far_address(^^ast.Node e) -> bool {
+        return types.far_bits != 0 and e != 0 and e.type == types.T_LONG
+    }
+
+    sub address_type(^^ast.Node e) -> ubyte {
+        if far_address(e)
+            return ir.T_LONG
+        return ir.T_POINTER
+    }
+
     ; The address register and displacement for base[index] where base is a
     ; pointer or address value (not an array variable).
     sub indexed_address(^^ast.Node base, ^^ast.Node index, long elemsize) -> uword, long {
@@ -3172,7 +3185,7 @@ irgen {
         }
         else {
             pr, pt = expression(base)
-            pr = convert(pr, pt, ir.T_POINTER, false)
+            pr = convert(pr, pt, address_type(base), false)
         }
         bool ok
         quad ci
@@ -3182,6 +3195,16 @@ irgen {
         uword ixr
         ubyte ixt
         ixr, ixt = expression(index)
+        if far_address(base) {
+            ; a long that is an address in far memory: the sum is a long too
+            ixr = convert(ixr, ixt, ir.T_LONG, types.is_signed(index.type))
+            if elemsize != 1
+                void ir.emit_ri(chunk, ir.OP_MUL, ir.T_LONG, ixr, elemsize)
+            uword farsum = ir.new_reg(ir.T_LONG)
+            void ir.emit_rr(chunk, ir.OP_LOADR, ir.T_LONG, farsum, pr)
+            void ir.emit_rr(chunk, ir.OP_ADDR, ir.T_LONG, farsum, ixr)
+            return farsum, first
+        }
         ixr = convert(ixr, ixt, ir.T_POINTER, types.is_signed(index.type))
         if elemsize != 1
             void ir.emit_ri(chunk, scale_op(), address_irt, ixr, elemsize)
@@ -5174,7 +5197,7 @@ irgen {
                 uword ar
                 ubyte at
                 ar, at = expression(e.a)
-                ar = convert(ar, at, ir.T_POINTER, false)
+                ar = convert(ar, at, address_type(e.a), false)
                 void ir.emit_rp(chunk, ir.OP_LOADI, ir.T_BYTE, mr, ar, 0)
                 return mr, ir.T_BYTE
             }
@@ -6938,7 +6961,7 @@ irgen {
                 return fpr, t
             }
             r, at = expression(a)
-            r = convert(r, at, ir.T_POINTER, false)
+            r = convert(r, at, address_type(a), false)
             uword pr = ir.new_reg(t)
             void ir.emit_rp(chunk, ir.OP_LOADI, t, pr, r, 0)
             return pr, t
@@ -6952,7 +6975,7 @@ irgen {
             bool pfar = pfarok and pfaraddr > 65535 and types.far_bits != 0
             if not pfar {
                 r, at = expression(a)
-                r = convert(r, at, ir.T_POINTER, false)
+                r = convert(r, at, address_type(a), false)
             }
             r2, at2 = expression(a.next)
             ubyte vt = ir.T_BYTE

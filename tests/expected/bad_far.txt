@@ -1,7 +1,7 @@
+tests/bad_far.p8:9:19: error: value type long doesn't match target type uword
+tests/bad_far.p8:10:27: error: value type long doesn't match target type uword
 tests/bad_far.p8:5:21: error: memory address must be valid integer for the target
-tests/bad_far.p8:9:19: error: the address of a variable in far memory does not fit a pointer (taking it is not supported yet)
-tests/bad_far.p8:10:36: error: an array in far memory cannot be searched with 'in' yet (its address does not fit a pointer)
-tests/bad_far.p8:11:20: error: an array in far memory cannot be passed to a subroutine yet (its address does not fit a pointer)
-tests/bad_far.p8:12:20: error: invalid address type for memory access
-tests/bad_far.p8:13:20: error: invalid address type for memory access
-tests/bad_far.p8:14:20: error: indexing requires an iterable, address uword, or pointer variable
+tests/bad_far.p8:11:29: error: the address of a variable in far memory is a long: there is no pointer to it
+tests/bad_far.p8:12:32: error: the address of an element in far memory needs a constant index for now
+tests/bad_far.p8:13:36: error: an array in far memory cannot be searched with 'in' yet (its address does not fit a pointer)
+tests/bad_far.p8:14:20: error: an array in far memory cannot be passed to a subroutine yet (its address does not fit a pointer)

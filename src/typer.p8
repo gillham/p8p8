@@ -701,6 +701,8 @@ typer {
     ; is this the plain name of a long variable?  (Where addresses are words such a value
     ; does not go into one; an expression of constants that happens to be typed long may.)
     sub long_variable(^^ast.Node v) -> bool {
+        if v.kind == ast.N_ADDROF
+            return true         ; (the address of something in far memory)
         if v.kind != ast.N_IDENT or v.extra == 0
             return false
         ^^symtab.Sym ls = v.extra
@@ -869,6 +871,20 @@ typer {
     }
 
     bool sizing = false         ; inside sizeof(): a name has its declared type
+
+    ; the name of a memory mapped variable at an address of more than 16 bits, on a
+    ; machine with far memory
+    sub far_memvar(^^ast.Node e) -> bool {
+        if e == 0 or e.kind != ast.N_IDENT or e.extra == 0 or types.far_bits == 0
+            return false
+        ^^symtab.Sym s = e.extra
+        if s.kind != symtab.K_MEMVAR or s.decl == 0 or s.decl.kind != ast.N_VARDECL or s.decl.b == 0
+            return false
+        bool ok
+        quad v
+        ok, v = const_eval(s.decl.b)
+        return ok and v > 65535
+    }
 
     sub literal_fits(quad value, uword t) -> bool {
         when t {
@@ -1988,6 +2004,8 @@ typer {
             ast.N_ADDROF -> {
                 uword vt = infer(e.a)
                 void infer(e.b)
+                if e.op == token.T_AMP and far_memvar(e.a)
+                    return types.T_LONG         ; (in far memory: its address is a long)
                 if e.op == token.T_AMPAMP {
                     if e.b != 0 or types.is_array(vt)
                         return types.pointer_to(types.index_elem(vt))

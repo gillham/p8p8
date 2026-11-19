@@ -1,9 +1,10 @@
 #!/bin/sh
 # Addresses of more than 16 bits.  First tried by hand in assembly: tests/far/modes816.p8 on a Commander X16 with a 65816
 # (x16emu -c816) and on a C64 with a SuperCPU and 16 MB (VICE's xscpu64), and
-# tests/far/modes45.p8 on the MEGA65 (xmega65).  Then tests/far/fardata.p8, where the
-# compiler writes the code (memory mapped variables and arrays, @(), peek and poke at far
-# addresses), on the two machines that have far memory.  Prints what each program shows; the
+# tests/far/modes45.p8 on the MEGA65 (xmega65).  Then tests/far/fardata.p8 and
+# farcomputed.p8, where the compiler writes the code (memory mapped variables and arrays,
+# @(), peek and poke at far addresses that are constants, and at ones the program works
+# out), on the two machines that have far memory.  Prints what each program shows; the
 # Makefile compares with tests/expected/farcheck.txt.  A machine whose emulator is not
 # installed is left out with a line that says so.
 #
@@ -59,25 +60,27 @@ for row in range(0, len(data), 40):
     if line.startswith(('LONG', '[DP]', 'BANK')):
         print(line)
 PY
-    echo "-- C64, SuperCPU: what the compiler writes for far data"
-    "$p8c" -lib "$lib" -target c64 -cpu 65816 -out "$work/c64" tests/far/fardata.p8 || exit 1
-    address=$(awk '$3 == ".p8_sys_startup:cleanup_at_exit" { print $2 }' "$work/c64/fardata.vice-mon-list")
-    printf 'break %s\ncommand 1 "bsave \\"screen.bin\\" 0 0400 07e7"\n' "$address" > "$work/c64/mon.txt"
-    rm -f "$work/c64/screen.bin"
-    (cd "$work/c64" && exec xscpu64 -simmsize 16 -console -warp -limitcycles 200000000 -moncommands mon.txt \
-        -autostartprgmode 1 -autostart fardata.prg > vice.log 2>&1 < /dev/null) &
-    emulator=$!
-    wait_for 60 "$work/c64/screen.bin"
-    kill $emulator 2> /dev/null
-    wait $emulator 2> /dev/null
-    python3 - "$work/c64/screen.bin" <<'PY'
+    for program in fardata farcomputed; do
+        echo "-- C64, SuperCPU: $program, where the compiler writes the code"
+        "$p8c" -lib "$lib" -target c64 -cpu 65816 -out "$work/c64" tests/far/$program.p8 || exit 1
+        address=$(awk '$3 == ".p8_sys_startup:cleanup_at_exit" { print $2 }' "$work/c64/$program.vice-mon-list")
+        printf 'break %s\ncommand 1 "bsave \\"screen.bin\\" 0 0400 07e7"\n' "$address" > "$work/c64/mon.txt"
+        rm -f "$work/c64/screen.bin"
+        (cd "$work/c64" && exec xscpu64 -simmsize 16 -console -warp -limitcycles 200000000 -moncommands mon.txt \
+            -autostartprgmode 1 -autostart $program.prg > vice.log 2>&1 < /dev/null) &
+        emulator=$!
+        wait_for 60 "$work/c64/screen.bin"
+        kill $emulator 2> /dev/null
+        wait $emulator 2> /dev/null
+        python3 - "$work/c64/screen.bin" <<'PY'
 import sys
 data = open(sys.argv[1], 'rb').read()
 for row in range(0, len(data), 40):
     line = ''.join(chr((c & 0x7f) + 0x40) if (c & 0x7f) < 0x20 else chr(c & 0x7f) for c in data[row:row + 40]).rstrip()
-    if line and line[0].isdigit():
+    if line and (line[0].isdigit() or line[0] == '$'):
         print(line)
 PY
+    done
 else
     echo "(no xscpu64)"
 fi
@@ -87,11 +90,13 @@ if command -v xmega65 > /dev/null; then
     (cd "$work/m65" && timeout 60 xmega65 -headless -sleepless -besure -prg modes45.prg -prgexit -dumpscreen screen.txt \
         > log.txt 2>&1 < /dev/null)
     grep -E '^(\[ZP\]|LDQ|ATTIC|BANK)' "$work/m65/screen.txt"
-    echo "-- MEGA65: what the compiler writes for far data"
-    "$p8c" -lib "$lib" -target mega65 -out "$work/m65" tests/far/fardata.p8 || exit 1
-    (cd "$work/m65" && rm -f screen.txt && timeout 60 xmega65 -headless -sleepless -besure -prg fardata.prg -prgexit -dumpscreen screen.txt \
-        > log.txt 2>&1 < /dev/null)
-    sed -n '/ RUN:/,$p' "$work/m65/screen.txt" | grep '^[0-9]'
+    for program in fardata farcomputed; do
+        echo "-- MEGA65: $program, where the compiler writes the code"
+        "$p8c" -lib "$lib" -target mega65 -out "$work/m65" tests/far/$program.p8 || exit 1
+        (cd "$work/m65" && rm -f screen.txt && timeout 60 xmega65 -headless -sleepless -besure -prg $program.prg -prgexit -dumpscreen screen.txt \
+            > log.txt 2>&1 < /dev/null)
+        sed -n '/ RUN:/,$p' "$work/m65/screen.txt" | grep '^[0-9$]'
+    done
 else
     echo "(no xmega65)"
 fi

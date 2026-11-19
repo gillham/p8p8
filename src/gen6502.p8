@@ -5041,6 +5041,58 @@ gen6502 {
         }
     }
 
+    ; A load or store through a register that is a long: an address in far memory that
+    ; the program worked out.  The register's bytes are the pointer.
+    sub far_indirect(^^ir.Instr i) {
+        ubyte size = type_size(i.type)
+        ubyte bytes = 3
+        if c45 {
+            bytes = 4
+            q_flush()
+        }
+        ubyte k
+        for k in 0 to bytes - 1 {
+            lda_reg(i.r2, k)
+            if i.offset != 0 {
+                ; (a displacement: added in)
+                if k == 0
+                    far_line("clc")
+                put("    adc  #")
+                putn((i.offset >> (k * 8)) & 255)
+                nl()
+            }
+            put("    sta  P8ZP_SCRATCH_W1+")
+            putn(k)
+            nl()
+        }
+        if i.op == ir.OP_LOADI {
+            for k in 0 to size - 1 {
+                far_byte("lda", k)
+                far_cell("sta", k)
+            }
+            if c45
+                far_line("ldz  #0")
+            ; (from its place in the register file into the register, as any value)
+            for k in 0 to size - 1 {
+                far_cell("lda", k)
+                sta_reg(i.r1, k)
+            }
+            return
+        }
+        for k in 0 to size - 1 {
+            if i.op == ir.OP_STOREZI
+                far_line("lda  #0")
+            else {
+                lda_reg(i.r1, k)
+                far_cell("sta", 4)      ; (through memory: the peephole passes do not see A go into the store)
+                far_cell("lda", 4)
+            }
+            far_byte("sta", k)
+        }
+        if c45
+            far_line("ldz  #0")
+    }
+
     sub far_instruction(^^ir.Instr i) {
         ubyte size = type_size(i.type)
         bool indexed = i.op == ir.OP_LOADX or i.op == ir.OP_STOREX or i.op == ir.OP_STOREZX
@@ -6041,6 +6093,10 @@ gen6502 {
         }
         if far_operand(i) {
             far_instruction(i)
+            return
+        }
+        if types.far_bits != 0 and (i.op == ir.OP_LOADI or i.op == ir.OP_STOREI or i.op == ir.OP_STOREZI) and i.r2 != 0 and i.r2 <= ir.regcount and ir.regtypes[i.r2] == ir.T_LONG {
+            far_indirect(i)
             return
         }
         if c45 {

@@ -496,11 +496,20 @@ driver puts the number into `types.far_bits` when the program's CPU is the
 upstream refuses it.
 
 A long is a far address.  Pointers stay words: what needs a pointer to far
-memory (its address taken, an array passed or searched) is refused.  So far
-the address has to be a constant: a memory mapped variable or array
+memory (a typed pointer, an array passed or searched) is refused, and so is
+a far address into a word.
+
+A constant address: a memory mapped variable or array
 (`&ubyte ATTIC = $8000000`, `ATTIC[i]`), `@(constant)`, `peek` and `poke`
 and their relatives.  In the IR those are what they are nearby: a memory
 operand with a fixed address or the variable's name, only larger.
+
+An address the program works out: a long variable or expression in `@()`,
+in `peek` and `poke`, or with an index (`base[i]`); `&` of a far variable
+is a long (the typer, `far_memvar`).  In the IR the load or store goes
+through a register as always (`LOADI`, `STOREI`), and the register is a
+long, not a pointer; that is how the code generator knows
+(`far_indirect`: the register's bytes are the far pointer).
 
 The code generator (`far_instruction`) does every instruction with a far
 memory operand in one way: a pointer to the operand goes into the two scratch
@@ -518,8 +527,9 @@ the address).
 `make farcheck` runs three programs: the instructions written by hand (the
 65816's absolute long, absolute long indexed, `[dp]`, `[dp],y` on the X16 and
 the SuperCPU; the 45GS02's `[zp],z` and `ldq`/`stq` through it on the MEGA65)
-and `tests/far/fardata.p8`, where the compiler writes the code, on the two
-machines with far memory.  On the X16 a bank other than 0 is bank 0 again in
+and `tests/far/fardata.p8` (constant addresses) and `farcomputed.p8`
+(worked out ones), where the compiler writes the code, on the two machines
+with far memory.  On the X16 a bank other than 0 is bank 0 again in
 x16emu.
 
 Assembly text that switches the CPU for a few lines goes back with
