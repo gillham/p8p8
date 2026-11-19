@@ -212,35 +212,18 @@ Options are upstream's where both have them, with one dash or two.
 
 ## Overlays
 
-`%overlay 1` in a block puts the block's code into overlay 1; on the
-Commander X16 that is RAM bank 1, overlay 2 is bank 2, and so on.  The
-block's variables, strings and arrays stay in main memory.  Calls into an
-overlay, between overlays and back are written by the compiler; nothing
-else in the program changes.  `p8c` then writes two files, `name.prg` (a
-small loader) and `name.non` (the main program and the overlays), which
-belong together on the disk.  An overlay holds 8 KB of code.
+`%overlay n` in a block puts the block's code into overlay n: code that is
+kept outside main memory and is only there while it runs (a RAM bank of the
+Commander X16, a RAM Expansion Unit on the C64 and C128, memory beyond
+64 KB on the MEGA65).  The block's variables, strings and arrays stay in
+main memory, and the compiler writes the calls into an overlay, between
+overlays and back.  `p8c` writes two files that belong together,
+`name.prg` and `name.non`.  On a machine without overlays the directive is
+ignored and the program is built in one piece.  Upstream has no such
+directive.
 
-Code in an overlay cannot look into another bank of high memory, since it
-is in that window itself: what reads and writes a program's own banks (a
-text buffer, say) belongs in a block without `%overlay`.  The bank a
-program chose is the same after a call into an overlay.
-
-On the C64 and the C128 the overlays are in a RAM Expansion Unit, and one
-at a time is fetched into a window of main memory to run: 4 KB at $c000 on
-the C64, at $b000 on the C128, and the program itself ends below that.
-`name.prg` is the program; the first call into an overlay reads `name.non`
-from the same disk into the REU.  The overlays take the REU from its start,
-$1000 bytes each; a program's own data in the REU belongs behind them.
-Calls between two overlays in a loop fetch 4 KB each time.
-
-On the MEGA65 the overlays are in bank 4 and 5 of its memory ($40000 on, 8 KB
-each, so sixteen of them), and the DMA controller copies one into a window
-at $a000 to run; the program ends below that.  Nothing is banked or mapped.
-`name.prg` is the program and reads `name.non` from drive 8 at the first
-call into an overlay.
-
-On a machine without overlays the directive is ignored and the program is
-built in one piece.  Upstream has no such directive.
+[OVERLAYS.md](OVERLAYS.md) is the guide: the machines, what belongs in an
+overlay and what does not, what a call costs.
 
 ## A custom launcher knows the zero page setting
 

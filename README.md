@@ -190,7 +190,7 @@ A program can have parts of its code outside main memory: a block with
 Expansion Unit of a C64 or C128, or in a MEGA65's memory beyond 64 KB, and
 so on for 2, 3...  `p8c` writes the
 calls and two files that belong together, `name.prg` and `name.non`.  That
-is p8p8's own ([docs/DIFFERENCES.md](docs/DIFFERENCES.md), "Overlays").
+is p8p8's own; [docs/OVERLAYS.md](docs/OVERLAYS.md) is the guide.
 
 `-cpu 65816` writes code for that CPU on any 6502 machine (`-target cx16
 -cpu 65816`, for a Commander X16 that has one; `-target c64 -cpu 65816` for
@@ -342,7 +342,7 @@ run those suites with p8p8's own 6502 code generator.
 | `seed/` | the compiler's own earlier output, which it is built from |
 | `runtime/` | support code that some programs are built with |
 | `tests/` | test programs, scripts and expected output |
-| `docs/` | the differences from `prog8c`, the design, a tour of the internals, and the description of target files and the library |
+| `docs/` | the differences from `prog8c`, the guide to overlays, the design, a tour of the internals, and the description of target files and the library |
 | `tools/` | helper scripts for the tests |
 
 ## Licence and credits
