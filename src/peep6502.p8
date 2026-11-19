@@ -699,6 +699,14 @@ peep6502 {
             O_IMMTEXT, O_OTHER -> {
                 buf.add_str(dest, "  ")
                 buf.add_str(dest, s.text)
+                if c45 and s.text[0] == '(' and lmn[i] != M_JMP and lmn[i] != M_JSR {
+                    ; the 45GS02 has no (zp): it is (zp),z, with Z zero
+                    long last = 0
+                    while s.text[last + 1] != 0
+                        last++
+                    if s.text[last] == ')'
+                        buf.add_str(dest, ",z")
+                }
             }
         }
         buf.add_byte(dest, '\n')

@@ -402,10 +402,36 @@ a variable *is* that variable until something stores there (`qacc`, the
 `qalias` tables; the tables of where a register is named are the 65816
 runs'), so that `c = a + b` is `ldq a / clc / adq b / stq c`.  Before any
 other instruction `q_flush` puts every value where the 6502's code looks for
-it and makes Z zero.  There is no immediate form: a constant operand is four
+it.  There is no immediate form: a constant operand is four
 bytes of data (`p8_qconst_N`).  A signed comparison is a subtraction whose
 sign the overflow flag turns round; the top byte is in Z, so `tza` first.
-After a comparison Z is made zero between `php` and `plp`.
+
+**Z is zero where the generated code is left**, not after every 32-bit
+instruction: before a call, a return, a jump to another subroutine and
+assembly text (`z_matters`).  The ROM is written for a Z of zero (BASIC gave
+`?SYNTAX ERROR` when a program came back with another); the generated code
+itself never counts on it.  Whether Z is zero is known along a chunk and
+unknown where another chunk of a subroutine with longs begins.  The `ldz #0`
+goes next to the 32-bit code or to the head of the chunk when a call follows
+before the next long instruction (`z_wanted_from`): written just before the
+call it would stand in the middle of what the peephole passes work on, and
+every temporary around it stays alive.  Never between a comparison and its
+branch.
+
+**Where the 6502's way is quicker it stays.**  A 32-bit instruction costs
+about as much as two or three of a byte.  Incrementing a long in memory
+(`inc / bne`) and testing two longs for equality (compare, branch away at the
+first byte that differs) are done after one byte most of the time, so those
+are written the 6502's way with the names Q's code knows (`q_byte`).
+
+**The flags.**  The instructions that make a value in Q set N and Z for all
+32 bits, so a result that is tested against zero needs no comparison
+(`qflags`): `if a & 1023 == 0` is `ldq a / anq mask / bne`.  `stq` does not
+leave the flags alone: its prefix `$42 $42` is two real `neg a`, which set
+them by the low byte.  (Found by a loop of 65536 turns that made 256;
+`tests/mega65/qflags.p8` shows it in xmega65.)  So a value is stored before
+a comparison, never between it and the branch, and a counter that has to be
+stored is loaded again for its flags.
 
 A long comes back from a call in R14 and R15 and is fetched from there into
 Q; a long is returned by storing Q there.
@@ -430,6 +456,13 @@ not know on a line of its own is a label to it, silently.  Library assembly
 that switches to `.cpu "45gs02"` for a few lines goes back with
 `.cpu "default"`, which is the CPU of the command line (`--m45gs02` when the
 program is 45GS02 code).
+
+`tools/benchmega65.sh` times four loops on longs both ways (by the VIC-IV's
+frame counter; the jiffy clock stands still in xmega65).  Frames for the
+6502 code and the 45GS02 code: addition 65 and 48, multiplication 18 and 1,
+division 12 and 0, comparisons 71 and 63; 1,841 and 1,243 bytes.  The first
+version, which made Z zero after every instruction and did everything with
+Q, was slower than the 6502 code on two of the four.
 
 There is no other compiler to compare with: `make emucmp65` runs each test
 program on the MEGA65 (xmega65, without a window) as 6502 code and as 45GS02

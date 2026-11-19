@@ -48,7 +48,9 @@
   multiplication and division use the MEGA65's arithmetic unit (a test of
   long division: 941 bytes against 1,997).
   `make emucmp65` compares the two kinds of code for every test program in
-  xmega65.
+  xmega65, and `tools/benchmega65.sh` times loops on longs: additions take
+  48 frames where the 6502 code takes 65, comparisons 63 against 71,
+  multiplications 1 against 18.
 - Fixed: a program with more than 65,535 IR registers was compiled wrongly
   without a word (the numbers began again at zero).  p8p8's own source had
   reached that size.  For the llvm targets subroutines now share register
