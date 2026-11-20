@@ -126,6 +126,52 @@ memory of p8vi_cx16ovl (cx16):
 
 So moving those 5,260 bytes out of main memory cost 813 there.
 
+### What can go into an overlay?
+
+`-overlayinfo` answers that for a program as it is: every block with its
+bytes in main memory, and for a block that stays (`main` above all) its
+subroutines of 100 bytes and more.
+
+```
+what could go into an overlay, of p8vi_cx16ovl (cx16):
+  main                             13691   no: main stays; its subroutines can go one by one
+      main.key_mode_nav                 1425   yes
+      main.execute                             in overlay 1
+      ...
+  buffer                           12038   yes
+  xmem                                24   no: its subroutine select chooses a bank itself
+  prog8_math                         279   no: the compiler's own code calls it
+  conv                               323   no: assembly in txt.print_uw names conv.internal_uword2decimal
+  diskio                            1054   yes
+```
+
+It says no when
+
+- the compiler's own code calls the block by name (the runtime: `prog8_lib`,
+  `prog8_math`, `sys`, `floats`...);
+- the block has a place of its own (an address, a jump table);
+- assembly somewhere else names one of its subroutines, since only calls in
+  Prog8 code are led into an overlay (assembly inside the block itself is no
+  obstacle to moving the whole block);
+- a subroutine is installed as an interrupt handler;
+- on the X16 and the GameTank, a subroutine chooses a bank itself;
+- on the machines that copy an overlay in, and where it is ROM, the block's
+  assembly keeps variables in its own code (it writes to a place that the
+  same assembly defines).
+
+Blocks of the library are judged like any other, and one that gets a yes
+can be named in an `%overlay` list (`%overlay 2, diskio`).  The gain is
+smaller than the block: every one of its subroutines that is called from
+outside needs its way in.
+
+**A yes is not a promise.**  It means nothing in how the program is put
+together stands against the move.  What the compiler cannot see is what a
+subroutine does with addresses: one that reads or writes through an address
+in the overlay's window (p8vi's `load_file`, which reads a file straight
+into a page of banked text) has to stay in main memory, and so on the X16
+does code that is called with such an address.  `buffer` gets a yes above
+and must not go: it is the code that maps the banked text.
+
 An overlay that does not fit is an error from the assembler that names it:
 "overlay 2 is too large by 131 bytes".  Move a subroutine to another block.
 

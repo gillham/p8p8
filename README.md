@@ -253,6 +253,7 @@ Options p8p8 has that the reference compiler does not:
 | `-noopt` | the own code generator without its optimizations |
 | `-verbose` | print the commands that are run and the assembler's summary |
 | `-nooverlays` | take no notice of `%overlay`: the program is built in one piece, as on a machine without overlays |
+| `-overlayinfo` | after a 6502 program is built: every block (and the larger subroutines of the ones that stay) with its bytes and whether it could go into an overlay, or why not |
 | `-meminfo` | after a 6502 program is built: what it takes of main memory and of each overlay, and what is left (`-verbose` prints this too) |
 | `-libpath` | print the library directory that is used |
 | `-report <dir>` | write a report of this run into the new directory `<dir>` (see below); `-reportnosource` leaves the program's sources out of it |

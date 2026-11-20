@@ -109,6 +109,9 @@ echo "-- asmcall: assembly that calls into an overlay"
 "$p8c" -lib "$lib" -target cx16 -out "$work/said" tests/overlay/asmcall.p8 2>&1
 echo "-- subs: what -meminfo lists in each overlay (without the sizes)"
 "$p8c" -lib "$lib" -target cx16 -meminfo -out "$work/said" tests/overlay/subs.p8 2>&1 | grep '^  overlay\|^      ' | awk '{ if ($1 == "overlay") print $1, $2; else print "   ", $1 }'
+echo "-- banks: what -overlayinfo says of each block (without the sizes)"
+"$p8c" -lib "$lib" -target cx16 -overlayinfo -out "$work/said" tests/overlay/banks.p8 2>&1 | grep '^  [a-z]\|^      [a-z]' | grep -v "overlay's window" \
+    | sed 's/^\( *[a-z_0-9.]*\) *[0-9]* */\1: /' | cut -c1-110
 echo "-- overlays, for the X16 with -nooverlays: one program"
 mkdir -p "$work/off"
 "$p8c" -lib "$lib" -target cx16 -nooverlays -out "$work/off" tests/overlay/overlays.p8 || exit 1

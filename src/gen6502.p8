@@ -1280,6 +1280,8 @@ gen6502 {
             error("this code generator has no instructions for the target's cpu", target.text("cpu"))
         read_options()
         overlay_prepare()
+        if want_verdicts
+            overlay_verdicts()
         far_prepare()
         wide_prepare()
         assign_cells()
@@ -1979,6 +1981,276 @@ gen6502 {
             memtop = overlay_start
     }
 
+    ; ---- -overlayinfo: what could go into an overlay ----
+    ; For every block, and for every subroutine by itself, whether anything in how the
+    ; program is put together stands against moving its code into an overlay:
+    ;   - the code generator writes calls of it by name (the runtime blocks);
+    ;   - it has a place of its own (an address, a jump table);
+    ;   - assembly somewhere else names it: only calls in Prog8 code are led into an
+    ;     overlay (inside one block that is no obstacle to moving the whole block);
+    ;   - it is installed as an interrupt handler;
+    ;   - (keeps_data) its assembly writes to places that are defined in that same
+    ;     assembly: variables kept in the code, or code that changes itself.  In a bank of
+    ;     RAM that works; where an overlay is copied in afresh or is ROM, it does not.
+    ; What cannot be seen is said by -overlayinfo itself: code that uses an address in the
+    ; overlay's window, or changes the bank.
+    bool want_verdicts = false
+    bool irq_mark_all = false
+    ^^ir.Block scan_block = 0
+    ^^ir.Sub scan_sub = 0
+
+    sub overlay_verdicts() {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if starts_with(bl.name, "prog8_") or starts_with(bl.name, "p8_") or strings.compare(bl.name, "sys") == 0
+                    or strings.compare(bl.name, "cx16") == 0 or strings.compare(bl.name, "cbm") == 0
+                    or strings.compare(bl.name, "floats") == 0 or strings.compare(bl.name, "c64") == 0
+                    or strings.compare(bl.name, "c128") == 0
+                bl.why_not = "the compiler's own code calls it"
+            else if bl.address != 0 or bl.force_output
+                bl.why_not = "it has a place of its own in the program"
+            bl = bl.next
+        }
+        bl = prog.blocks
+        while bl != 0 {
+            scan_block = bl
+            scan_sub = 0
+            ^^ir.Chunk c = bl.chunks
+            while c != 0 {
+                if c.kind == ir.C_ASM and not c.is_ir
+                    verdict_scan(c.text, c.textlen)
+                c = c.next
+            }
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                scan_sub = s
+                if s.asmtext != 0 and not s.asm_is_ir
+                    verdict_scan(s.asmtext, s.asmlen)
+                c = s.chunks
+                while c != 0 {
+                    if c.kind == ir.C_ASM and not c.is_ir
+                        verdict_scan(c.text, c.textlen)
+                    c = c.next
+                }
+                s = s.next
+            }
+            bl = bl.next
+        }
+        irq_mark_all = true
+        overlay_interrupt_check()
+        irq_mark_all = false
+        ; Where the overlay's window is also the program's for its banked data: a
+        ; subroutine that chooses a bank itself (it calls something with "bank" in its
+        ; name) would take the overlay it is in out of the window.
+        if target.text("overlay_return") != 0 {
+            bl = prog.blocks
+            while bl != 0 {
+                s = bl.subs
+                while s != 0 {
+                    c = s.chunks
+                    while c != 0 and s.why_not == 0 {
+                        if c.kind != ir.C_ASM {
+                            ^^ir.Instr i = c.first
+                            while i != 0 {
+                                if i.op == ir.OP_CALL and i.sym != 0 and has_bank(i.sym) {
+                                    s.why_not = reason("it chooses a bank itself (", i.sym, ")")
+                                    if bl.why_not == 0
+                                        bl.why_not = reason("its subroutine ", short_name(s.name), " chooses a bank itself")
+                                    break
+                                }
+                                i = i.next
+                            }
+                        }
+                        c = c.next
+                    }
+                    s = s.next
+                }
+                bl = bl.next
+            }
+        }
+        ; an interrupt handler keeps its block out as well
+        bl = prog.blocks
+        while bl != 0 {
+            s = bl.subs
+            while s != 0 {
+                if s.why_not != 0 and bl.why_not == 0 and s.why_not[0] == 'i' and s.why_not[1] == 't' and s.why_not[3] == 'i'
+                    bl.why_not = reason("its subroutine ", short_name(s.name), " is installed as an interrupt handler")
+                s = s.next
+            }
+            bl = bl.next
+        }
+    }
+
+    ; a subroutine's own name as the source has it
+    sub short_name(^^ubyte name) -> ^^ubyte {
+        ^^ubyte tail = unscoped(name)
+        if tail[0] == 'p' and tail[1] == '8' and tail[2] == 's' and tail[3] == '_'
+            return tail + 4
+        return tail
+    }
+
+    sub has_bank(^^ubyte name) -> bool {
+        long k = 0
+        while name[k] != 0 and name[k + 1] != 0 and name[k + 2] != 0 and name[k + 3] != 0 {
+            if (name[k] | 32) == 'b' and (name[k + 1] | 32) == 'a' and (name[k + 2] | 32) == 'n' and (name[k + 3] | 32) == 'k'
+                    and (name[k + 4] | 32) != 's'
+                return true         ; (rambank, cartbank, cart.bank; not numbanks)
+            k++
+        }
+        return false
+    }
+
+    sub reason(str before, ^^ubyte name, str after) -> ^^ubyte {
+        buf.clear(nb)
+        buf.add_str(nb, before)
+        if name != 0
+            buf.add_str(nb, name)
+        buf.add_str(nb, after)
+        buf.add_byte(nb, 0)
+        return strtab.intern_cstr(nb.data)
+    }
+
+    sub asm_name_char(ubyte ch) -> bool {
+        return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_' or ch == '.'
+    }
+
+    ; the names that one piece of assembly defines outside a section (a label at the start
+    ; of a line), for the test whether it writes to one of them
+    const ubyte DEFINED = 96
+    ^^pointer defined_names = 0
+    ubyte defined_count = 0
+
+    sub verdict_scan(^^ubyte text, long length) {
+        if text == 0
+            return
+        if scanb == 0
+            scanb = buf.new(256)
+        if defined_names == 0
+            defined_names = mem.alloc(DEFINED as long * sizeof(pointer))
+        defined_count = 0
+        bool in_section = false
+        ubyte pass
+        for pass in 0 to 1 {
+            ; pass 0: what the text defines.  pass 1: what it names and writes to.
+            long k = 0
+            while k < length {
+                long line_end = k
+                while line_end < length and text[line_end] != '\n'
+                    line_end++
+                long c = k
+                while c < line_end and (text[c] == ' ' or text[c] == '\t')
+                    c++
+                ; the line's first word
+                long first = c
+                while c < line_end and (asm_name_char(text[c]) or (c == first and text[c] == '.'))
+                    c++
+                long first_len = c - first
+                if pass == 0 {
+                    if first_len >= 8 and text[first] == '.' and text[first + 1] == 's' and text[first + 2] == 'e' and text[first + 3] == 'c'
+                        in_section = true
+                    else if first_len >= 5 and text[first] == '.' and text[first + 1] == 's' and text[first + 2] == 'e' and text[first + 3] == 'n'
+                        in_section = false
+                    else if first_len > 0 and first_len < 200 and text[first] != '.' and not in_section and defined_count < DEFINED
+                            and not (first_len == 3 and c < line_end and (text[c] == ' ' or text[c] == '\t'))
+                            and not (first_len == 3 and c == line_end) {
+                        ; (a word of three letters with something after it is an instruction)
+                        defined_names[defined_count] = strtab.intern(text + first, first_len as uword)
+                        defined_count++
+                    }
+                }
+                else {
+                    ; is the line a store or a change in memory?  (after a label, if there is one)
+                    long m = first
+                    long m_len = first_len
+                    if not (m_len == 3 and (c == line_end or text[c] == ' ' or text[c] == '\t')) {
+                        while c < line_end and (text[c] == ' ' or text[c] == '\t')
+                            c++
+                        m = c
+                        while c < line_end and asm_name_char(text[c])
+                            c++
+                        m_len = c - m
+                    }
+                    bool writes = false
+                    if m_len == 3 {
+                        ubyte m0 = text[m] | 32
+                        ubyte m1 = text[m + 1] | 32
+                        ubyte m2 = text[m + 2] | 32
+                        writes = (m0 == 's' and m1 == 't' and (m2 == 'a' or m2 == 'x' or m2 == 'y' or m2 == 'z'))
+                            or (m0 == 'i' and m1 == 'n' and m2 == 'c') or (m0 == 'd' and m1 == 'e' and m2 == 'c')
+                            or (m0 == 'a' and m1 == 's' and m2 == 'l') or (m0 == 'l' and m1 == 's' and m2 == 'r')
+                            or (m0 == 'r' and m1 == 'o' and (m2 == 'l' or m2 == 'r'))
+                            or (m0 == 't' and (m1 == 'r' or m1 == 's') and m2 == 'b')
+                    }
+                    ; every name on the rest of the line
+                    bool operand = true
+                    while c < line_end and text[c] != ';' {
+                        if asm_name_char(text[c]) and not (text[c] >= '0' and text[c] <= '9') and text[c] != '.' {
+                            long w = c
+                            while c < line_end and asm_name_char(text[c])
+                                c++
+                            if c - w < 200
+                                verdict_name(text + w, c - w, writes and operand)
+                            operand = false
+                        }
+                        else
+                            c++
+                    }
+                }
+                k = line_end + 1
+            }
+        }
+    }
+
+    ; a name in assembly: a subroutine of the program that it names, or (written) a place
+    ; in the text itself
+    sub verdict_name(^^ubyte spelled, long length, bool written) {
+        ^^ubyte name = strtab.intern(spelled, length as uword)
+        if written {
+            ubyte d
+            for d in 0 to defined_count {
+                if d < defined_count {
+                    ^^ubyte known = defined_names[d]
+                    if known == name {
+                        if scan_sub != 0
+                            scan_sub.keeps_data = true
+                        scan_block.keeps_data = true
+                    }
+                }
+            }
+        }
+        ^^ir.Sub named = 0
+        ^^ir.Block named_block = 0
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 and named == 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                ; (its full name anywhere; its own short name inside its block)
+                if s.name == name or strings.compare(s.name, name) == 0 or (bl == scan_block and strings.compare(unscoped(s.name), name) == 0) {
+                    named = s
+                    named_block = bl
+                    break
+                }
+                s = s.next
+            }
+            bl = bl.next
+        }
+        if named == 0 or named == scan_sub
+            return
+        ^^ubyte owner = scan_block.name
+        if scan_sub != 0
+            owner = scan_sub.name
+        if named.why_not == 0
+            named.why_not = reason("assembly in ", owner, " names it")
+        if named_block != scan_block and named_block.why_not == 0 {
+            buf.clear(scanb)
+            buf.add_str(scanb, "assembly in ")
+            buf.add_str(scanb, owner)
+            buf.add_str(scanb, " names ")
+            buf.add_byte(scanb, 0)
+            named_block.why_not = reason(scanb.data, named.name, "")
+        }
+    }
+
     ; A subroutine in an overlay cannot be an interrupt handler: an interrupt comes
     ; whatever is in the window (and the thunks keep A in one place while they change the
     ; bank).  What can be seen is the usual way of installing one: the address of a
@@ -2010,7 +2282,7 @@ gen6502 {
         ubyte known = 0
         ^^ir.Instr i = c.first
         while i != 0 {
-            if i.op == ir.OP_LOAD and i.sym != 0 and overlay_of(i.sym) != 0 {
+            if i.op == ir.OP_LOAD and i.sym != 0 and (overlay_of(i.sym) != 0 or (irq_mark_all and find_sub(i.sym) != 0)) {
                 handler_regs[known & 7] = i.r1
                 handler_names[known & 7] = i.sym
                 known++
@@ -2038,7 +2310,13 @@ gen6502 {
         ubyte k
         for k in 0 to 7 {
             if k < known and handler_regs[k] == reg {
-                error("a subroutine in an overlay cannot be an interrupt handler (it is only in memory while its own code runs)", handler_names[k])
+                if irq_mark_all {
+                    ^^ir.Sub handler = find_sub(handler_names[k])
+                    if handler != 0 and handler.why_not == 0
+                        handler.why_not = "it is installed as an interrupt handler"
+                }
+                else
+                    error("a subroutine in an overlay cannot be an interrupt handler (it is only in memory while its own code runs)", handler_names[k])
                 return
             }
         }

@@ -136,6 +136,16 @@ overlay 2
     main.with_inner
     main.report
 overlay 3
+-- banks: what -overlayinfo says of each block (without the sizes)
+  main: no: main stays; its subroutines can go one by one
+  work: in overlay 1
+  cbm: no: the compiler's own code calls it
+  cx16: no: the compiler's own code calls it
+  sys: no: the compiler's own code calls it
+  p8_sys_startup: no: the compiler's own code calls it
+  prog8_lib: no: the compiler's own code calls it
+  txt: yes
+  conv: no: assembly in txt.print_uw names conv.internal_uword2decimal
 -- overlays, for the X16 with -nooverlays: one program
 overlays.prg
 MAIN FIRST 42 SECOND FIRST 1238 2

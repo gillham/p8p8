@@ -668,6 +668,16 @@ of labels (a symbol that nothing uses is not in that list, so sizes cannot
 be symbols of their own), and what the thunks, the stubs and the support
 file take in main memory from labels around them.
 
+`-overlayinfo` (`gen6502.overlay_verdicts`, `main.overlay_info`) gives every
+block and subroutine a reason why it cannot go into an overlay, or none:
+the runtime blocks that the generator names itself, a block with an address,
+a name that assembly elsewhere uses (every name in every piece of assembly
+is looked up among the subroutines), an interrupt handler, a call of
+something with "bank" in its name where the window is the program's too,
+and assembly that writes to a place it defines itself (outside a section),
+which only matters where an overlay is copied in or is ROM.  What code does
+with addresses is not looked at, and the report says so.
+
 After the build the driver removes what the assembler wrote for each part
 (`name.ov0`, `name.ov1`...).
 

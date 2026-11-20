@@ -32,6 +32,11 @@
 - Overlays on the GameTank: `%overlay n` is bank n of the cartridge (128
   to 254), with what the block includes as assembly or binary beside its
   code, and `p8c` writes the whole 2 MB cartridge as `name.gtr`.
+- `-overlayinfo` lists every block of a program, the library's too, with
+  its bytes and whether it could go into an overlay or why not (the
+  compiler's own runtime, a name that assembly uses, an interrupt handler,
+  a subroutine that chooses a bank, variables kept in assembly code).
+  Blocks of the library can be named in an `%overlay` list.
 - `-meminfo` lists the blocks and subroutines in each overlay with their
   bytes, and what the overlays cost in main memory (the ways in, the ways
   out and back, the code they share).

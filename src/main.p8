@@ -348,6 +348,10 @@ main {
                 opt_meminfo = true
             else if strings.compare(arg, "-nooverlays") == 0
                 gen6502.overlays_off = true
+            else if strings.compare(arg, "-overlayinfo") == 0 {
+                opt_overlayinfo = true
+                gen6502.want_verdicts = true
+            }
             else if strings.compare(arg, "-traceimports") == 0
                 importer.trace = true
             else if strings.compare(arg, "-warnunused") == 0
@@ -719,6 +723,8 @@ main {
         out.nl()
         out.puts("  -nooverlays    take no notice of %overlay: the program in one piece, as for a machine without overlays")
         out.nl()
+        out.puts("  -overlayinfo   for a 6502 machine: list the blocks and main's subroutines with their sizes, and what stands against moving each into an overlay")
+        out.nl()
         out.puts("  -meminfo       for a 6502 machine: print what the program takes of main memory and of each overlay, and what is left")
         out.nl()
         out.puts("  -ir            generate the IR and write it as <module>.p8ir (-out dir: where, default .)")
@@ -1037,6 +1043,7 @@ main {
     ^^ubyte out_ext = 0
     ^^ubyte built_ext = 0           ; the extension build() gave the program
     bool opt_warnshadow = false     ; -warnshadow: the assembler's warnings about symbols that hide others
+    bool opt_overlayinfo = false    ; -overlayinfo: after a 6502 program is built, what of it could go into an overlay
     bool opt_meminfo = false        ; -meminfo: after a 6502 program is built, how much memory it takes and leaves
     bool opt_verbose = false        ; -verbose: say what is run, and let the assembler print its summary
 
@@ -1668,6 +1675,164 @@ main {
         return count + 1
     }
 
+    ; -overlayinfo: every block that has code in main memory with its bytes, and whether
+    ; it could go into an overlay (what gen6502.overlay_verdicts found); under a block
+    ; that cannot go as a whole, its larger subroutines one by one.  Sizes are from where
+    ; a block or a subroutine begins in the assembler's list of labels to the next one.
+    const uword INFO_STARTS = 2048
+    ^^long info_starts = 0
+    uword info_count = 0
+
+    sub info_next(long start, long otherwise) -> long {
+        long best = otherwise
+        uword k = 0
+        while k < info_count {
+            if info_starts[k] > start and info_starts[k] < best
+                best = info_starts[k]
+            k++
+        }
+        return best
+    }
+
+    sub info_line(^^ubyte name, ubyte indent, long bytes, ubyte overlay, ^^ubyte why_not, bool keeps_data) {
+        ubyte k
+        for k in 1 to indent
+            out.putc(' ')
+        report_name(name)
+        if overlay != 0
+            out.puts("      ")
+        else
+            report_number(bytes, 6)
+        out.puts("   ")
+        if overlay != 0 {
+            out.puts("in overlay ")
+            report_number(overlay, 1)
+        }
+        else if why_not != 0 {
+            out.puts("no: ")
+            out.puts(why_not)
+        }
+        else if keeps_data and (target.number("overlay_image_size", 0) != 0 or target.text("overlay_return") == 0) {
+            out.puts("no: its assembly keeps variables in its own code")
+            if target.number("overlay_image_size", 0) != 0
+                out.puts(" (an overlay is ROM here)")
+            else
+                out.puts(" (an overlay is copied in afresh here)")
+        }
+        else
+            out.puts("yes")
+        out.nl()
+    }
+
+    sub overlay_info(^^ubyte name) {
+        if ov_front == 0 {
+            ov_front = buf.new(4096)
+            ov_path = buf.new(1024)
+            ov_ext = buf.new(64)
+            ov_file = buf.new(65536)
+        }
+        if io_platform.file_size(ov_output(name, ".vice-mon-list")) <= 0
+            return
+        ^^ubyte labels
+        long labels_size
+        labels, labels_size = ov_read(ov_path.data)
+        long finish = label_value(labels, labels_size, "prog8_program_end")
+        if info_starts == 0
+            info_starts = mem.alloc(INFO_STARTS as long * 4)
+        ; where everything begins that is in main memory
+        info_count = 0
+        ^^ir.Block bl = gen6502.prog.blocks
+        while bl != 0 {
+            long start = label_value(labels, labels_size, bl.name)
+            if start >= 0 and bl.overlay == 0 and info_count < INFO_STARTS {
+                info_starts[info_count] = start
+                info_count++
+            }
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                start = label_value(labels, labels_size, s.name)
+                if start >= 0 and s.overlay == 0 and info_count < INFO_STARTS {
+                    info_starts[info_count] = start
+                    info_count++
+                }
+                s = s.next
+            }
+            bl = bl.next
+        }
+        ; (the thunks and what else follows the blocks end the last of them)
+        long after = label_value(labels, labels_size, "run_global_inits")
+        if after >= 0 and info_count < INFO_STARTS {
+            info_starts[info_count] = after
+            info_count++
+        }
+        after = label_value(labels, labels_size, "p8ov_thunks_start")
+        if after >= 0 and info_count < INFO_STARTS {
+            info_starts[info_count] = after
+            info_count++
+        }
+        out.puts("what could go into an overlay, of ")
+        out.puts(name)
+        out.puts(" (")
+        out.puts(importer.target)
+        out.puts("):")
+        out.nl()
+        bl = gen6502.prog.blocks
+        while bl != 0 {
+            start = label_value(labels, labels_size, bl.name)
+            if start >= 0 and bl.overlay == 0 {
+                ; the block's bytes: to the next block (its own subroutines are inside it)
+                long block_end = finish
+                uword k = 0
+                ^^ir.Block other = gen6502.prog.blocks
+                while other != 0 {
+                    long other_start = label_value(labels, labels_size, other.name)
+                    if other != bl and other.overlay == 0 and other_start > start and other_start < block_end
+                        block_end = other_start
+                    other = other.next
+                }
+                if after >= 0 and after > start and after < block_end
+                    block_end = after
+                long run_inits = label_value(labels, labels_size, "run_global_inits")
+                if run_inits > start and run_inits < block_end
+                    block_end = run_inits
+                long bytes = block_end - start
+                if bytes > 0 {
+                    bool whole = bl.why_not == 0 and strings.compare(bl.name, "p8b_main") != 0
+                    if strings.compare(bl.name, "p8b_main") == 0
+                        info_line(bl.name, 2, bytes, 0, "main stays; its subroutines can go one by one", false)
+                    else
+                        info_line(bl.name, 2, bytes, 0, bl.why_not, bl.keeps_data)
+                    if not whole and not bl.library {
+                        ; a block of the program that stays: its subroutines of some size
+                        s = bl.subs
+                        while s != 0 {
+                            long sub_start = label_value(labels, labels_size, s.name)
+                            if sub_start >= 0 and gen6502.parent_of(bl, s) == 0 {
+                                long sub_bytes = info_next(sub_start, block_end) - sub_start
+                                if s.overlay != 0
+                                    info_line(s.name, 6, 0, s.overlay, 0, false)
+                                else if sub_bytes >= 100 {
+                                    if strings.compare(s.name, "p8b_main.p8s_start") == 0
+                                        info_line(s.name, 6, sub_bytes, 0, "the program begins here", false)
+                                    else
+                                        info_line(s.name, 6, sub_bytes, 0, s.why_not, s.keeps_data)
+                                }
+                            }
+                            s = s.next
+                        }
+                    }
+                }
+            }
+            else if bl.overlay != 0 and (bl.subs != 0 or bl.chunks != 0)
+                info_line(bl.name, 2, 0, bl.overlay, 0, false)
+            bl = bl.next
+        }
+        out.puts("  (yes: nothing in how the program is put together stands against it.  Code that uses an address")
+        out.nl()
+        out.puts("  in the overlay's window, or chooses a bank itself, has to stay out all the same: that cannot be seen.)")
+        out.nl()
+    }
+
     ; -meminfo (and -verbose): what the program that was just built takes and leaves
     sub memory_report(^^ubyte name) {
         if ov_front == 0 {
@@ -2194,6 +2359,8 @@ main {
                 built_ext = ".prg"
                 if opt_meminfo or opt_verbose
                     memory_report(name)
+                if opt_overlayinfo
+                    overlay_info(name)
                 if gen6502.breakpoints != 0
                     breakpoint_list(name)
                 banked_calls_file(name)
@@ -2315,6 +2482,8 @@ main {
         built_ext = extension
         if opt_own and not is_llvm and (opt_meminfo or opt_verbose)
             memory_report(name)
+        if opt_own and not is_llvm and opt_overlayinfo
+            overlay_info(name)
         if opt_own and not is_llvm and gen6502.breakpoints != 0
             breakpoint_list(name)
         banked_calls_file(name)

@@ -321,6 +321,8 @@ ir {
         bool asm_is_ir      ; asmtext is inline IR, not native assembly
         bool clobbers_declared
         ubyte overlay       ; %overlay n in it: its code goes into that overlay (0: where its block's is)
+        ^^ubyte why_not     ; -overlayinfo: why it cannot go into an overlay by itself, or 0
+        bool keeps_data     ; -overlayinfo: its assembly writes to places in its own text
         bool no_pool        ; backend use: may run from an interrupt, so it keeps off the shared temporaries
         bool reenter        ; backend use: may be called again while it runs (recursion, or it is not known)
         ^^ubyte clobbered   ; an asmsub's clobbered CPU registers ("A,X,Y"), or 0
@@ -341,6 +343,8 @@ ir {
         bool force_output
         bool chipram        ; %option amiga_chipram: its code and variables go in the Amiga's chip memory
         ubyte overlay       ; %overlay n: its code goes into that overlay (0: the main program)
+        ^^ubyte why_not     ; -overlayinfo: why the block cannot go into an overlay, or 0
+        bool keeps_data     ; -overlayinfo: its assembly writes to places in its own text
         bool overlay_data   ; %option overlay_data: the library is called with this block's overlay left in the window
         bool no_prefixing
         bool ignore_unused
