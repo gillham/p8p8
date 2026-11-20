@@ -378,6 +378,7 @@ ir {
         ubyte hwreg         ; backend use: the CPU register it lives in, or 0
         long uses           ; backend use: how often the code names it
         bool split          ; one half (_lsb or _msb) of a split word array
+        ubyte home          ; backend use: the overlay its initial values are in (0: main memory)
     }
 
     struct Program {

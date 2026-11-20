@@ -609,6 +609,12 @@ the window only while the overlay's code runs:
 - a call from one overlay into another (`overlay_thunk_cross`) keeps the
   caller's bank on the stack.
 
+A block with `%option overlay_data` also has its data in its overlay: the
+variables with values that are arrays or strings, and the string literals
+that only its code names (`overlay_data_homes` gives each such variable its
+`home`; `data_values` writes the ones of a part, the overlay's after its
+code).
+
 ROM routines called by their address are called as they are.  So are
 routines of the library when the calling block has `%option overlay_data`
 (`ir.Block.overlay_data`): its overlay stays in the window, because the block

@@ -43,9 +43,11 @@
 - An interrupt handler in an overlay is an error where the compiler can see
   it being installed; assembly that calls a subroutine in another overlay
   by its full name gets a warning.
-- `%option overlay_data` in a block of an overlay: routines of the library
-  are called with the block's bank still in the window, so that a picture
-  beside its code can be unpacked or copied by them.
+- `%option overlay_data` in a block of an overlay: its strings, its arrays
+  with values and the string literals only its code uses are in the overlay
+  beside the code (on the GameTank: out of the fixed bank), and routines of
+  the library are called with the overlay still in the window, so that
+  they can print, copy or unpack what is there.
 - An overlay that the program names but whose subroutines nothing calls is
   reported, and the program is still built as one with overlays (it was
   built in one piece without a word).

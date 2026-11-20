@@ -255,15 +255,48 @@ bytes free there where 1,190 were.
 
 ## What is where
 
-**Code is in the overlay; data is not.**  The variables of an overlay block,
-its strings and its arrays are in main memory with all the others (on the
-GameTank: the variables in RAM, the strings and constant arrays in the
-fixed bank).  So
+**Code is in the overlay; data is not, unless you say so.**  The variables
+of an overlay block, its strings and its arrays are in main memory with all
+the others (on the GameTank: the variables in RAM, the strings and arrays
+with values in the fixed bank).  So
 
 - a variable keeps its value whichever overlay is running, and any code may
   use it;
 - a string or an array of an overlay block can be passed to any subroutine;
 - an overlay does not make a program's data smaller, only its code.
+
+**`%option overlay_data` puts a block's strings and arrays into its overlay.**
+With it the block's strings, its arrays that have values, and the string
+literals that only its code uses are in the overlay beside the code:
+
+```prog8
+%overlay 129, credits
+
+credits {
+    %option overlay_data
+    str title = "Space Man GT"
+    ubyte[] colours = [3, 14, 15, 92]
+
+    sub show() {
+        txt.print(title)
+        txt.print(" by many hands")
+    }
+}
+```
+
+That is where they belong on the GameTank, whose fixed bank is 16 KB for
+everything else.  What it asks of the block:
+
+- only its own code uses them, or routines of the library that it hands
+  them to (those are called with the overlay left in the window).  A
+  subroutine of the main program, or of another overlay, that is given such
+  a string finds something else at that address;
+- they are not written to.  In a cartridge they cannot be; on the C64, the
+  C128 and the MEGA65 what is written is gone when the overlay is brought
+  in again.
+
+Variables without values (and single variables with one) stay in main
+memory as before, so the block can still keep state.
 
 **The library is in main memory.**  `textio`, `diskio` and the rest are
 there for every overlay, and are not counted against one.

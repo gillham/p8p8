@@ -20,6 +20,10 @@ HELLO 42 54 REPORT 4 20 12 210
 listed.non
 listed.prg
 LISTED 42 123 REPORT 7 5
+-- data, 65c02
+data.non
+data.prg
+DATA IN THE OVERLAY A LITERAL TOO 15 2000 IN MAIN MEMORY
 -- overlays, 65816
 overlays.non
 overlays.prg
@@ -42,6 +46,10 @@ HELLO 42 54 REPORT 4 20 12 210
 listed.non
 listed.prg
 LISTED 42 123 REPORT 7 5
+-- data, 65816
+data.non
+data.prg
+DATA IN THE OVERLAY A LITERAL TOO 15 2000 IN MAIN MEMORY
 -- overlays, c64 with an REU
 overlays.non
 overlays.prg
@@ -60,6 +68,11 @@ HELLO 42 54 REPORT 4 20 12 210
 listed.non
 listed.prg
 LISTED 42 123 REPORT 7 5
+-- data, c64 with an REU
+data.non
+data.prg
+DATA IN THE OVERLAY A LITERAL TOO 15 200
+0 IN MAIN MEMORY
 -- overlays, c128 with an REU
 overlays.non
 overlays.prg
@@ -78,6 +91,11 @@ HELLO 42 54 REPORT 4 20 12 210
 listed.non
 listed.prg
 LISTED 42 123 REPORT 7 5
+-- data, c128 with an REU
+data.non
+data.prg
+DATA IN THE OVERLAY A LITERAL TOO 15 200
+0 IN MAIN MEMORY
 -- overlays, mega65, 45gs02
 overlays.non
 overlays.prg
@@ -96,6 +114,10 @@ HELLO 42 54 REPORT 4 20 12 210
 listed.non
 listed.prg
 LISTED 42 123 REPORT 7 5
+-- data, mega65, 45gs02
+data.non
+data.prg
+DATA IN THE OVERLAY A LITERAL TOO 15 2000 IN MAIN MEMORY
 -- overlays, mega65, 6502
 overlays.non
 overlays.prg
@@ -114,6 +136,10 @@ HELLO 42 54 REPORT 4 20 12 210
 listed.non
 listed.prg
 LISTED 42 123 REPORT 7 5
+-- data, mega65, 6502
+data.non
+data.prg
+DATA IN THE OVERLAY A LITERAL TOO 15 2000 IN MAIN MEMORY
 -- cartridge, gametank: the banks of the cartridge
 cartridge.gtr
 2097152 bytes
@@ -121,6 +147,7 @@ bank 128 has something in it
 bank 129 has something in it
 bank 255 has something in it
 bank 129 begins with 0a141e28
+the string of the block in bank 129 is in bank 129
 the reset vector is 0xfd00
 -- handler: an interrupt handler in an overlay
 6502 code generator: a subroutine in an overlay cannot be an interrupt handler (it is only in memory while its own code runs): p8b_main.p8s_ticker

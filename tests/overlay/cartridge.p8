@@ -27,6 +27,8 @@ main {
         txt.spc()
         txt.print_uw(counter)
         txt.nl()
+        asset.describe()
+        txt.nl()
     }
 
     sub triple(uword v) -> uword {
@@ -55,6 +57,13 @@ packed:
     %asm {{
         .byte  1, 2, 3, 4, 5, 6
     }}
+
+    str where = "text in bank 129"
+
+    ; (the string is in this bank too, and the library prints it from here)
+    sub describe() {
+        txt.print(where)
+    }
 
     ; a routine of the library copies out of this bank
     sub copied() -> ubyte {

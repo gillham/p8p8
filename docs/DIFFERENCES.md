@@ -224,8 +224,10 @@ overlays and back.  `p8c` writes two files that belong together,
 ignored and the program is built in one piece.  Upstream has no such
 directive.
 
-`%option overlay_data` in a block of an overlay says that it has data beside
-its code which routines of the library are given the address of.
+`%option overlay_data` in a block of an overlay puts the block's strings and
+arrays with values into the overlay too, and has routines of the library
+called with the overlay left in the window, so that they can be given the
+address of what is there.
 
 [OVERLAYS.md](OVERLAYS.md) is the guide: the machines, what belongs in an
 overlay and what does not, what a call costs.

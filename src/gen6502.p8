@@ -1969,6 +1969,7 @@ gen6502 {
                 wanted++
             }
         }
+        overlay_data_homes()
         if overlay_max != 0
             overlay_interrupt_check()
         long most = target.number("overlay_max", 255)
@@ -2248,6 +2249,134 @@ gen6502 {
             buf.add_str(scanb, " names ")
             buf.add_byte(scanb, 0)
             named_block.why_not = reason(scanb.data, named.name, "")
+        }
+    }
+
+    ; The strings and the arrays with values of a block with "%option overlay_data" are in
+    ; the block's overlay with its code (v.home), and so is a string literal that only
+    ; such code names.  Everything else stays in main memory: a variable is where all
+    ; code can get at it, and so is a string that code outside the overlay names too.
+    sub overlay_data_homes() {
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            v.home = 0
+            v = v.next
+        }
+        if overlay_max == 0
+            return
+        bool any = false
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if bl.overlay_data
+                any = true
+            bl = bl.next
+        }
+        if not any
+            return
+        v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_VAR and v.init != 0 and array_length(v.typestr) != 0 {
+                if starts_with(v.name, "prog8_interned_strings.")
+                    v.home = 255                ; (not seen yet: the code below says)
+                else {
+                    bl = prog.blocks
+                    while bl != 0 {
+                        if bl.overlay_data and scoped_in(v.name, bl.name) {
+                            v.home = bl.overlay
+                            ; (a variable of a subroutine is where that subroutine is)
+                            ^^ir.Sub s = bl.subs
+                            while s != 0 {
+                                if scoped_in(v.name, s.name)
+                                    v.home = s.overlay
+                                s = s.next
+                            }
+                        }
+                        bl = bl.next
+                    }
+                }
+            }
+            v = v.next
+        }
+        ; a string literal: in an overlay when all the code that names it is there
+        bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Chunk c = bl.chunks
+            while c != 0 {
+                literal_homes(c, 0)
+                c = c.next
+            }
+            s = bl.subs
+            while s != 0 {
+                ubyte here = 0
+                if bl.overlay_data
+                    here = s.overlay
+                c = s.chunks
+                while c != 0 {
+                    literal_homes(c, here)
+                    c = c.next
+                }
+                s = s.next
+            }
+            bl = bl.next
+        }
+        literal_homes(prog.initglobals, 0)
+        v = prog.vars
+        while v != 0 {
+            if v.home == 255
+                v.home = 0
+            ; (one that a variable's values name, an array of strings, stays in main memory)
+            if v.init != 0 and v.kind == ir.V_VAR {
+                ^^ir.Var named = prog.vars
+                while named != 0 {
+                    if named.home != 0 and named != v and starts_with(named.name, "prog8_interned_strings.") and text_has(v.init, named.name)
+                        named.home = 0
+                    named = named.next
+                }
+            }
+            v = v.next
+        }
+    }
+
+    ; is name in the scope of that block or subroutine ("scope.something")?
+    sub scoped_in(^^ubyte name, ^^ubyte scope) -> bool {
+        long k = 0
+        while scope[k] != 0 and scope[k] == name[k]
+            k++
+        return scope[k] == 0 and name[k] == '.'
+    }
+
+    sub text_has(^^ubyte text, ^^ubyte part) -> bool {
+        long k = 0
+        while text[k] != 0 {
+            long m = 0
+            while part[m] != 0 and text[k + m] == part[m]
+                m++
+            if part[m] == 0
+                return true
+            k++
+        }
+        return false
+    }
+
+    sub literal_homes(^^ir.Chunk c, ubyte here) {
+        if c == 0 or c.kind == ir.C_ASM
+            return
+        ^^ir.Instr i = c.first
+        while i != 0 {
+            if i.sym != 0 and starts_with(i.sym, "prog8_interned_strings.") {
+                ^^ir.Var v = prog.vars
+                while v != 0 {
+                    if v.name == i.sym or strings.compare(v.name, i.sym) == 0 {
+                        if v.home == 255
+                            v.home = here
+                        else if v.home != here
+                            v.home = 0
+                        break
+                    }
+                    v = v.next
+                }
+            }
+            i = i.next
         }
     }
 
@@ -2700,6 +2829,10 @@ gen6502 {
                     block_code(bl)
                     bl = bl.next
                 }
+                put("p8ov_strings_and_arrays_")
+                putn(n)
+                raw(":")
+                data_values(n)
                 cur_overlay = 0
                 raw("    .endm")
                 put("    .if prog8_overlay == ")
@@ -8858,9 +8991,16 @@ gen6502 {
         }
         struct_definitions()
         raw("; variables with initial values")
+        data_values(0)
+        raw("")
+    }
+
+    ; the variables with initial values that are in this part of the program: 0 is main
+    ; memory, n an overlay (the strings and arrays of a block with %option overlay_data)
+    sub data_values(ubyte part) {
         ^^ir.Var v = prog.vars
         while v != 0 {
-            if v.kind == ir.V_VAR and v.init != 0 and v.zpaddr == 0 and not ram_initialized(v) {
+            if v.kind == ir.V_VAR and v.init != 0 and v.zpaddr == 0 and not ram_initialized(v) and v.home == part {
                 if v.align > 1 {
                     put("    .align  ")
                     putn(v.align)
@@ -8906,7 +9046,6 @@ gen6502 {
             }
             v = v.next
         }
-        raw("")
     }
 
     ; memory() blocks, and static struct instances

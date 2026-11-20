@@ -1648,6 +1648,14 @@ main {
             }
             bl = bl.next
         }
+        buf.clear(ov_ext)
+        buf.add_str(ov_ext, "p8ov_strings_and_arrays_")
+        buf.add_long(ov_ext, n)
+        buf.add_byte(ov_ext, 0)
+        ^^ubyte data_label = strtab.intern_cstr(ov_ext.data)
+        long data_start = label_value(labels, labels_size, data_label)
+        if data_start >= 0 and data_start < gen6502.overlay_start + ov_sizes[n]
+            count = content_add(count, data_label, labels, labels_size)
         if count < 2
             return              ; (one thing: the overlay's line says it all)
         ubyte k
@@ -1660,7 +1668,10 @@ main {
                     finish = content_starts[other]
             }
             out.puts("      ")
-            report_name(content_names[k])
+            if content_names[k] == data_label
+                out.puts("(its strings and arrays)        ")
+            else
+                report_name(content_names[k])
             report_number(finish - content_starts[k], 6)
             out.nl()
         }
