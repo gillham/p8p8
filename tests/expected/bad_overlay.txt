@@ -1,4 +1,5 @@
-tests/bad_overlay.p8:2:1: error: %overlay may only occur in a block or in a subroutine
-tests/bad_overlay.p8:11:5: error: invalid overlay directive, expected a number from 1 to 255
-tests/bad_overlay.p8:13:9: error: invalid overlay directive, expected a number from 1 to 255
-tests/bad_overlay.p8:18:5: error: invalid overlay directive, expected a number from 1 to 255
+tests/bad_overlay.p8:2:1: error: %overlay in a module needs the blocks and subroutines that are in the overlay after its number
+tests/bad_overlay.p8:3:18: error: expected the name of a block or of a subroutine (block.name)
+tests/bad_overlay.p8:12:5: error: invalid overlay directive, expected a number from 1 to 255
+tests/bad_overlay.p8:14:9: error: invalid overlay directive, expected a number from 1 to 255
+tests/bad_overlay.p8:19:5: error: invalid overlay directive, expected a number from 1 to 255

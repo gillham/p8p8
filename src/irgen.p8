@@ -114,9 +114,67 @@ irgen {
         }
         if program_defers
             gen_defer_block()
+        overlay_lists()
         main_block_first()
         addressed_blocks_last()
         return prog
+    }
+
+    ; "%overlay n, name, name..." in a module: the blocks and subroutines that are in
+    ; overlay n, all in one place (and the program's other sources are as they are for a
+    ; build without overlays).  A program that also has the directive inside a block or
+    ; a subroutine gets a warning: what is where should be in one place.
+    ^^ast.Node overlay_inline = 0       ; a directive inside a block or a subroutine, if there is one
+
+    sub overlay_lists() {
+        bool listed = false
+        ^^importer.Module m = importer.modules
+        while m != 0 {
+            ^^ast.Node d = m.tree.a
+            while d != 0 {
+                if d.kind == ast.N_DIRECTIVE and d.a != 0 and d.a.kind == ast.N_INT and strings.compare(d.name, "overlay") == 0 {
+                    listed = true
+                    ^^ast.Node name = d.a.next
+                    while name != 0 {
+                        if name.kind == ast.N_IDENT
+                            overlay_listed(name, d.a.value as ubyte)
+                        name = name.next
+                    }
+                }
+                d = d.next
+            }
+            m = m.next
+        }
+        if listed and overlay_inline != 0
+            diag.warning_at(source.get(overlay_inline.file), overlay_inline.line, overlay_inline.col, "%overlay here and in a list at the top of a module: the list is the place to see what is where (it is what counts where both name the same thing)")
+    }
+
+    sub overlay_listed(^^ast.Node name, ubyte number) {
+        ^^symtab.Sym s = resolver.lookup_name(name.name, name)
+        if s == 0 or (s.kind != symtab.K_BLOCK and s.kind != symtab.K_SUB) {
+            error(name, "%overlay: this is not the name of a block or of a subroutine")
+            return
+        }
+        ^^ubyte irname = sym_name(s)
+        if s.kind == symtab.K_BLOCK {
+            ^^ir.Block b = find_block(irname)
+            if b != 0
+                b.overlay = number
+            return
+        }
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub su = bl.subs
+            while su != 0 {
+                if su.name == irname or strings.compare(su.name, irname) == 0 {
+                    su.overlay = number
+                    return
+                }
+                su = su.next
+            }
+            bl = bl.next
+        }
+        ; (a subroutine that nothing uses has no code: nothing to place)
     }
 
     ; The blocks that have an address of their own come after all the others, lowest
@@ -1693,8 +1751,10 @@ irgen {
             block.chipram = symtab.has_option(b.a, strtab.intern_cstr("amiga_chipram"))
             ^^ast.Node od = b.a
             while od != 0 {
-                if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0
+                if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0 {
                     block.overlay = od.a.value as ubyte
+                    overlay_inline = od
+                }
                 od = od.next
             }
             block.no_prefixing = symtab.has_option(b.a, strtab.intern_cstr("no_symbol_prefixing")) or symtab.has_option(module.tree.a, strtab.intern_cstr("no_symbol_prefixing"))
@@ -2243,8 +2303,10 @@ irgen {
         crumb.name = cursub.name
         ^^ast.Node od = n.c
         while od != 0 {
-            if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0
+            if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0 {
                 cursub.overlay = od.a.value as ubyte
+                overlay_inline = od
+            }
             od = od.next
         }
         ; (on the llvm targets a subroutine uses the register numbers of the ones before

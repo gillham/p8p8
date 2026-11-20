@@ -16,6 +16,10 @@ words.prg
 subs.non
 subs.prg
 HELLO 42 54 REPORT 4 20 12 210
+-- listed, 65c02
+listed.non
+listed.prg
+LISTED 42 123 REPORT 7 5
 -- overlays, 65816
 overlays.non
 overlays.prg
@@ -34,6 +38,10 @@ words.prg
 subs.non
 subs.prg
 HELLO 42 54 REPORT 4 20 12 210
+-- listed, 65816
+listed.non
+listed.prg
+LISTED 42 123 REPORT 7 5
 -- overlays, c64 with an REU
 overlays.non
 overlays.prg
@@ -48,6 +56,10 @@ words.prg
 subs.non
 subs.prg
 HELLO 42 54 REPORT 4 20 12 210
+-- listed, c64 with an REU
+listed.non
+listed.prg
+LISTED 42 123 REPORT 7 5
 -- overlays, c128 with an REU
 overlays.non
 overlays.prg
@@ -62,6 +74,10 @@ words.prg
 subs.non
 subs.prg
 HELLO 42 54 REPORT 4 20 12 210
+-- listed, c128 with an REU
+listed.non
+listed.prg
+LISTED 42 123 REPORT 7 5
 -- overlays, mega65, 45gs02
 overlays.non
 overlays.prg
@@ -76,6 +92,10 @@ words.prg
 subs.non
 subs.prg
 HELLO 42 54 REPORT 4 20 12 210
+-- listed, mega65, 45gs02
+listed.non
+listed.prg
+LISTED 42 123 REPORT 7 5
 -- overlays, mega65, 6502
 overlays.non
 overlays.prg
@@ -90,6 +110,10 @@ words.prg
 subs.non
 subs.prg
 HELLO 42 54 REPORT 4 20 12 210
+-- listed, mega65, 6502
+listed.non
+listed.prg
+LISTED 42 123 REPORT 7 5
 -- overlays, for the X16 with -nooverlays: one program
 overlays.prg
 MAIN FIRST 42 SECOND FIRST 1238 2

@@ -1,5 +1,6 @@
 ; %overlay: where it may stand and what it takes.
-%overlay 1                      ; error: in a block or a subroutine only
+%overlay 1                      ; error: a list needs names
+%overlay 2, one, 3              ; error: a name
 
 main {
     sub start() {

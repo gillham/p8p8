@@ -566,6 +566,10 @@ overlay of that one).  Such a subroutine is written in its overlay's part
 outside its block's scope but under its full name
 (`p8b_main.p8s_name  .proc`), so nothing that names it changes.
 
+`%overlay n, name, name...` at module level is the same said from outside:
+`irgen.overlay_lists` looks each name up after all blocks are generated
+and sets the block's or the subroutine's overlay.
+
 Only code is in an overlay.  The variables, strings and arrays of such a
 block are in main memory with all the others (the code generator writes them
 outside the blocks anyway), so an overlay is never written back, a value is

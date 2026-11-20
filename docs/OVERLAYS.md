@@ -78,6 +78,26 @@ Subroutines declared inside it go with it.  `main.start` stays in main
 memory.  Blocks are the tidier unit: what belongs together is together, and
 calls between its subroutines cost nothing extra.
 
+### All in one place
+
+The same can be said at the top of a module, outside every block, as a list:
+the overlay's number, then the blocks and the subroutines (`block.name`)
+that are in it.
+
+```prog8
+%import editor
+
+%overlay 1, view, main.execute, main.substitute
+%overlay 2, report
+```
+
+Then nothing in the blocks themselves says anything about overlays.  That
+suits a program whose sources are shared between machines or between
+compilers: the list is in the one file that is for the machine with
+overlays, and it shows at a glance what is where.  A program that uses the
+list and also has `%overlay` inside a block or a subroutine gets a warning;
+where both name the same thing, the list counts.
+
 ## Building and running
 
 ```

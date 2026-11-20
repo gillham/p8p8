@@ -365,10 +365,22 @@ checker {
         else if strings.compare(nm, "overlay") == 0 {
             ; (p8p8's own: the code of the block, or of the one subroutine, goes into that
             ; overlay on a machine that has them)
-            if level == L_MODULE
-                error(d, "%overlay may only occur in a block or in a subroutine")
-            else if nargs != 1 or arg.kind != ast.N_INT or arg.value < 1 or arg.value > 255
+            ; In a module it is a list: the number, then the blocks and subroutines that
+            ; are in that overlay ("%overlay 2, view, main.execute").
+            if nargs < 1 or arg.kind != ast.N_INT or arg.value < 1 or arg.value > 255
                 error(d, "invalid overlay directive, expected a number from 1 to 255")
+            else if level == L_MODULE {
+                if nargs == 1
+                    error(d, "%overlay in a module needs the blocks and subroutines that are in the overlay after its number")
+                ^^ast.Node oa = arg.next
+                while oa != 0 {
+                    if oa.kind != ast.N_IDENT
+                        error(oa, "expected the name of a block or of a subroutine (block.name)")
+                    oa = oa.next
+                }
+            }
+            else if nargs != 1
+                error(d, "%overlay in a block or a subroutine takes the overlay's number and nothing else")
         }
         else if strings.compare(nm, "breakpoint") == 0 {
             if nargs != 0
