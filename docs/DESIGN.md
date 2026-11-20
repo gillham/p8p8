@@ -740,7 +740,24 @@ takes a result from A or HL (a long: DE and HL, HL the low half).  The IR's carr
 (clear for "less"), the Z80's is the other way round, so a branch on the
 carry looks at what set it.  System calls 2 and 3 (a character, a string)
 go to CP/M's BDOS.  An instruction that is not written yet is an error that
-names it: floats, the other system calls.
+names it: floats, and the system calls for files, the clock and the
+command line.
+
+The system calls that are there: the end of the program, a character and a
+string out, a character and a key in (BDOS functions 1 and 6), copying and
+filling memory, and the builtin functions that the IR leaves to the back
+end (comparing strings, "is in" for a string and for arrays of bytes and
+words, clamp for bytes and words).  Each is a small routine (`p8rt_...`)
+that is written into the program when it is used; so is the square root, a
+routine of whole numbers for a long (a byte or a word is made one).
+
+The IR's carry is its own flag: only a compare, clc, sec and the shifts and
+rotations by one bit change it, and roxl, roxr, bstcc and bstcs read it.
+Mostly the reader comes straight after what set it and the Z80's carry
+serves.  A subroutine where it does not (`carry_scan`; the library's string
+hash rotates a byte around a loop) keeps the flag in a byte of its own,
+clear at its start as on the host, stored by every instruction that sets it
+and fetched by a reader that does not have it at hand.
 
 The IR's hardware register slots are places in memory here (`p8_slot_N`).
 A subroutine with several results stores them there before it returns, and
@@ -765,7 +782,8 @@ of the comparison for that).
 `make z80cmp` builds the test programs for the host and for CP/M and
 compares what they print; a program the generator cannot build yet is
 counted.  At the start: 19 the same, none different, 49 not built; with longs, signed
-division and structs: 43 the same, 25 not built; with the slots: 47 and 20.  The
+division and structs: 43 the same, 25 not built; with the slots: 47 and 20; with the
+system calls: 58, and the 9 not built all use floats.  The
 library's virtual registers r0-r15, which it puts at addresses from $ff0000
 for the back end to place, are 32 bytes of the program's own.
 

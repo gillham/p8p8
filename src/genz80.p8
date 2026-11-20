@@ -49,6 +49,23 @@ genz80 {
     bool need_print = false
     bool need_jphl = false
     bool need_vregs = false
+    bool carry_cell = false         ; this subroutine keeps the IR's carry in a place of its own (see carry_scan)
+    bool carry_loaded = false       ; the instruction's carry was just taken from there
+    bool entry_pending = false      ; the subroutine's first label is still to come
+    bool[32] need_rt                ; the routines of the system calls (the RT_ numbers)
+    const ubyte RT_MOVE = 0
+    const ubyte RT_FILL = 1
+    const ubyte RT_FILLW = 2
+    const ubyte RT_STRCMP = 3
+    const ubyte RT_INSTR = 4
+    const ubyte RT_INBYTES = 5
+    const ubyte RT_INWORDS = 6
+    const ubyte RT_CLAMP8 = 7
+    const ubyte RT_CLAMPS8 = 8
+    const ubyte RT_CLAMP16 = 9
+    const ubyte RT_CLAMPS16 = 10
+    const ubyte RT_SQRT = 11
+    const ubyte RT_WAITKEY = 12
 
     sub error(str message, ^^ubyte detail) {
         out.err()
@@ -366,6 +383,7 @@ genz80 {
         sys.memset(&slot_used, 256, 0)
         need_jphl = false
         need_vregs = false
+        sys.memset(&need_rt, 32, 0)
         if nb == 0
             nb = buf.new(256)
         if cells == 0
@@ -447,11 +465,18 @@ genz80 {
         put(s.name)
         nl()
         part++
+        carry_cell = carry_scan(s)
         ^^ir.Chunk c = s.chunks
         bool first = true
         while c != 0 {
-            if first and (c.label == 0 or strings.compare(c.label, s.name) != 0)
-                label(s.name)
+            if first {
+                if c.label == 0 or strings.compare(c.label, s.name) != 0 {
+                    label(s.name)
+                    carry_clear()
+                }
+                else
+                    entry_pending = true
+            }
             first = false
             chunk(c)
             c = c.next
@@ -461,6 +486,106 @@ genz80 {
         line("ret")
         nl()
         register_cells()
+        if carry_cell {
+            buf.add_str(cells, "p8c_")
+            buf.add_long(cells, part)
+            buf.add_str(cells, ":  defs  1\n")
+        }
+        carry_cell = false
+    }
+
+    ; ---- the IR's carry ----
+    ;
+    ; The IR has a carry flag that only a compare, clc, sec and the shifts and rotations
+    ; by one bit change, and that roxl, roxr, bstcc and bstcs read.  Mostly the reader comes
+    ; straight after what set it, and the Z80's own carry serves.  A subroutine where it
+    ; does not (the library's string hash rotates a byte around a loop) keeps the flag in
+    ; a place of its own: clear at its start, as on the host, where each subroutine has
+    ; its own flags; every instruction that sets it stores it there, and a reader takes it
+    ; from there.  The place holds the IR's carry, which after a compare is the other way
+    ; round than the Z80's.
+
+    sub carry_setter(ubyte op) -> bool {
+        when op {
+            ir.OP_CMP, ir.OP_CMPI, ir.OP_CLC, ir.OP_SEC, ir.OP_LSL, ir.OP_LSR, ir.OP_ASR, ir.OP_ROL, ir.OP_ROR,
+            ir.OP_ROXL, ir.OP_ROXR, ir.OP_LSLM, ir.OP_LSRM, ir.OP_ASRM, ir.OP_ROLM, ir.OP_RORM, ir.OP_ROXLM, ir.OP_ROXRM -> return true
+        }
+        return false
+    }
+
+    sub carry_rotation(ubyte op) -> bool {
+        return op == ir.OP_ROXL or op == ir.OP_ROXR or op == ir.OP_ROXLM or op == ir.OP_ROXRM
+    }
+
+    ; does instruction i, after instruction before (or 0), find the carry it reads in the
+    ; Z80's own?
+    sub carry_at_hand(^^ir.Instr i, ^^ir.Instr before) -> bool {
+        if before == 0 or not carry_setter(before.op)
+            return false
+        if carry_rotation(i.op) and (before.op == ir.OP_CMP or before.op == ir.OP_CMPI)
+            return false
+        return true
+    }
+
+    sub carry_scan(^^ir.Sub s) -> bool {
+        ^^ir.Chunk c = s.chunks
+        while c != 0 {
+            if c.kind != ir.C_ASM {
+                ^^ir.Instr before = 0
+                ^^ir.Instr i = c.first
+                while i != 0 {
+                    if (carry_rotation(i.op) or i.op == ir.OP_BSTCC or i.op == ir.OP_BSTCS) and not carry_at_hand(i, before)
+                        return true
+                    before = i
+                    i = i.next
+                }
+            }
+            c = c.next
+        }
+        return false
+    }
+
+    sub carry_place() {
+        put("(p8c_")
+        putn(part)
+        put(")")
+    }
+
+    sub carry_clear() {
+        if carry_cell {
+            line("xor  a")
+            start("ld")
+            carry_place()
+            put(",a")
+            nl()
+        }
+    }
+
+    ; after an instruction that set the carry: into the place, with the flags and A as
+    ; they were
+    sub carry_save(ubyte op) {
+        line("push  af")
+        if op == ir.OP_CMP or op == ir.OP_CMPI
+            line("ccf")
+        line("sbc  a,a")
+        start("ld")
+        carry_place()
+        put(",a")
+        nl()
+        line("pop  af")
+    }
+
+    ; before an instruction that reads the carry: from the place, when it is not at hand
+    sub carry_in(^^ir.Instr i) {
+        carry_loaded = false
+        if carry_cell and not carry_at_hand(i, previous) {
+            start("ld")
+            put("a,")
+            carry_place()
+            nl()
+            line("rra")
+            carry_loaded = true
+        }
     }
 
     ; the places of the registers that the code just written names, for the end of the
@@ -487,6 +612,10 @@ genz80 {
     sub chunk(^^ir.Chunk c) {
         if c.label != 0
             label(c.label)
+        if entry_pending {
+            entry_pending = false
+            carry_clear()
+        }
         if c.kind == ir.C_ASM {
             if c.is_ir
                 error("IR text that was not turned into instructions", c.label)
@@ -504,6 +633,8 @@ genz80 {
         ^^ir.Instr i = c.first
         while i != 0 {
             instruction(i)
+            if carry_cell and carry_setter(i.op)
+                carry_save(i.op)
             previous = i
             i = i.next
         }
@@ -1017,6 +1148,11 @@ genz80 {
     sub flags_for_branch(bool sign) {
         if previous == 0
             return
+        if sign and previous.op == ir.OP_CMPI and previous.value == 0 {
+            ; (a compare with 0 and then the sign: the value's own)
+            test_reg(previous.r1, size_of(type1(previous)), true)
+            return
+        }
         when previous.op {
             ir.OP_LOAD, ir.OP_LOADM, ir.OP_LOADMZ, ir.OP_LOADR, ir.OP_LOADI, ir.OP_LOADX, ir.OP_STOREM, ir.OP_STOREI,
             ir.OP_STOREX, ir.OP_LOADHR, ir.OP_LSIGB, ir.OP_LSIGW, ir.OP_MSIGB, ir.OP_MSIGW, ir.OP_EXT, ir.OP_EXTS, ir.OP_EXTL, ir.OP_EXTLS,
@@ -1353,13 +1489,15 @@ genz80 {
             ; (the IR's carry is the 6502's: clear after a compare means "less".  A compare
             ; here leaves the Z80's, which is set then.)
             ir.OP_BSTCC -> {
-                if previous != 0 and (previous.op == ir.OP_CMP or previous.op == ir.OP_CMPI)
+                carry_in(i)
+                if not carry_loaded and previous != 0 and (previous.op == ir.OP_CMP or previous.op == ir.OP_CMPI)
                     jump_if("c", i.sym)
                 else
                     jump_if("nc", i.sym)
             }
             ir.OP_BSTCS -> {
-                if previous != 0 and (previous.op == ir.OP_CMP or previous.op == ir.OP_CMPI)
+                carry_in(i)
+                if not carry_loaded and previous != 0 and (previous.op == ir.OP_CMP or previous.op == ir.OP_CMPI)
                     jump_if("nc", i.sym)
                 else
                     jump_if("c", i.sym)
@@ -1623,6 +1761,33 @@ genz80 {
                 else
                     unsupported(i)
             }
+            ir.OP_SQRT -> {
+                ; r1 = the square root of r2 (a whole number, rounded down)
+                if size == 0 {
+                    unsupported(i)
+                    return
+                }
+                for k in 0 to 3 {
+                    if k < size
+                        a_from_reg(i.r2, k)
+                    else if k == size
+                        line("xor  a")
+                    start("ld")
+                    put("(p8_la+")
+                    putn(k)
+                    put("),a")
+                    nl()
+                }
+                line("call  p8rt_sqrt32")
+                need_rt[RT_SQRT] = true
+                need_long = true
+                line("ld  a,l")
+                reg_from_a(i.r1, 0)
+                if size_of(ir.regtypes[i.r1]) >= 2 {
+                    line("ld  a,h")
+                    reg_from_a(i.r1, 1)
+                }
+            }
             ir.OP_CLC -> line("or  a")
             ir.OP_SEC -> line("scf")
             else -> unsupported(i)
@@ -1690,6 +1855,8 @@ genz80 {
             unsupported(i)
             return
         }
+        if carry_rotation(i.op)
+            carry_in(i)
         repeat count
             shift_once(i.op, i, place, size)
     }
@@ -1745,36 +1912,428 @@ genz80 {
 
     ; ---- system calls: CP/M ----
 
-    sub syscall(^^ir.Instr i) {
+    sub arg_n(^^ir.Instr i, ubyte n) -> ^^ir.Arg {
         ^^ir.Arg a = i.args
+        while a != 0 and n != 0 {
+            a = a.next
+            n--
+        }
+        return a
+    }
+
+    ; an argument of a system call into A, or into a register pair
+    sub arg_a(^^ir.Arg a) {
+        if a == 0
+            error("a system call without the arguments it needs", 0)
+        else if a.reg != 0
+            a_from_reg(a.reg, 0)
+        else
+            a_imm(a.value as long)
+    }
+
+    sub arg_pair(^^ir.Arg a, str pair) {
+        if a == 0
+            error("a system call without the arguments it needs", 0)
+        else if a.reg != 0 {
+            if size_of(a.type) == 1 {
+                ; (a byte where a word is wanted)
+                a_from_reg(a.reg, 0)
+                start("ld")
+                put(pair)
+                put(",0")
+                nl()
+                start("ld")
+                buf.add_byte(o, pair[1])
+                put(",a")
+                nl()
+            }
+            else
+                pair_from_reg(pair, a.reg, 0)
+        }
+        else
+            pair_imm(pair, a.value as long)
+    }
+
+    sub call_rt(ubyte which, str routine) {
+        need_rt[which] = true
+        start("call")
+        put(routine)
+        nl()
+    }
+
+    ; The system calls: what the library asks of the machine (the low numbers, as the
+    ; virtual machine has them), and the builtin functions that the IR leaves to the
+    ; back end (from $1000).  A result is in A or HL.
+    sub syscall(^^ir.Instr i) {
+        ^^ir.Arg a0 = arg_n(i, 0)
+        ^^ir.Arg a1 = arg_n(i, 1)
+        ^^ir.Arg a2 = arg_n(i, 2)
+        ^^ir.Arg res = i.results
         when i.value as long {
+            1 -> line("jp  0")              ; the end of the program: back to CP/M
             2 -> {
                 ; a character to the console (BDOS function 2)
-                if a == 0 or a.reg == 0 {
-                    error("system call 2 needs its character in a register", 0)
-                    return
-                }
-                a_from_reg(a.reg, 0)
+                arg_a(a0)
                 line("ld  e,a")
                 line("ld  c,2")
                 line("call  5")
             }
             3 -> {
                 ; a string that ends with 0
-                if a == 0 or a.reg == 0 {
-                    error("system call 3 needs its string in a register", 0)
-                    return
-                }
-                pair_from_reg("hl", a.reg, 0)
+                arg_pair(a0, "hl")
                 line("call  p8rt_print")
                 need_print = true
+            }
+            36 -> {
+                ; copy memory: from, to, how many bytes (they may overlap)
+                arg_pair(a0, "hl")
+                arg_pair(a1, "de")
+                arg_pair(a2, "bc")
+                call_rt(RT_MOVE, "p8rt_move")
+            }
+            37 -> {
+                ; fill memory: where, how many bytes, the value
+                arg_a(a2)
+                line("ld  e,a")
+                arg_pair(a0, "hl")
+                arg_pair(a1, "bc")
+                call_rt(RT_FILL, "p8rt_fill")
+            }
+            38 -> {
+                ; fill memory with a word: where, how many words, the value
+                arg_pair(a0, "hl")
+                arg_pair(a1, "bc")
+                arg_pair(a2, "de")
+                call_rt(RT_FILLW, "p8rt_fillw")
+            }
+            69 -> {
+                ; a character from the console, waited for and shown (BDOS function 1)
+                line("ld  c,1")
+                line("call  5")
+            }
+            217 -> {
+                ; a key, or 0 when none is waiting (BDOS function 6)
+                line("ld  e,255")
+                line("ld  c,6")
+                line("call  5")
+            }
+            218 -> call_rt(RT_WAITKEY, "p8rt_waitkey")
+            $100d -> {
+                ; compare two strings: -1, 0 or 1
+                arg_pair(a0, "hl")
+                arg_pair(a1, "de")
+                call_rt(RT_STRCMP, "p8rt_strcmp")
+            }
+            $100e -> {
+                ; is a character in a string
+                arg_a(a0)
+                line("ld  b,a")
+                arg_pair(a1, "hl")
+                call_rt(RT_INSTR, "p8rt_instr")
+            }
+            $100f -> {
+                ; is a byte in an array: the value, the array, its length
+                arg_a(a0)
+                line("ld  e,a")
+                arg_pair(a1, "hl")
+                arg_pair(a2, "bc")
+                call_rt(RT_INBYTES, "p8rt_inbytes")
+            }
+            $1010 -> {
+                arg_pair(a0, "de")
+                arg_pair(a1, "hl")
+                arg_pair(a2, "bc")
+                call_rt(RT_INWORDS, "p8rt_inwords")
+            }
+            $1012, $1013 -> {
+                ; clamp a byte: the value, the least, the most
+                arg_a(a1)
+                line("ld  b,a")
+                arg_a(a2)
+                line("ld  c,a")
+                arg_a(a0)
+                need_rt[RT_CLAMP8] = true
+                if i.value == $1013
+                    call_rt(RT_CLAMPS8, "p8rt_clamps8")
+                else
+                    line("call  p8rt_clamp8")
+            }
+            $1014, $1015 -> {
+                arg_pair(a0, "hl")
+                arg_pair(a1, "de")
+                arg_pair(a2, "bc")
+                need_rt[RT_CLAMP16] = true
+                if i.value == $1015
+                    call_rt(RT_CLAMPS16, "p8rt_clamps16")
+                else
+                    line("call  p8rt_clamp16")
             }
             else -> {
                 buf.clear(nb)
                 buf.add_long(nb, i.value as long)
                 buf.add_byte(nb, 0)
                 error("this system call is not there for CP/M yet", nb.data)
+                return
             }
+        }
+        if res != 0 and res.reg != 0 {
+            ubyte rsize = size_of(res.type)
+            if rsize == 1 or rsize == 2
+                keep(res.reg, rsize)
+            else
+                error("the result of this system call cannot be taken on the Z80 yet", 0)
+        }
+    }
+
+    ; the routines of the system calls that the program uses
+    sub runtime_calls() {
+        if need_rt[RT_MOVE] {
+            raw("; copies BC bytes from HL to DE; the two may overlap")
+            raw("p8rt_move:")
+            line("ld  a,b")
+            line("or  c")
+            line("ret  z")
+            line("push  hl")
+            line("or  a")
+            line("sbc  hl,de")
+            line("pop  hl")
+            line("jr  c,p8rt_move_back")
+            line("ldir")
+            line("ret")
+            raw("p8rt_move_back:")
+            line("add  hl,bc")
+            line("dec  hl")
+            line("ex  de,hl")
+            line("add  hl,bc")
+            line("dec  hl")
+            line("ex  de,hl")
+            line("lddr")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_FILL] {
+            raw("; fills BC bytes at HL with E")
+            raw("p8rt_fill:")
+            line("ld  a,b")
+            line("or  c")
+            line("ret  z")
+            line("ld  (hl),e")
+            line("inc  hl")
+            line("dec  bc")
+            line("jr  p8rt_fill")
+            nl()
+        }
+        if need_rt[RT_FILLW] {
+            raw("; fills BC words at HL with DE")
+            raw("p8rt_fillw:")
+            line("ld  a,b")
+            line("or  c")
+            line("ret  z")
+            line("ld  (hl),e")
+            line("inc  hl")
+            line("ld  (hl),d")
+            line("inc  hl")
+            line("dec  bc")
+            line("jr  p8rt_fillw")
+            nl()
+        }
+        if need_rt[RT_WAITKEY] {
+            raw("; waits for a key and gives it in A, without showing it")
+            raw("p8rt_waitkey:")
+            line("ld  e,255")
+            line("ld  c,6")
+            line("call  5")
+            line("or  a")
+            line("jr  z,p8rt_waitkey")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_STRCMP] {
+            raw("; compares the strings at HL and DE: A = 0 the same, 1 the first is greater, 255 it is less")
+            raw("p8rt_strcmp:")
+            line("ld  a,(de)")
+            line("ld  b,a")
+            line("ld  a,(hl)")
+            line("cp  b")
+            line("jr  nz,p8rt_strcmp_differ")
+            line("or  a")
+            line("ret  z")
+            line("inc  hl")
+            line("inc  de")
+            line("jr  p8rt_strcmp")
+            raw("p8rt_strcmp_differ:")
+            line("ld  a,1")
+            line("ret  nc")
+            line("ld  a,255")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_INSTR] {
+            raw("; is the character in B in the string at HL: A = 1 or 0")
+            raw("p8rt_instr:")
+            line("ld  a,(hl)")
+            line("or  a")
+            line("ret  z")
+            line("cp  b")
+            line("inc  hl")
+            line("jr  nz,p8rt_instr")
+            line("ld  a,1")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_INBYTES] {
+            raw("; is the byte in E among the BC bytes at HL: A = 1 or 0")
+            raw("p8rt_inbytes:")
+            line("ld  a,b")
+            line("or  c")
+            line("ret  z")
+            line("ld  a,(hl)")
+            line("cp  e")
+            line("inc  hl")
+            line("dec  bc")
+            line("jr  nz,p8rt_inbytes")
+            line("ld  a,1")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_INWORDS] {
+            raw("; is the word in DE among the BC words at HL: A = 1 or 0")
+            raw("p8rt_inwords:")
+            line("ld  a,b")
+            line("or  c")
+            line("ret  z")
+            line("ld  a,(hl)")
+            line("inc  hl")
+            line("cp  e")
+            line("jr  nz,p8rt_inwords_next")
+            line("ld  a,(hl)")
+            line("cp  d")
+            line("jr  nz,p8rt_inwords_next")
+            line("ld  a,1")
+            line("ret")
+            raw("p8rt_inwords_next:")
+            line("inc  hl")
+            line("dec  bc")
+            line("jr  p8rt_inwords")
+            nl()
+        }
+        if need_rt[RT_CLAMPS8] {
+            raw("; A = A kept between B and C, signed: with the top bits turned over it is the unsigned one")
+            raw("p8rt_clamps8:")
+            line("xor  $80")
+            line("ld  d,a")
+            line("ld  a,b")
+            line("xor  $80")
+            line("ld  b,a")
+            line("ld  a,c")
+            line("xor  $80")
+            line("ld  c,a")
+            line("ld  a,d")
+            line("call  p8rt_clamp8")
+            line("xor  $80")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_CLAMP8] {
+            raw("; A = A kept between B and C")
+            raw("p8rt_clamp8:")
+            line("cp  b")
+            line("jr  nc,p8rt_clamp8_top")
+            line("ld  a,b")
+            raw("p8rt_clamp8_top:")
+            line("cp  c")
+            line("ret  c")
+            line("ld  a,c")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_CLAMPS16] {
+            raw("; HL = HL kept between DE and BC, signed")
+            raw("p8rt_clamps16:")
+            line("ld  a,h")
+            line("xor  $80")
+            line("ld  h,a")
+            line("ld  a,d")
+            line("xor  $80")
+            line("ld  d,a")
+            line("ld  a,b")
+            line("xor  $80")
+            line("ld  b,a")
+            line("call  p8rt_clamp16")
+            line("ld  a,h")
+            line("xor  $80")
+            line("ld  h,a")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_CLAMP16] {
+            raw("; HL = HL kept between DE and BC")
+            raw("p8rt_clamp16:")
+            line("push  hl")
+            line("or  a")
+            line("sbc  hl,de")
+            line("pop  hl")
+            line("jr  nc,p8rt_clamp16_top")
+            line("ld  h,d")
+            line("ld  l,e")
+            raw("p8rt_clamp16_top:")
+            line("push  hl")
+            line("or  a")
+            line("sbc  hl,bc")
+            line("pop  hl")
+            line("ret  c")
+            line("ld  h,b")
+            line("ld  l,c")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_SQRT] {
+            raw("; HL = the square root of the long in p8_la, rounded down: two bits of the number")
+            raw("; at a time into the rest (C and HL), the root in DE")
+            raw("p8rt_sqrt32:")
+            line("ld  ix,p8_la")
+            line("ld  hl,0")
+            line("ld  c,l")
+            line("ld  d,h")
+            line("ld  e,l")
+            line("ld  b,16")
+            raw("p8rt_sqrt32_bit:")
+            repeat 2 {
+                line("sla  (ix+0)")
+                line("rl  (ix+1)")
+                line("rl  (ix+2)")
+                line("rl  (ix+3)")
+                line("adc  hl,hl")
+                line("rl  c")
+            }
+            line("sla  e")
+            line("rl  d")
+            line("push  hl")
+            line("push  de")
+            line("ex  de,hl")
+            line("add  hl,hl")
+            line("ld  a,0")
+            line("adc  a,0")
+            line("inc  hl")
+            line("ex  de,hl")
+            line("or  a")
+            line("sbc  hl,de")
+            line("ld  d,a")
+            line("ld  a,c")
+            line("sbc  a,d")
+            line("pop  de")
+            line("jr  c,p8rt_sqrt32_less")
+            line("ld  c,a")
+            line("inc  e")
+            line("pop  af")
+            line("jr  p8rt_sqrt32_next")
+            raw("p8rt_sqrt32_less:")
+            line("pop  hl")
+            raw("p8rt_sqrt32_next:")
+            line("djnz  p8rt_sqrt32_bit")
+            line("ex  de,hl")
+            line("ret")
+            nl()
         }
     }
 
@@ -1821,6 +2380,7 @@ genz80 {
             nl()
         }
         runtime_long()
+        runtime_calls()
         if need_div {
             raw("; HL = HL / DE, DE = the remainder (unsigned; a division by 0 gives $ffff)")
             raw("p8rt_div16:")
