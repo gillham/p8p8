@@ -514,7 +514,8 @@ genz80 {
                 }
             }
             raw("_main:")
-            own_stack()
+            ; (the stack is where zcc's first instructions and the target's zcc_init
+            ; lines put it: z88dk's heap is laid out by it)
         }
         else {
             ; (the load address is the target's: $0100 for CP/M)
@@ -4141,7 +4142,9 @@ genz80 {
             v = v.next
         }
         buf.add_bytes(o, cells.data, cells.len)
-        if target.number("stack_size", 0) > 0 {
+        ; (a stack of the program's own: for a program that the assembler alone makes,
+        ; and for one that zcc links when the target's zcc_init lines use it)
+        if target.number("stack_size", 0) > 0 and (not linked() or (target.text("zcc_init") != 0 and text_has(target.text("zcc_init"), "p8_stack_top"))) {
             put("p8_stack:  defs  ")
             putn(target.number("stack_size", 0))
             nl()
