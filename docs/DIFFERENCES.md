@@ -217,7 +217,7 @@ subroutine: that subroutine's; at the top of a module, with names after
 the number: theirs): code that is
 kept outside main memory and is only there while it runs (a RAM bank of the
 Commander X16, a RAM Expansion Unit on the C64 and C128, memory beyond
-64 KB on the MEGA65).  The block's variables, strings and arrays stay in
+64 KB on the MEGA65, a bank of the GameTank's cartridge).  The block's variables, strings and arrays stay in
 main memory, and the compiler writes the calls into an overlay, between
 overlays and back.  `p8c` writes two files that belong together,
 `name.prg` and `name.non`.  On a machine without overlays the directive is

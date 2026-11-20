@@ -187,8 +187,8 @@ and `farmem.copy` and `farmem.fill` from the library.  That is p8p8's own
 
 A program can have parts of its code outside main memory: a block with
 `%overlay 1` is in bank 1 of a Commander X16's high memory, in the RAM
-Expansion Unit of a C64 or C128, or in a MEGA65's memory beyond 64 KB, and
-so on for 2, 3...  `p8c` writes the
+Expansion Unit of a C64 or C128, in a MEGA65's memory beyond 64 KB, or (with
+the bank's number) in a bank of a GameTank cartridge.  `p8c` writes the
 calls and two files that belong together, `name.prg` and `name.non`.  That
 is p8p8's own; [docs/OVERLAYS.md](docs/OVERLAYS.md) is the guide.
 

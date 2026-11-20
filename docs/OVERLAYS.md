@@ -129,6 +129,7 @@ An overlay that does not fit is an error from the assembler that names it:
 | C64 (`-target c64`) | a RAM Expansion Unit | $c000-$cfdf, copied in | 4 KB |
 | C128 (`-target c128`) | a RAM Expansion Unit | $b000-$bfff, copied in | 4 KB |
 | MEGA65 (`-target mega65`) | memory from $40000 on (banks 4 and 5) | $a000-$bfff, copied in by DMA | 8 KB |
+| GameTank (`-target gametank`) | bank n of the cartridge, 128 to 254 | $8000-$bfff, by choosing the bank | 16 KB |
 
 On every other machine `%overlay` is ignored and the program is built in one
 piece, if it fits.  That is also a way to try a program on the host
@@ -160,10 +161,42 @@ it always is.  The main program has up to $a000.  Sixteen overlays fit in
 banks 4 and 5; a program that keeps data of its own there has to stay clear
 of them.
 
+**GameTank.**  Overlay n is bank n of the cartridge, so the numbers are 128
+to 254; the main program is in the fixed bank (255) at $c000.  `p8c` writes
+one file, `game.gtr`: the whole 2 MB cartridge, with the main program, the
+overlays in their banks, and $ff everywhere else.  The banks that are not
+overlays are the program's, for assets it chooses with `cartbank`; as on the
+X16 the bank the main program chose is still chosen after a call into an
+overlay, and when an overlay calls into the main program.
+
+What a block includes with `%asmbinary`, or defines in an `%asm` block, is in
+the block's bank with its code.  That is the place for an asset and the
+subroutine that uses it: the subroutine reads the asset at its address in
+the window, and whoever calls it need not know which bank that is.
+
+```prog8
+%overlay 130, title
+
+title {
+    %asm {{
+picture     .binary "title.gfx"
+    }}
+
+    asmsub show() {
+        %asm {{
+            ; copies from p8b_title.picture, which is in the window now
+            ...
+        }}
+    }
+}
+```
+
 ## What is where
 
 **Code is in the overlay; data is not.**  The variables of an overlay block,
-its strings and its arrays are in main memory with all the others.  So
+its strings and its arrays are in main memory with all the others (on the
+GameTank: the variables in RAM, the strings and constant arrays in the
+fixed bank).  So
 
 - a variable keeps its value whichever overlay is running, and any code may
   use it;
@@ -215,6 +248,9 @@ Into an overlay from outside it:
 
 - on the X16, a dozen instructions that choose the bank, call, and put back
   the bank that was there: about twice a plain call;
+- on the GameTank the same, but choosing a bank there is a subroutine of
+  some fifty instructions (the bank's number goes out a bit at a time), and
+  it runs twice for a call;
 - on the C64, the C128 and the MEGA65, about twice a plain call when the
   overlay is in the window already, and a copy of the overlay's code (as
   many bytes as it has) when another one is.  After the call the caller's

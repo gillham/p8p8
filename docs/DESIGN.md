@@ -655,6 +655,16 @@ or mapped, so the ROM stays where it is.
 After the build the driver removes what the assembler wrote for each part
 (`name.ov0`, `name.ov1`...).
 
+The GameTank's overlays are banks of its cartridge, in the window at
+$8000-$bfff below the main program, which is in the fixed bank.  Its texts
+are the X16's with `cartbank` for the bank register (the routine keeps the
+bank it chose in a variable, which is what the thunks read).  The target
+gives `overlay_image_size`: the driver then writes one file with the whole
+cartridge (`overlay_image` in `main.p8`), bank `overlay_image_first` at its
+start and the main program at its end; an overlay's run of the assembler
+begins with the overlay, the window being below the program.  The assembler
+is only run for the overlays that exist (there are 127 numbers).
+
 Not there: an overlay of more than the window, code of the library in an
 overlay, overlays in an IR file (`-ir` does not write the directive).
 Assembly in an overlay block that calls another overlay by its label is not

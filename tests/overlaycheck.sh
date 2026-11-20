@@ -82,6 +82,24 @@ for cpu in 45gs02 6502; do
         sed -n '/ RUN:/,$p' "$work/$program/screen.txt" | grep '^[0-9MHL?]'
     done
 done
+# the GameTank: overlays are banks of the cartridge, and p8c writes the whole of it.
+# (No emulator is run here: which banks hold something, the data that is in one of
+# them beside its code, and where the machine starts.)
+echo "-- cartridge, gametank: the banks of the cartridge"
+mkdir -p "$work/gt"
+"$p8c" -lib "$lib" -target gametank -varsgolden -out "$work/gt" tests/overlay/cartridge.p8 || exit 1
+ls "$work/gt" | grep -E '\.(gtr|bin|non)$'
+python3 - "$work/gt/cartridge.gtr" <<'PY'
+import sys
+data = open(sys.argv[1], 'rb').read()
+print(len(data), "bytes")
+for bank in range(128, 256):
+    part = data[(bank - 128) * 0x4000:(bank - 127) * 0x4000]
+    if part.strip(b'\xff').strip(b'\x00'):
+        print("bank", bank, "has something in it")
+print("bank 129 begins with", data[0x4000:0x4004].hex())
+print("the reset vector is", hex(data[-4] | data[-3] << 8))
+PY
 echo "-- overlays, for the X16 with -nooverlays: one program"
 mkdir -p "$work/off"
 "$p8c" -lib "$lib" -target cx16 -nooverlays -out "$work/off" tests/overlay/overlays.p8 || exit 1

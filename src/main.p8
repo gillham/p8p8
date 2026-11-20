@@ -1641,6 +1641,17 @@ main {
                 out.nl()
             }
         }
+        if target.number("overlay_image_size", 0) != 0 {
+            out.puts("  file: ")
+            out.puts(name)
+            if target.text("overlay_image_ext") != 0
+                out.puts(target.text("overlay_image_ext"))
+            out.puts(", the whole cartridge, ")
+            report_number(ov_file_size, 1)
+            out.puts(" bytes")
+            out.nl()
+            return
+        }
         out.puts("  files: ")
         out.puts(name)
         if target.text("overlay_loader") != 0
@@ -1709,18 +1720,24 @@ main {
         buf.add_bytes(ov_front, cmd.data, cmd.len)
         ubyte n = gen6502.overlay_max
         repeat {
-            buf.clear(cmd)
-            buf.add_bytes(cmd, ov_front.data, ov_front.len)
-            buf.add_str(cmd, " -D prog8_overlay=")
-            buf.add_long(cmd, n)
-            buf.add_str(cmd, " --output ")
-            add_output(name, ov_extension(".ov", n))
-            buf.add_byte(cmd, ' ')
-            add_output(name, ".asm")
-            run_cmd("building the program")
+            if n == 0 or gen6502.overlay_used(n) {
+                buf.clear(cmd)
+                buf.add_bytes(cmd, ov_front.data, ov_front.len)
+                buf.add_str(cmd, " -D prog8_overlay=")
+                buf.add_long(cmd, n)
+                buf.add_str(cmd, " --output ")
+                add_output(name, ov_extension(".ov", n))
+                buf.add_byte(cmd, ' ')
+                add_output(name, ".asm")
+                run_cmd("building the program")
+            }
             if n == 0
                 break
             n--
+        }
+        if target.number("overlay_image_size", 0) != 0 {
+            overlay_image(name)
+            return
         }
         ; the file with everything in it
         buf.clear(ov_file)
@@ -1748,9 +1765,11 @@ main {
         long select = target.number("overlay_select", 0)
         long window = gen6502.overlay_start
         for n in 1 to gen6502.overlay_max {
+            ov_sizes[n] = 0
+            if not gen6502.overlay_used(n)
+                continue
             data, size = ov_read(ov_output(name, ov_extension(".ov", n)))
             long skip = window - load + 2
-            ov_sizes[n] = 0
             if size > skip {
                 ov_sizes[n] = size - skip
                 ov_word(1)
@@ -1777,8 +1796,10 @@ main {
             out.exit(1)
         }
         ; (what the assembler wrote for each part has been used)
-        for n in 0 to gen6502.overlay_max
-            io_platform.delete_file(ov_output(name, ov_extension(".ov", n)))
+        for n in 0 to gen6502.overlay_max {
+            if n == 0 or gen6502.overlay_used(n)
+                io_platform.delete_file(ov_output(name, ov_extension(".ov", n)))
+        }
         if loader == 0
             return
         ; where the program begins: the assembler's list of labels says
@@ -1829,6 +1850,91 @@ main {
         add_output(name, ".loader.asm")
         run_cmd("building the program's loader")
         ov_loader_size = io_platform.file_size(ov_output(name, ".prg"))
+    }
+
+    ; A machine whose overlays are banks of a cartridge: one file with the whole of it
+    ; (the target's "overlay_image_size" bytes).  Bank "overlay_image_first" is at its
+    ; start, each bank as large as the window, and the main program at its end, where
+    ; the fixed bank is.  In an overlay's run the assembler's file begins with the
+    ; overlay, the window being below the main program.
+    sub overlay_image(^^ubyte name) {
+        long image_size = target.number("overlay_image_size", 0)
+        long first = target.number("overlay_image_first", 0)
+        long bank_size = gen6502.overlay_end - gen6502.overlay_start
+        long header = 2
+        if strings.compare(gen6502.output_type, "RAW") == 0
+            header = 0
+        if gen6502.load_address < gen6502.overlay_end {
+            out.err()
+            out.puts("a program with overlays has to be above the window they run in (in the fixed bank), not at its load address")
+            out.nl()
+            out.exit(1)
+        }
+        ^^ubyte image = mem.alloc(image_size)
+        long k
+        for k in 0 to image_size - 1
+            image[k] = $ff
+        ^^ubyte data
+        long size
+        data, size = ov_read(ov_output(name, ov_extension(".ov", 0)))
+        long main_size = size - header
+        if main_size > image_size {
+            out.err()
+            out.puts("the program is larger than the cartridge")
+            out.nl()
+            out.exit(1)
+        }
+        mem.copy(data + header, image + image_size - main_size, main_size)
+        ; (the sizes, for -meminfo: the assembler's list of labels has them)
+        ^^ubyte labels
+        long labels_size
+        labels, labels_size = ov_read(ov_output(name, ".vice-mon-list"))
+        ubyte n
+        for n in 1 to gen6502.overlay_max {
+            ov_sizes[n] = 0
+            if gen6502.overlay_used(n) and io_platform.file_size(ov_output(name, ov_extension(".ov", n))) > header {
+                data, size = ov_read(ov_path.data)
+                long place = (n as long - first) * bank_size
+                if n < first or place + bank_size > image_size - main_size {
+                    out.err()
+                    out.puts("overlay ")
+                    buf.clear(ov_ext)
+                    buf.add_long(ov_ext, n)
+                    buf.add_byte(ov_ext, 0)
+                    out.puts(ov_ext.data)
+                    out.puts(" is not a bank of the cartridge that an overlay can be in")
+                    out.nl()
+                    out.exit(1)
+                }
+                long length = size - header
+                if length > bank_size
+                    length = bank_size
+                mem.copy(data + header, image + place, length)
+                buf.clear(ov_ext)
+                buf.add_str(ov_ext, "p8ov_size_")
+                buf.add_long(ov_ext, n)
+                buf.add_byte(ov_ext, 0)
+                ov_sizes[n] = label_value(labels, labels_size, ov_ext.data)
+                if ov_sizes[n] < 0
+                    ov_sizes[n] = length
+            }
+        }
+        ^^ubyte extension = target.text("overlay_image_ext")
+        if extension == 0
+            extension = ".bin"
+        if not io_platform.write_file(ov_output(name, extension), image, image_size) {
+            out.err()
+            out.puts("cannot write ")
+            out.puts(ov_path.data)
+            out.nl()
+            out.exit(1)
+        }
+        ov_loader_size = 0
+        ov_file_size = image_size
+        for n in 0 to gen6502.overlay_max {
+            if n == 0 or gen6502.overlay_used(n)
+                io_platform.delete_file(ov_output(name, ov_extension(".ov", n)))
+        }
     }
 
     sub hex_value(ubyte c) -> byte {

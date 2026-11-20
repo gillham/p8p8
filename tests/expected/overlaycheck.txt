@@ -114,6 +114,14 @@ HELLO 42 54 REPORT 4 20 12 210
 listed.non
 listed.prg
 LISTED 42 123 REPORT 7 5
+-- cartridge, gametank: the banks of the cartridge
+cartridge.gtr
+2097152 bytes
+bank 128 has something in it
+bank 129 has something in it
+bank 255 has something in it
+bank 129 begins with 0a141e28
+the reset vector is 0xfd00
 -- overlays, for the X16 with -nooverlays: one program
 overlays.prg
 MAIN FIRST 42 SECOND FIRST 1238 2

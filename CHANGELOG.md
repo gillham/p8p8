@@ -29,6 +29,9 @@
   an overlay may call a subroutine there that chooses a bank for the
   program's data and leaves it chosen; the overlay comes back for its own
   code, and the main program finds its bank as it left it.
+- Overlays on the GameTank: `%overlay n` is bank n of the cartridge (128
+  to 254), with what the block includes as assembly or binary beside its
+  code, and `p8c` writes the whole 2 MB cartridge as `name.gtr`.
 - `%overlay n, name, name...` at the top of a module lists the blocks and
   subroutines of an overlay in one place, with nothing in the blocks
   themselves.

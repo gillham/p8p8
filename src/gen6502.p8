@@ -2200,16 +2200,19 @@ gen6502 {
             put("p8_overlay_store = ")
             puthex(target.number("overlay_store", 0))
             nl()
-            raw("p8_overlay_sizes:")
-            ubyte sn
-            for sn in 1 to overlay_max {
-                if overlay_used(sn) {
-                    put("    .word  p8ov_size_")
-                    putn(sn)
-                    nl()
+            if target.number("overlay_image_size", 0) == 0 {
+                ; (for a machine that copies an overlay in: how much of it there is)
+                raw("p8_overlay_sizes:")
+                ubyte sn
+                for sn in 1 to overlay_max {
+                    if overlay_used(sn) {
+                        put("    .word  p8ov_size_")
+                        putn(sn)
+                        nl()
+                    }
+                    else
+                        raw("    .word  0")
                 }
-                else
-                    raw("    .word  0")
             }
             raw("p8_overlay_file  .macro")
             put("    .byte  ")
