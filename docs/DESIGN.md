@@ -752,8 +752,8 @@ A float is a 32-bit IEEE one in four bytes; loads, stores and moves are
 those of a long.  The arithmetic is z88dk's math32 library's (the left
 operand on the stack, the right one in DE and HL, the result there), and so
 are the conversions and the functions.  Three things come from a C source
-that is linked along (`z80-float.c` in the target's directory, from
-prog8c-llvm's z80 profiles): the shortest digits of a float, reading one,
+that is linked along (`lib/targets/z80/z80-float.c`, which the Z80 machines
+share; from prog8c-llvm's z80 profiles): the shortest digits of a float, reading one,
 and rounding to even.  The library's square root can be off in the last
 place (3.2500002 for 10.5625), so one step of Heron's method follows it.
 A float constant's bits are worked out by the compiler (`float_bits`).

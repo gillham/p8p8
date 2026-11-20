@@ -136,7 +136,7 @@ beginning.  The keys it reads:
 | `exit_code` | how the program ends; `sys.exit` comes here too |
 | `run_command` | what `-run` runs, with `{file}` for the program (p8p8) |
 | `zcc_platform` | z88dk's platform for a program with floats, which `zcc` links (`+cpm`) |
-| `float_source` | a C file in the target's directory that is linked with such a program |
+| `float_source` | a C file that is linked with such a program, from the target's directory (`../z80/z80-float.c`: the one the Z80 machines share) |
 | `library` | the directory with the target's modules, as for any target |
 | `library_platform` | a subdirectory of `library` that is searched before it (p8p8) |
 
