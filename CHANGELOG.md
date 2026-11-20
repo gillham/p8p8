@@ -6,7 +6,7 @@
   builds a CP/M program with z88dk's z80asm, and `-run` starts it in tnylpo.
   Bytes and words, calls, loops and text output work; longs, floats and most
   of the library do not yet.  `make z80cmp` compares with the host: of the
-  test programs 16 print the same, 5 do not, 49 are not built yet.
+  test programs 19 print the same and 49 are not built yet.
 
 - `-meminfo` (and `-verbose`) prints after a 6502 program is built where
   the main program is, how many bytes it takes and how many are free below

@@ -34,11 +34,14 @@ genz80 {
     long errors = 0
     long labels = 0
     ^^ubyte reg_used = 0            ; per IR register: named by the code that was written
+    long part = 0                   ; which subroutine's registers: its number
+    ^^buf.Buf cells = 0             ; the places of the registers, written at the end
     ^^ir.Instr previous = 0         ; the instruction before the one being written, in its chunk
     bool need_mul = false
     bool need_div = false
     bool need_print = false
     bool need_jphl = false
+    bool need_vregs = false
 
     sub error(str message, ^^ubyte detail) {
         out.err()
@@ -146,7 +149,11 @@ genz80 {
     sub reg(uword r, ubyte offset) {
         if r <= ir.regcount
             reg_used[r] = 1
+        ; (register numbers are used again from one subroutine to the next, so each
+        ; subroutine has places of its own)
         put("p8r_")
+        putn(part)
+        put("_")
         putn(r)
         if offset != 0 {
             put("+")
@@ -162,6 +169,12 @@ genz80 {
                 put("+")
                 putn(i.offset + extra)
             }
+        }
+        else if (i.value as long) + i.offset >= $ff0000 {
+            ; (one of the library's virtual registers, by its made-up address)
+            put("p8_vregs+")
+            putn((i.value as long) + i.offset - $ff0000 + extra)
+            need_vregs = true
         }
         else
             putn((i.value as long) + i.offset + extra)
@@ -319,8 +332,13 @@ genz80 {
         need_div = false
         need_print = false
         need_jphl = false
+        need_vregs = false
         if nb == 0
             nb = buf.new(256)
+        if cells == 0
+            cells = buf.new(65536)
+        buf.clear(cells)
+        part = 0
         reg_used = mem.alloc(70000)
         long k
         for k in 0 to 69999
@@ -352,16 +370,20 @@ genz80 {
         put("p8_init_globals:")
         nl()
         previous = 0
+        part = 0
         chunk_code(prog.initglobals)
         line("ret")
         nl()
+        register_cells()
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
             ^^ir.Chunk c = bl.chunks
+            part++
             while c != 0 {
                 chunk(c)
                 c = c.next
             }
+            register_cells()
             ^^ir.Sub s = bl.subs
             while s != 0 {
                 subroutine(s)
@@ -388,6 +410,7 @@ genz80 {
         put("; ---- ")
         put(s.name)
         nl()
+        part++
         ^^ir.Chunk c = s.chunks
         bool first = true
         while c != 0 {
@@ -401,6 +424,28 @@ genz80 {
             label(s.name)
         line("ret")
         nl()
+        register_cells()
+    }
+
+    ; the places of the registers that the code just written names, for the end of the
+    ; program
+    sub register_cells() {
+        uword r
+        for r in 1 to ir.regcount {
+            if reg_used[r] != 0 {
+                reg_used[r] = 0
+                ubyte rsize = size_of(ir.regtypes[r])
+                if rsize == 0
+                    rsize = 4
+                buf.add_str(cells, "p8r_")
+                buf.add_long(cells, part)
+                buf.add_byte(cells, '_')
+                buf.add_long(cells, r)
+                buf.add_str(cells, ":  defs  ")
+                buf.add_long(cells, rsize)
+                buf.add_byte(cells, '\n')
+            }
+        }
     }
 
     sub chunk(^^ir.Chunk c) {
@@ -1417,7 +1462,16 @@ genz80 {
             if v.kind == ir.V_MEMVAR and v.init != 0 {
                 name(v.name)
                 put("  equ  ")
-                put_number_text(v.init)
+                long address = number_of(v.init)
+                if address >= $ff0000 {
+                    ; (the library's virtual registers r0-r15: it gives them addresses that
+                    ; no 16-bit machine has, to say that they are the back end's to place)
+                    put("p8_vregs+")
+                    putn(address - $ff0000)
+                    need_vregs = true
+                }
+                else
+                    put_number_text(v.init)
                 nl()
             }
             else if v.kind == ir.V_VAR and v.init != 0 {
@@ -1443,6 +1497,11 @@ genz80 {
                     }
                     bytes = element_count(v.typestr) * vsize
                 }
+                if v.align > 1 {
+                    put("    align  ")
+                    putn(v.align)
+                    nl()
+                }
                 name(v.name)
                 put(":  defs  ")
                 putn(bytes)
@@ -1450,20 +1509,35 @@ genz80 {
             }
             v = v.next
         }
-        uword r
-        for r in 1 to ir.regcount {
-            if reg_used[r] != 0 {
-                ubyte rsize = size_of(ir.regtypes[r])
-                if rsize == 0
-                    rsize = 4
-                put("p8r_")
-                putn(r)
-                put(":  defs  ")
-                putn(rsize)
-                nl()
-            }
-        }
+        buf.add_bytes(o, cells.data, cells.len)
+        if need_vregs
+            raw("p8_vregs:  defs  32")
         raw("p8_bss_end:")
+    }
+
+    ; the value of a number as the IR writes it ($hex or decimal)
+    sub number_of(^^ubyte text) -> long {
+        long value = 0
+        long k = 0
+        if text[0] == '$' {
+            k = 1
+            repeat {
+                ubyte c = text[k] | 32
+                if text[k] >= '0' and text[k] <= '9'
+                    value = value * 16 + (text[k] - '0')
+                else if c >= 'a' and c <= 'f'
+                    value = value * 16 + (c - 'a' + 10)
+                else
+                    break
+                k++
+            }
+            return value
+        }
+        while text[k] >= '0' and text[k] <= '9' {
+            value = value * 10 + (text[k] - '0')
+            k++
+        }
+        return value
     }
 
     ; a number as the IR writes it ($hex, decimal, with a minus) for the assembler
@@ -1477,6 +1551,11 @@ genz80 {
 
     ; the values of a variable: numbers, and "@name" for the address of something
     sub values(^^ir.Var v, ubyte esize) {
+        if v.align > 1 {
+            put("    align  ")
+            putn(v.align)
+            nl()
+        }
         name(v.name)
         put(":")
         nl()

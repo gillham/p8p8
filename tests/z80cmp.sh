@@ -27,6 +27,10 @@ for f in "$@"; do
         continue
     fi
     (cd "$work/host" && timeout 10 "./$name" < /dev/null > "$name.out" 2>&1)
+    if [ $? -ge 124 ]; then
+        skipped=$((skipped + 1))    # (it does not end on the host, or it is for a machine's memory)
+        continue
+    fi
     # (a CP/M file name is eight characters and three)
     (cd "$work/z80" && cp "$name.com" t.com && timeout 20 tnylpo t.com < /dev/null > "$name.out" 2>&1)
     # (CP/M ends its lines with CR LF)

@@ -723,7 +723,9 @@ with its `cpm` family): Prog8 code, and `%ir` blocks whose system calls are
 what the machine has to do.  The generator turns those into instructions
 with `irparse.expand` and lowers them like the rest.
 
-Every IR register has a place in memory (`p8r_N`); an instruction takes its
+Every IR register has a place in memory (`p8r_S_N`, S the subroutine:
+register numbers are used again from one subroutine to the next); an
+instruction takes its
 operands from there into A, or HL and DE, works, and puts the result back.
 A call stores its arguments in the subroutine's parameter variables and
 takes a result from A or HL.  The IR's carry after a compare is the 6502's
@@ -735,7 +737,9 @@ calls.
 
 `make z80cmp` builds the test programs for the host and for CP/M and
 compares what they print; a program the generator cannot build yet is
-counted.  At the start: 16 the same, 5 different, 49 not built.
+counted.  At the start: 19 the same, none different, 49 not built.  The
+library's virtual registers r0-r15, which it puts at addresses from $ff0000
+for the back end to place, are 32 bytes of the program's own.
 
 ## Machines and the library
 
