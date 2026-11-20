@@ -3321,6 +3321,7 @@ genz80 {
         }
         raw("; ---- variables without values, and the registers of the code")
         raw("p8_bss_start:")
+        long bss_from = o.len
         v = prog.vars
         while v != 0 {
             if (v.kind == ir.V_VAR and v.init == 0) or v.kind == ir.V_SLAB or (v.kind == ir.V_INSTANCE and v.init == 0) {
@@ -3370,6 +3371,61 @@ genz80 {
             raw("p8_lb:  defs  4")
         }
         raw("p8_bss_end:")
+        if not uses_floats
+            outside_file(bss_from)
+    }
+
+    ; The variables without values are not part of the program's file: they are the
+    ; memory after it, which the first instructions clear.  So each "name: defs n" from
+    ; position from on becomes a name for an address after the end.  (Not in a program
+    ; that zcc links: there the memory after this module is another module's.)
+    sub outside_file(long from) {
+        ^^buf.Buf lines = buf.new(o.len - from + 16)
+        buf.add_bytes(lines, o.data + from, o.len - from)
+        o.len = from
+        long offset = 0
+        long p = 0
+        while p < lines.len {
+            long begin = p
+            while p < lines.len and lines.data[p] != '\n'
+                p++
+            long stop = p
+            p++
+            if stop == begin
+                continue
+            if lines.data[begin] == ' ' {
+                ; "    align  n"
+                long q = begin
+                while q < stop and (lines.data[q] < '0' or lines.data[q] > '9')
+                    q++
+                long boundary = 0
+                while q < stop and lines.data[q] >= '0' and lines.data[q] <= '9' {
+                    boundary = boundary * 10 + (lines.data[q] - '0')
+                    q++
+                }
+                if boundary > 1
+                    offset = (offset + boundary - 1) / boundary * boundary
+                continue
+            }
+            ; "name:" or "name:  defs  n"
+            long colon = begin
+            while colon < stop and lines.data[colon] != ':'
+                colon++
+            put("    defc  ")
+            buf.add_bytes(o, lines.data + begin, colon - begin)
+            put(" = p8_bss_start+")
+            putn(offset)
+            nl()
+            long d = colon
+            while d < stop and (lines.data[d] < '0' or lines.data[d] > '9')
+                d++
+            long bytes = 0
+            while d < stop and lines.data[d] >= '0' and lines.data[d] <= '9' {
+                bytes = bytes * 10 + (lines.data[d] - '0')
+                d++
+            }
+            offset += bytes
+        }
     }
 
     ; the struct that a type is an array of ("main.Two[4]"), or 0

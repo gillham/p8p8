@@ -4,9 +4,10 @@
 
 - The Z80 code is much shorter: a pass over each subroutine's assembly
   takes out loads, stores and moves that are not needed, and the generator
-  moves words as words and uses constants directly.  The string routines'
-  test is 5,961 bytes (10,263 before), long arithmetic 3,682 (4,564).
-  `-noopt` gives the code as it was.
+  moves words as words and uses constants directly.  Variables without values are no longer zero bytes in the
+  program's file.  The string routines' test is 4,898 bytes (10,263
+  before), long arithmetic 3,305 (4,564), hello 80 (138).  `-noopt` gives
+  the code as it was.
 
 - The Z80 machines have a library of their own (`lib/targets/z80`), no
   longer llvm16's, and its most used routines are Z80 assembly now: the

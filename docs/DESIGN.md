@@ -865,10 +865,15 @@ In the generator itself: words are moved as words (arguments of calls,
 copies, constants into memory), and a byte's arithmetic and compare with a
 constant have the constant as their operand.
 
+The variables without values and the places of the IR registers are not in
+the program's file: they are names for addresses after its end, memory
+that the first instructions clear.  (Not in a program that zcc links,
+where the memory after this module is another module's.)
+
 Measured on CP/M programs, bytes without and with all of this: the string
-routines' test 10,263 and 5,961; long arithmetic 4,564 and 3,682;
-fromtests 4,469 and 3,363; fromdocs_builtins 3,362 and 2,809; hello 138
-and 118.
+routines' test 10,263 and 4,898; long arithmetic 4,564 and 3,305;
+fromtests 4,469 and 3,041; fromdocs_builtins 3,362 and 2,057; hello 138
+and 80.
 
 The IR's hardware register slots are places in memory here (`p8_slot_N`).
 A subroutine with several results stores them there before it returns, and
