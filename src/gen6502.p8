@@ -1967,6 +1967,8 @@ gen6502 {
                 wanted++
             }
         }
+        if overlay_max != 0
+            overlay_interrupt_check()
         long most = target.number("overlay_max", 255)
         if overlay_max > most {
             error("the target has no room for an overlay of that number", target.text("overlay_max"))
@@ -1975,6 +1977,87 @@ gen6502 {
         ; (a window in main memory: the program itself ends below it)
         if overlay_max != 0 and memtop > overlay_start and load_address < overlay_start
             memtop = overlay_start
+    }
+
+    ; A subroutine in an overlay cannot be an interrupt handler: an interrupt comes
+    ; whatever is in the window (and the thunks keep A in one place while they change the
+    ; bank).  What can be seen is the usual way of installing one: the address of a
+    ; subroutine given to a routine, or stored in a vector, whose name has irq or nmi in
+    ; it (sys.set_irq, sys.set_rasterirq, cbm.CINV, cbm.NMINV...).
+    sub overlay_interrupt_check() {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                ^^ir.Chunk c = s.chunks
+                while c != 0 {
+                    if c.kind != ir.C_ASM
+                        interrupt_check_chunk(c)
+                    c = c.next
+                }
+                s = s.next
+            }
+            bl = bl.next
+        }
+    }
+
+    uword[8] handler_regs
+    ^^pointer handler_names = 0
+
+    sub interrupt_check_chunk(^^ir.Chunk c) {
+        if handler_names == 0
+            handler_names = mem.alloc(8 * sizeof(pointer))
+        ubyte known = 0
+        ^^ir.Instr i = c.first
+        while i != 0 {
+            if i.op == ir.OP_LOAD and i.sym != 0 and overlay_of(i.sym) != 0 {
+                handler_regs[known & 7] = i.r1
+                handler_names[known & 7] = i.sym
+                known++
+            }
+            else if known != 0 and i.sym != 0 and interrupt_name(i.sym) {
+                if i.op == ir.OP_CALL {
+                    ^^ir.Arg a = i.args
+                    while a != 0 {
+                        interrupt_check_reg(a.reg, known)
+                        a = a.next
+                    }
+                }
+                else if i.op == ir.OP_STOREM
+                    interrupt_check_reg(i.r1, known)
+            }
+            else if known != 0 and i.op == ir.OP_STOREM and i.sym == 0 and (i.offset == $0314 or i.offset == $0316 or i.offset == $0318)
+                interrupt_check_reg(i.r1, known)        ; (the Commodore machines' vectors, by their address)
+            i = i.next
+        }
+    }
+
+    sub interrupt_check_reg(uword reg, ubyte known) {
+        if reg == 0
+            return
+        ubyte k
+        for k in 0 to 7 {
+            if k < known and handler_regs[k] == reg {
+                error("a subroutine in an overlay cannot be an interrupt handler (it is only in memory while its own code runs)", handler_names[k])
+                return
+            }
+        }
+    }
+
+    ; has the name "irq", "nmi" or "cinv" in it, in whatever letters?
+    sub interrupt_name(^^ubyte name) -> bool {
+        long k = 0
+        while name[k] != 0 and name[k + 1] != 0 and name[k + 2] != 0 {
+            ubyte c0 = name[k] | 32
+            ubyte c1 = name[k + 1] | 32
+            ubyte c2 = name[k + 2] | 32
+            if (c0 == 'i' and c1 == 'r' and c2 == 'q') or (c0 == 'n' and c1 == 'm' and c2 == 'i')
+                return true
+            if c0 == 'c' and c1 == 'i' and c2 == 'n' and (name[k + 3] | 32) == 'v'
+                return true
+            k++
+        }
+        return false
     }
 
     ; the overlay that the subroutine of this name is in (0: none, or no subroutine)
@@ -2144,8 +2227,13 @@ gen6502 {
     ; overlay to come back into), and for each overlay that has any the routines they
     ; end in (the target's "overlay_back" and "overlay_back_full")
     sub overlay_out_stubs() {
-        if out_count == 0
+        if overlay_max == 0
+            return              ; (a program without overlays is written as it always was)
+        raw("p8ov_stubs_start:")
+        if out_count == 0 {
+            raw("p8ov_stubs_end:")
             return
+        }
         raw("; ---- the ways out of the overlays and back ----")
         uword n
         for n in 0 to out_count - 1 {
@@ -2184,6 +2272,7 @@ gen6502 {
                 }
             }
         }
+        raw("p8ov_stubs_end:")
         raw("")
     }
 
@@ -2227,10 +2316,13 @@ gen6502 {
         if overlay_max == 0
             return
         raw("; ---- the ways into the overlays ----")
+        raw("p8ov_thunks_start:")
         thunks_of_kind(false)
         if target.text("overlay_thunk_cross") != 0
             thunks_of_kind(true)
+        raw("p8ov_thunks_end:")
         ^^ubyte support = target.text("overlay_support")
+        raw("p8ov_support_start:")
         if support != 0 {
             ; the target's code that brings an overlay in, and what it needs to know
             put("p8_overlay_window = ")
@@ -2268,6 +2360,7 @@ gen6502 {
             put(support)
             raw("\"")
         }
+        raw("p8ov_support_end:")
         raw("")
     }
 
@@ -2434,9 +2527,77 @@ gen6502 {
         }
     }
 
+    ; Assembly that calls or jumps to a subroutine in an overlay by its name: the compiler
+    ; writes the way into an overlay for calls in Prog8 code only, so unless the code is
+    ; in that same overlay the subroutine is not there when it gets to it.  Said as a
+    ; warning, for names written in full (p8b_block.p8s_name).
+    ^^buf.Buf scanb = 0
+
+    sub asm_overlay_scan(^^ubyte text, long length) {
+        if scanb == 0
+            scanb = buf.new(256)
+        long k = 0
+        while k < length {
+            ; one line: past its blanks, to "jsr" or "jmp" (a label may stand before it)
+            long line_end = k
+            while line_end < length and text[line_end] != '\n'
+                line_end++
+            long c = k
+            while c + 4 < line_end and text[c] != ';' {
+                if (text[c] == 'j' or text[c] == 'J') and (c == k or text[c - 1] == ' ' or text[c - 1] == '\t')
+                        and (text[c + 3] == ' ' or text[c + 3] == '\t') {
+                    ubyte m1 = text[c + 1] | 32
+                    ubyte m2 = text[c + 2] | 32
+                    if (m1 == 's' and m2 == 'r') or (m1 == 'm' and m2 == 'p') {
+                        long a = c + 4
+                        while a < line_end and (text[a] == ' ' or text[a] == '\t')
+                            a++
+                        buf.clear(scanb)
+                        bool dotted = false
+                        while a < line_end and scanb.len < 200 {
+                            ubyte ch = text[a]
+                            if ch == '.'
+                                dotted = true
+                            else if not ((ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_')
+                                break
+                            buf.add_byte(scanb, ch)
+                            a++
+                        }
+                        buf.add_byte(scanb, 0)
+                        if dotted {
+                            ^^ir.Sub callee = find_sub(scanb.data)
+                            if callee != 0 and callee.overlay != 0 and callee.overlay != cur_overlay {
+                                out.err()
+                                out.puts("warning: assembly in ")
+                                if crumb.name != 0
+                                    out.puts(crumb.name)
+                                else
+                                    out.puts("a block")
+                                out.puts(" names ")
+                                out.puts(scanb.data)
+                                out.puts(", which is in overlay ")
+                                buf.clear(scanb)
+                                buf.add_long(scanb, callee.overlay)
+                                buf.add_byte(scanb, 0)
+                                out.puts(scanb.data)
+                                out.puts(": it is not in memory there; call it from Prog8 code")
+                                out.nl()
+                            }
+                        }
+                        break
+                    }
+                }
+                c++
+            }
+            k = line_end + 1
+        }
+    }
+
     sub asm_text(^^ubyte text, long length) {
         if text == 0
             return
+        if overlay_max != 0
+            asm_overlay_scan(text, length)
         buf.add_bytes(w(), text, length)
         if length == 0 or text[length - 1] != '\n'
             nl()

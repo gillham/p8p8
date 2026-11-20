@@ -657,6 +657,17 @@ kept from `overlay_store` on ($40000, bank 4) and the DMA controller copies
 one into the window at $a000-$bfff (`overlay_dma.asm`).  Nothing is banked
 or mapped, so the ROM stays where it is.
 
+Three checks: assembly text is scanned for `jsr`/`jmp` to the full name of a
+subroutine in another overlay (`asm_overlay_scan`, a warning); the IR is
+scanned for the address of a subroutine in an overlay that goes to a call
+or a store whose name has irq, nmi or cinv in it, or to $0314-$0318
+(`overlay_interrupt_check`, an error); and an overlay that the directives
+name but that has no code is said.  `-meminfo` lists what is in an overlay
+from where each block and lone subroutine begins in the assembler's list
+of labels (a symbol that nothing uses is not in that list, so sizes cannot
+be symbols of their own), and what the thunks, the stubs and the support
+file take in main memory from labels around them.
+
 After the build the driver removes what the assembler wrote for each part
 (`name.ov0`, `name.ov1`...).
 

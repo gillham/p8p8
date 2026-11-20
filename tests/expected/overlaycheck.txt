@@ -122,6 +122,20 @@ bank 129 has something in it
 bank 255 has something in it
 bank 129 begins with 0a141e28
 the reset vector is 0xfd00
+-- handler: an interrupt handler in an overlay
+6502 code generator: a subroutine in an overlay cannot be an interrupt handler (it is only in memory while its own code runs): p8b_main.p8s_ticker
+6502 code generator: a subroutine in an overlay cannot be an interrupt handler (it is only in memory while its own code runs): p8b_main.p8s_blinker
+-- asmcall: assembly that calls into an overlay
+warning: assembly in p8b_main.p8s_direct names p8b_first.p8s_value, which is in overlay 1: it is not in memory there; call it from Prog8 code
+warning: assembly in p8b_second.p8s_also names p8b_first.p8s_value, which is in overlay 1: it is not in memory there; call it from Prog8 code
+-- subs: what -meminfo lists in each overlay (without the sizes)
+overlay 1
+    main.triple
+    tools
+overlay 2
+    main.with_inner
+    main.report
+overlay 3
 -- overlays, for the X16 with -nooverlays: one program
 overlays.prg
 MAIN FIRST 42 SECOND FIRST 1238 2

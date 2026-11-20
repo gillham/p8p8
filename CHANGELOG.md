@@ -32,6 +32,12 @@
 - Overlays on the GameTank: `%overlay n` is bank n of the cartridge (128
   to 254), with what the block includes as assembly or binary beside its
   code, and `p8c` writes the whole 2 MB cartridge as `name.gtr`.
+- `-meminfo` lists the blocks and subroutines in each overlay with their
+  bytes, and what the overlays cost in main memory (the ways in, the ways
+  out and back, the code they share).
+- An interrupt handler in an overlay is an error where the compiler can see
+  it being installed; assembly that calls a subroutine in another overlay
+  by its full name gets a warning.
 - `%option overlay_data` in a block of an overlay: routines of the library
   are called with the block's bank still in the window, so that a picture
   beside its code can be unpacked or copied by them.

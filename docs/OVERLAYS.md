@@ -108,15 +108,23 @@ writes two files that belong together: `game.prg` and `game.non`.  Put both
 on the same disk or in the same directory and run `game.prg`.
 
 `-meminfo` prints what the main program and each overlay take and what is
-left:
+left, what is in an overlay that has more than one thing in it, and what
+the overlays cost in main memory:
 
 ```
-memory of game (cx16):
-  main program  $0801-$0d70   1392 bytes, 37263 free below $9f00
-  overlay   1   $a000-$a029     42 bytes, 8150 free of 8192
-  overlay   2   $a000-$a07e    127 bytes, 8065 free of 8192
-  files: game.prg (the loader) 290 bytes, game.non 1543 bytes
+memory of p8vi_cx16ovl (cx16):
+  main program  $0801-$8a99  33433 bytes, 5222 free below $9f00
+  overlay   1   $a000-$b48b   5260 bytes, 2932 free of 8192
+      main.execute                       554
+      main.subst_cmd                     757
+      main.save_file                     271
+      view                              2290
+      ...
+  for them in main memory 813 bytes: the ways in 210, the ways out and back 564, the code they share 39
+  files: p8vi_cx16ovl.prg (the loader) 306 bytes, p8vi_cx16ovl.non 36651 bytes
 ```
+
+So moving those 5,260 bytes out of main memory cost 813 there.
 
 An overlay that does not fit is an error from the assembler that names it:
 "overlay 2 is too large by 131 bytes".  Move a subroutine to another block.
@@ -220,6 +228,11 @@ there for every overlay, and are not counted against one.
 ## What to keep out of an overlay
 
 - **Interrupt handlers.**  An interrupt comes whatever is in the window.
+  The compiler refuses a subroutine in an overlay whose address is given to
+  a routine or stored in a vector with `irq` or `nmi` in its name
+  (`sys.set_irq`, `cbm.CINV`...); a handler installed another way it cannot
+  see.  A handler in the main program must not call into an overlay
+  either.
 - **Code that works on banked data, on the X16.**  An overlay runs in the
   window at $a000, so it cannot look at another bank there.  The
   subroutines that read and write a program's own banks (the text of an
@@ -244,7 +257,9 @@ there for every overlay, and are not counted against one.
 - **Assembly that jumps into another overlay by its label.**  The compiler
   writes the way into an overlay for calls in Prog8 code; a `jsr` in an
   `%asm` block goes where it says, and what is at that address depends on
-  the overlay that is in.
+  the overlay that is in.  There is a warning for a `jsr` or `jmp` to a
+  subroutine in another overlay when its name is written in full
+  (`p8b_block.p8s_name`).
 
 ## What a call costs
 
@@ -282,6 +297,8 @@ Measured, 20,000 calls of a subroutine that adds one to a byte, in jiffies:
 | `?cannot load the program's overlays` (C64, C128, MEGA65) | the same, at the first call into an overlay |
 | `?overlays need a ram expansion unit` (C64, C128) | no REU answers |
 | "overlay n is too large by ... bytes" when building | more code than the window holds |
+| "a subroutine in an overlay cannot be an interrupt handler" when building | its address is given to something with `irq` or `nmi` in its name |
+| "warning: assembly in ... names ..., which is in overlay n" when building | a `jsr` or `jmp` in assembly to a subroutine that is in another overlay |
 | "warning: overlay n has nothing in it" when building | nothing in the program calls a subroutine of that overlay, so it has no code (the program is still built as one with overlays) |
 | "Program too long" when building | the main program reaches the window; on the C64, C128 and MEGA65 it ends below it |
 

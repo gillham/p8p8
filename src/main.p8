@@ -1545,7 +1545,7 @@ main {
         long length = strings.length(name)
         long k = 0
         while k < size - length - 1 {
-            if data[k] == '.' and buf.bytes_equal(data + k + 1, name, length) and (data[k + 1 + length] == '\n' or data[k + 1 + length] == '\r') {
+            if data[k] == '.' and label_is(data + k + 1, name, length) and (data[k + 1 + length] == '\n' or data[k + 1 + length] == '\r') {
                 long e = k - 1
                 while e > 0 and data[e] == ' '
                     e--
@@ -1562,6 +1562,16 @@ main {
             k++
         }
         return -1
+    }
+
+    ; (the list has a colon where a name has a dot between its scopes)
+    sub label_is(^^ubyte listed, ^^ubyte name, long length) -> bool {
+        long k
+        for k in 0 to length - 1 {
+            if listed[k] != name[k] and not (listed[k] == ':' and name[k] == '.')
+                return false
+        }
+        return true
     }
 
     sub report_number(long value, ubyte width) {
@@ -1583,6 +1593,79 @@ main {
             out.putc(buf.hex_digit(((value >> shift) & 15) as ubyte))
             shift -= 4
         }
+    }
+
+    ; a block's or a subroutine's name as the source has it (without p8b_ and p8s_)
+    sub report_name(^^ubyte name) {
+        long k = 0
+        bool at_start = true
+        ubyte width = 0
+        while name[k] != 0 {
+            if at_start and name[k] == 'p' and name[k + 1] == '8' and (name[k + 2] == 'b' or name[k + 2] == 's') and name[k + 3] == '_'
+                k += 4
+            at_start = name[k] == '.'
+            out.putc(name[k])
+            width++
+            k++
+        }
+        while width < 32 {
+            out.putc(' ')
+            width++
+        }
+    }
+
+    ; What is in overlay n: its blocks, and the subroutines that are there by themselves,
+    ; each with its bytes.  They follow each other in the overlay, so an entry's size is
+    ; from where it begins (the assembler's list of labels) to where the next one does.
+    const ubyte CONTENTS = 128
+    ^^pointer content_names = 0
+    long[CONTENTS] content_starts
+
+    sub overlay_contents(ubyte n, ^^ubyte labels, long labels_size) {
+        if content_names == 0
+            content_names = mem.alloc(CONTENTS as long * sizeof(pointer))
+        ubyte count = 0
+        ^^ir.Block bl = gen6502.prog.blocks
+        while bl != 0 {
+            if bl.overlay == n {
+                if bl.subs != 0 or bl.chunks != 0
+                    count = content_add(count, bl.name, labels, labels_size)
+            }
+            else {
+                ^^ir.Sub s = bl.subs
+                while s != 0 {
+                    if s.overlay == n and gen6502.parent_of(bl, s) == 0
+                        count = content_add(count, s.name, labels, labels_size)
+                    s = s.next
+                }
+            }
+            bl = bl.next
+        }
+        if count < 2
+            return              ; (one thing: the overlay's line says it all)
+        ubyte k
+        for k in 0 to count - 1 {
+            ; the next one that begins after this one, or the overlay's end
+            long finish = gen6502.overlay_start + ov_sizes[n]
+            ubyte other
+            for other in 0 to count - 1 {
+                if content_starts[other] > content_starts[k] and content_starts[other] < finish
+                    finish = content_starts[other]
+            }
+            out.puts("      ")
+            report_name(content_names[k])
+            report_number(finish - content_starts[k], 6)
+            out.nl()
+        }
+    }
+
+    sub content_add(ubyte count, ^^ubyte name, ^^ubyte labels, long labels_size) -> ubyte {
+        long start = label_value(labels, labels_size, name)
+        if start < 0 or count == CONTENTS
+            return count
+        content_names[count] = name
+        content_starts[count] = start
+        return count + 1
     }
 
     ; -meminfo (and -verbose): what the program that was just built takes and leaves
@@ -1639,7 +1722,23 @@ main {
                 out.puts(" free of ")
                 report_number(window, 1)
                 out.nl()
+                overlay_contents(n, data, size)
             }
+        }
+        ; what the overlays cost in main memory
+        long thunks = label_value(data, size, "p8ov_thunks_end") - label_value(data, size, "p8ov_thunks_start")
+        long stubs = label_value(data, size, "p8ov_stubs_end") - label_value(data, size, "p8ov_stubs_start")
+        long support = label_value(data, size, "p8ov_support_end") - label_value(data, size, "p8ov_support_start")
+        if thunks >= 0 and stubs >= 0 and support >= 0 {
+            out.puts("  for them in main memory ")
+            report_number(thunks + stubs + support, 1)
+            out.puts(" bytes: the ways in ")
+            report_number(thunks, 1)
+            out.puts(", the ways out and back ")
+            report_number(stubs, 1)
+            out.puts(", the code they share ")
+            report_number(support, 1)
+            out.nl()
         }
         if target.number("overlay_image_size", 0) != 0 {
             out.puts("  file: ")

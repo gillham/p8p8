@@ -100,6 +100,15 @@ for bank in range(128, 256):
 print("bank 129 begins with", data[0x4000:0x4004].hex())
 print("the reset vector is", hex(data[-4] | data[-3] << 8))
 PY
+# what the compiler says: an interrupt handler in an overlay (refused), assembly that calls
+# into another overlay (a warning), and which blocks and subroutines -meminfo lists
+mkdir -p "$work/said"
+echo "-- handler: an interrupt handler in an overlay"
+"$p8c" -lib "$lib" -target cx16 -out "$work/said" tests/overlay/handler.p8 2>&1 | grep -v "^building\|^ *$"
+echo "-- asmcall: assembly that calls into an overlay"
+"$p8c" -lib "$lib" -target cx16 -out "$work/said" tests/overlay/asmcall.p8 2>&1
+echo "-- subs: what -meminfo lists in each overlay (without the sizes)"
+"$p8c" -lib "$lib" -target cx16 -meminfo -out "$work/said" tests/overlay/subs.p8 2>&1 | grep '^  overlay\|^      ' | awk '{ if ($1 == "overlay") print $1, $2; else print "   ", $1 }'
 echo "-- overlays, for the X16 with -nooverlays: one program"
 mkdir -p "$work/off"
 "$p8c" -lib "$lib" -target cx16 -nooverlays -out "$work/off" tests/overlay/overlays.p8 || exit 1
