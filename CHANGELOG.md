@@ -37,6 +37,10 @@
   the code as it was.  It is faster too: multiplications by constants are
   additions, and the long multiplication and division do no more steps
   than the numbers need (`make z80bench`: 9.4 seconds before, 3.4 now).
+  A large program no longer has memory for temporary values that the
+  pass made unnecessary (an editor for the TRS-80 Model 4: 37,317 bytes
+  before, 33,069 now; its 128K version 48,895 and 43,255, which is what
+  lets it run).
 
 - The Z80 machines have a library of their own (`lib/targets/z80`), no
   longer llvm16's, and its most used routines are Z80 assembly now: the

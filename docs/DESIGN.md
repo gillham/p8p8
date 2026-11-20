@@ -899,8 +899,12 @@ constant have the constant as their operand.
 
 The variables without values and the places of the IR registers are not in
 the program's file: they are names for addresses after its end, memory
-that the first instructions clear.  (Not in a program that zcc links,
-where the memory after this module is another module's.)
+that the first instructions clear.  (In a program that zcc links, the
+memory after this module is another module's, so there they are in z88dk's
+section for such memory, `bss_user`.)  Only the IR registers whose places
+are still named once the pass has run get one (`still_named`): in a large
+program most are not, and they were 6,490 bytes of a 128K editor that did
+not fit its machine with them.
 
 The pass also follows ordinary variables in A, HL and DE (a store through
 a pointer or a call forgets them; memory-mapped ones are never followed),

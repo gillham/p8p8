@@ -635,8 +635,10 @@ genz80 {
         nl()
         this_sub = 0
         this_index = -1
-        if optimize
+        if optimize {
             peepz80.run(o, from)
+            still_named(from)
+        }
         register_cells()
         if carry_cell {
             buf.add_str(cells, "p8c_")
@@ -742,6 +744,33 @@ genz80 {
 
     ; the places of the registers that the code just written names, for the end of the
     ; program
+    ; After the pass over the assembly: only the IR registers whose places the lines from
+    ; position from on still name get one.  (Most do not: their values stay in A, HL or DE.)
+    sub still_named(long from) {
+        uword r
+        for r in 1 to ir.regcount
+            reg_used[r] = 0
+        long p = from
+        long last = o.len - 6
+        while p < last {
+            if o.data[p] == 'p' and o.data[p + 1] == '8' and o.data[p + 2] == 'r' and o.data[p + 3] == '_' {
+                p += 4
+                while p < o.len and o.data[p] >= '0' and o.data[p] <= '9'
+                    p++
+                p++
+                long n = 0
+                while p < o.len and o.data[p] >= '0' and o.data[p] <= '9' {
+                    n = n * 10 + (o.data[p] - '0')
+                    p++
+                }
+                if n >= 1 and n <= ir.regcount
+                    reg_used[n] = 1
+            }
+            else
+                p++
+        }
+    }
+
     sub register_cells() {
         uword r
         for r in 1 to ir.regcount {
@@ -4172,6 +4201,21 @@ genz80 {
         raw("p8_bss_end:")
         if not linked()
             outside_file(bss_from)
+        else
+            own_section(bss_from)
+    }
+
+    ; In a program that zcc links, the variables without values are in the section that
+    ; z88dk has for such memory: after the program's code and data, before the heap, and
+    ; not in the program's file.  (The line that names the section goes before
+    ; p8_bss_start, which is 14 characters before position from.)
+    sub own_section(long from) {
+        long label_at = from - 14
+        ^^buf.Buf rest = buf.new(o.len - label_at + 16)
+        buf.add_bytes(rest, o.data + label_at, o.len - label_at)
+        o.len = label_at
+        raw("    SECTION  bss_user")
+        buf.add_bytes(o, rest.data, rest.len)
     }
 
     ; The variables without values are not part of the program's file: they are the
