@@ -697,7 +697,7 @@ checker {
     ; identifiers cannot start with an underscore, in any part of a dotted name
     ; %asm on a target without an assembler
     sub native_asm(^^ast.Node n) {
-        if llvm_target and n.name != 0 and strings.compare(n.name, "asm") == 0
+        if llvm_target and not importer.z80 and n.name != 0 and strings.compare(n.name, "asm") == 0
             error(n, "%asm with native assembly code can't be used on the llvm targets, use %ir instead")
         else if target_name != 0 and strings.compare(target_name, "virtual") == 0 and n.name != 0 and strings.compare(n.name, "asm") == 0
             error(n, "%asm blocks with native assembly code cannot be executed by the virtual machine, use %ir {{ ... }} instead")

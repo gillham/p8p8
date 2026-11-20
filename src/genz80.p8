@@ -713,8 +713,15 @@ genz80 {
         if c.kind == ir.C_ASM {
             if c.is_ir
                 error("IR text that was not turned into instructions", c.label)
-            else
-                error("assembly text cannot be used on the Z80 yet", c.label)
+            else {
+                ; Z80 assembly of the program's own (%asm), as it stands.  It names the
+                ; program's variables as this generator writes them: an underscore, and
+                ; underscores for the dots (txt.plot.col is _txt_plot_col).
+                buf.add_bytes(o, c.text, c.textlen)
+                nl()
+                ; (what it leaves in the carry is not known)
+                previous = 0
+            }
             return
         }
         previous = 0

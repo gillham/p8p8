@@ -113,8 +113,32 @@ target {
         return spec
     }
 
-    ; Reads a properties file; false when there is none.
+    ; Reads a properties file; false when there is none.  A file may name another that
+    ; it is made from ("base = file", beside it): what it says itself comes first, and
+    ; the other file gives the keys it does not have.  A path in a key of the other file
+    ; is still read from where the first one is.
     sub load(^^ubyte name) -> bool {
+        if not parse(name, false)
+            return false
+        ^^ubyte from = text("base")
+        if from != 0 {
+            ^^buf.Buf bp = buf.new(256)
+            if dir != 0 and from[0] != '/' {
+                buf.add_str(bp, dir)
+                buf.add_byte(bp, '/')
+            }
+            buf.add_str(bp, from)
+            buf.add_byte(bp, 0)
+            if not parse(bp.data, true) {
+                loaded = false
+                return false
+            }
+        }
+        return true
+    }
+
+    ; the keys of one file; more: after those that are there already
+    sub parse(^^ubyte name, bool more) -> bool {
         setup()
         long size = io_platform.file_size(name)
         if size < 0
@@ -124,7 +148,8 @@ target {
         if got < 0
             return false
         text[got] = 0
-        count = 0
+        if not more
+            count = 0
         long i = 0
         while text[i] != 0 {
             ; one logical line
@@ -193,6 +218,8 @@ target {
                 count++
             }
         }
+        if more
+            return true
         loaded = true
         file = strtab.intern_cstr(name)
         dir = 0

@@ -28,9 +28,9 @@ The command is `p8c`.
 - For the 68000 there is a first code generator, for the `qemu68k` target
   (a bare 68020 in QEMU), the Amiga 1200 and the Amiga 500: it writes vasm
   assembly.
-- For the Z80 there is the beginning of a code generator: `-target cpm`
-  and `-target trs80` (the TRS-80 Model I and III)
-  build a CP/M program and a TRS-80 command file with z88dk (its assembler; for a program with
+- For the Z80 there is the beginning of a code generator: `-target cpm`,
+  `-target trs80` (the TRS-80 Model I and III) and `-target trs80m4` (the
+  Model 4) build a CP/M program and TRS-80 command files with z88dk (its assembler; for a program with
   floats its `zcc` and maths library).  The test programs run; files and
   the clock are missing, and the code is not optimised yet.
 - For the host it writes LLVM IR and builds a native executable with clang.

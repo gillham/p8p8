@@ -758,6 +758,17 @@ program's own before anything else.  `make trs80cmp3` is the comparison on
 a Model III, with TRSDOS 1.3 and with LDOS: 65 the same, none different,
 each.
 
+`trs80m4` is the Model 4 in its own mode: programs at $3000, an 80 by 24
+screen, and everything through the DOS's supervisor calls (`rst $28`).  Its
+`textio` is the first library module with Z80 assembly: `%asm` on a Z80
+machine is written into the program as it stands, and names variables as
+the generator does (`_txt_plot_col`); an `asmsub` is not possible yet,
+because its register names are the 6502's.  z88dk has no Model 4 platform,
+so a program with floats is linked for its TRS-80 one without the DOS
+library (as prog8c-llvm's profile does).  `make trs80cmp4`: 65 the same,
+none different.  `make trs80screen` runs the screen routines (a character
+put and read back, the cursor moved and asked for) on the three models.
+
 `make trs80cmp` is `make z80cmp` for the TRS-80: the programs are built
 with `tests/z80/trs80gp.properties`, a variant of the target whose console
 also writes to the printer and whose end tells the emulator to stop, and

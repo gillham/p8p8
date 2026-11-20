@@ -121,11 +121,19 @@ serves both.
 | `reset_address` | what is pushed as the return address of the program when the zero page is not kept (default `sys.reset_system`) |
 | `jsrfar_routine` | the routine for a call into another bank (default `<name>.x16jsrfar`) |
 
+### A target file made from another
+
+`base = file` (beside this one, or a whole path) names a target file whose
+keys this one has as well: what a file says itself comes first.  A path in
+a key of the base is still read from where the file that names it is, so a
+file elsewhere states `library` (and `float_source`) itself.  The tests'
+trs80gp variants are made this way.
+
 ### A Z80 machine
 
 `cpu = z80` makes the target a Z80 machine: p8p8's Z80 code generator
 writes the program (assembly for z88dk's z80asm), and none of the 6502 keys
-above apply.  `cpm` and `trs80` are such targets.  The routines are lines of
+above apply.  `cpm`, `trs80` and `trs80m4` are such targets.  The routines are lines of
 assembly that end by returning; a line that ends with a colon is a label.
 `tests/z80/trs80gp.properties` is a target file of one's own made from
 `trs80`: its console also prints, and its end stops the emulator, which is

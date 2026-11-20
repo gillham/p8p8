@@ -1,7 +1,7 @@
 #!/bin/sh
 # Does the TRS-80's DOS still work after a program has ended?  A program with floats
-# (linked by zcc) and one without are built for the trs80 target as it is, run on a
-# Model I and on a Model III (each with its TRSDOS) in trs80gp, and DIR is typed at the
+# (linked by zcc) and one without are built for the trs80 and trs80m4 targets as they
+# are, run on a Model I, a Model III and a Model 4 (each with its TRSDOS) in trs80gp, and DIR is typed at the
 # prompt that should follow; the text of the screen is then saved by the emulator and
 # must show the directory.
 # (A program once left the DOS damaged in two ways: by overrunning its stack, and
@@ -17,15 +17,19 @@ bad=0
 for f in "$here/hello.p8" "$here/programs/floatlong.p8"; do
     name=$(basename "$f" .p8)
     mkdir -p "$work/$name"
-    if ! "$p8c" -lib "$lib" -target trs80 -out "$work/$name" "$f" > "$work/$name/build.log" 2>&1; then
-        echo "not built: $f"; bad=1; continue
+  for model in -m1 -m3 -m4; do
+    target=trs80
+    [ "$model" = -m4 ] && target=trs80m4
+    if ! "$p8c" -lib "$lib" -target $target -out "$work/$name" "$f" > "$work/$name/build.log" 2>&1; then
+        echo "not built: $f ($model)"; bad=1; continue
     fi
     cp "$work/$name/$name.cmd" "$work/$name/prog.cmd"
-  for model in -m1 -m3; do
     rm -f "$work/$name/trs80-text-0.bin"
-    # (what a directory has on the screen: the Model I's TRSDOS 2.3, the Model III's 1.3)
+    # (what a directory has on the screen: the Model I's TRSDOS 2.3, the Model III's 1.3,
+    # the Model 4's TRSDOS 6)
     words="FILE DIRECTORY"
     [ "$model" = -m3 ] && words="Free Granules"
+    [ "$model" = -m4 ] && words="files out of"
     # (the options are timed: 900 frames for the DOS to start and the program to run,
     # 600 for the directory; -it saves the text of the screen, -ix ends the emulator)
     (cd "$work/$name" && timeout 90 "${TRS80GP:-trs80gp}" -batch -turbo -im wp 0 off $model prog.cmd \

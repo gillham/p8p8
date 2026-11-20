@@ -18,6 +18,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 machine=${Z80CMP_MACHINE:-cpm}
 where="CP/M in tnylpo"
 [ "$machine" = trs80 ] && where="TRS-80 in trs80gp ${TRS80_MODEL:--m1}"
+[ "$machine" = trs80m4 ] && where="TRS-80 Model 4 in trs80gp"
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_z80cmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/host" "$work/z80"
@@ -31,6 +32,9 @@ for f in "$@"; do
     fi
     if [ "$machine" = trs80 ]; then
         "$p8c" -lib "$lib" -srcdirs "$lib/targets/trs80" -target "$here/z80/trs80gp.properties" -out "$work/z80" "$f" > "$work/z80.err" 2>&1
+        built="$work/z80/$name.cmd"
+    elif [ "$machine" = trs80m4 ]; then
+        "$p8c" -lib "$lib" -srcdirs "$lib/targets/trs80m4" -target "$here/z80/trs80gp-m4.properties" -out "$work/z80" "$f" > "$work/z80.err" 2>&1
         built="$work/z80/$name.cmd"
     else
         "$p8c" -lib "$lib" -target cpm -out "$work/z80" "$f" > "$work/z80.err" 2>&1
@@ -49,6 +53,8 @@ for f in "$@"; do
     # (a CP/M file name is eight characters and three)
     if [ "$machine" = trs80 ]; then
         "$here/trs80run.sh" "$built" > "$work/z80/$name.out" 2>&1
+    elif [ "$machine" = trs80m4 ]; then
+        TRS80_MODEL=-m4 "$here/trs80run.sh" "$built" > "$work/z80/$name.out" 2>&1
     else
         (cd "$work/z80" && cp "$name.com" t.com && timeout 20 tnylpo t.com < /dev/null > "$name.out" 2>&1)
     fi

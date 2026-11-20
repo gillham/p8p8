@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `-target trs80m4`: the TRS-80 Model 4 in its own mode (TRSDOS 6, LS-DOS
+  6), with an 80 by 24 screen through the DOS's supervisor calls.  All the
+  test programs print there what they print on the host (`make trs80cmp4`).
+- `%asm` on a Z80 machine: Z80 assembly as it stands, for z88dk's z80asm.
+  It names the program's variables as the generator writes them
+  (`txt.plot.col` is `_txt_plot_col`).  Subroutines written wholly in
+  assembly (`asmsub`) are not there yet.
+- A target file can be made from another: `base = file`.
+
 - A second Z80 machine: `-target trs80`, the TRS-80 Model I and III with a
   DOS.  The program is a command file (`.cmd`), which p8c writes itself;
   the screen, the console and the keys are the ROM's.  All the test
