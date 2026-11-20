@@ -138,7 +138,7 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 | `output_format` | `cmd`: a TRS-80 command file (load records and a start address), which p8c makes of the assembler's plain image; without it the plain image |
 | `startup_code` | the first instructions, when the machine needs any: where the stack is (`\n` between lines) |
 | `stack_size` | the program gets a stack of its own of this many bytes (the TRS-80, whose DOS calls a program on a small stack) |
-| `exit_code` | how the program ends; `sys.exit` comes here too.  A program that `zcc` linked returns to zcc's own first instructions instead |
+| `exit_code` | how the program ends; `sys.exit` comes here too |
 | `exit_hook` | lines before the end, whichever it is (the tests' trs80gp variant stops the emulator there) |
 | `console_out` | a routine: the character in A to the console |
 | `key_poll` | a routine: A = a key, or 0 when none is waiting |
@@ -146,6 +146,7 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 | `run_command` | what `-run` runs, with `{file}` for the program (p8p8) |
 | `zcc_platform` | z88dk's platform for a program with floats, which `zcc` links (`+cpm`) |
 | `library` | for a Z80 machine the target's own directory is searched before it: `trs80` has its own `textio.p8` and takes the rest from `../llvm16` |
+| `zcc_init` | lines for the start of zcc's own first instructions (the TRS-80: an empty command line, since zcc's code writes into the one it is given) |
 | `float_source` | a C file that is linked with such a program, from the target's directory (`../z80/z80-float.c`: the one the Z80 machines share) |
 | `library` | the directory with the target's modules, as for any target |
 | `library_platform` | a subdirectory of `library` that is searched before it (p8p8) |

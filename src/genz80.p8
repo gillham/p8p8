@@ -456,6 +456,11 @@ genz80 {
         nl()
         line("; written by p8p8's Z80 code generator, for z88dk-z80asm")
         if uses_floats {
+            if target.text("zcc_init") != 0 {
+                ; (lines of the target for the start of zcc's first instructions)
+                line("SECTION  code_crt_init")
+                target_lines("zcc_init")
+            }
             line("SECTION  code_user")
             line("PUBLIC  _main")
             ubyte e
@@ -467,8 +472,6 @@ genz80 {
                 }
             }
             raw("_main:")
-            ; (where zcc's first instructions called from: the end goes back there)
-            line("ld  (p8_exit_sp),sp")
             own_stack()
         }
         else {
@@ -497,21 +500,14 @@ genz80 {
         nl()
         line("call  p8_init_globals")
         line("call  _main_start")
-        ; How the program ends; sys.exit comes here too.  A program that zcc linked
-        ; returns to zcc's first instructions, which put back what they changed and
-        ; leave as the machine wants; another ends as the target file says.  Before
-        ; either, what the target wants done at the end (exit_hook), when it has that.
+        ; How the program ends, as the target file says; sys.exit comes here too.  (A
+        ; program that zcc linked does not go back through zcc's own last instructions:
+        ; on the TRS-80 those leave the cursor at the top of the screen.)  Before the
+        ; end, what the target wants done there (exit_hook), when it has that.
         raw("p8_exit:")
         if target.text("exit_hook") != 0
             target_lines("exit_hook")
-        if uses_floats {
-            line("ld  sp,(p8_exit_sp)")
-            line("ld  hl,0")
-            line("ret")
-            raw("p8_exit_sp:  defw  0")
-        }
-        else
-            target_lines("exit_code")
+        target_lines("exit_code")
         nl()
     }
 

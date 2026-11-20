@@ -736,12 +736,19 @@ library it names (`importer.own_library`), so `trs80` has a `textio` of
 its own (the 64 by 16 screen at $3c00, the ROM's cursor address) and
 `cpm` one whose keys go through the target's routines.
 
-The TRS-80's DOS calls a program on its own stack, which is small: a
-program with floats overran it (103 bytes of the DOS's variables changed,
-and the DOS showed rubbish after the program), so the target gives the
-program a stack of its own (`stack_size`).  A program that zcc linked ends
-by returning to zcc's first instructions, with the stack pointer they
-called it with; another ends as the target file says.
+A program with floats left the TRS-80's DOS damaged, in two ways.  The DOS
+calls a program on its own stack, which is small, and the float routines
+overran it (103 bytes of the DOS's variables changed), so the target gives
+the program a stack of its own (`stack_size`).  And zcc's first
+instructions take a command line where HL points at the start and put a 0
+at its end; trs80gp starts a program with HL at a byte of the DOS's own,
+which that 0 broke.  The target's `zcc_init` lines, which go into zcc's
+section `code_crt_init`, give zcc's code an empty line of the program's own
+(prog8c-llvm's TRS-80 profiles do the same in a startup source).  A program
+ends as the target file says whether zcc linked it or not: zcc's own last
+instructions leave the cursor at the top of the screen.  `make trs80dos`
+types DIR after a program with floats and one without, and looks for the
+directory on the screen that trs80gp saves.
 
 `make trs80cmp` is `make z80cmp` for the TRS-80: the programs are built
 with `tests/z80/trs80gp.properties`, a variant of the target whose console
