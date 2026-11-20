@@ -29,6 +29,8 @@
   an overlay may call a subroutine there that chooses a bank for the
   program's data and leaves it chosen; the overlay comes back for its own
   code, and the main program finds its bank as it left it.
+- `-nooverlays` builds a program in one piece whatever its `%overlay`
+  directives say.
 - `%overlay n` in a subroutine puts that one subroutine into the overlay:
   the way to move code out of `main`.
 - [docs/OVERLAYS.md](docs/OVERLAYS.md): a guide to overlays.

@@ -1899,7 +1899,7 @@ gen6502 {
         cur_overlay = 0
         overlay_start = target.number("overlay_window_start", 0)
         overlay_end = target.number("overlay_window_end", 0)
-        bool possible = overlay_start != 0 and target.text("overlay_thunk") != 0
+        bool possible = overlay_start != 0 and target.text("overlay_thunk") != 0 and not overlays_off
         overlay_returns = possible and target.text("overlay_return") != 0
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
@@ -2038,6 +2038,7 @@ gen6502 {
     ; that one's thunk, which puts back what was there itself.)
     const uword OUT_STUBS = 1024
     bool overlay_returns = false    ; the target has "overlay_return"
+    bool overlays_off = false       ; -nooverlays: one program, whatever the source and the target say
     ^^pointer out_names = 0         ; the stubs' names
     ^^pointer out_callees = 0       ; what each calls (0: through the pointer in the scratch word)
     ^^ubyte out_overlays = 0

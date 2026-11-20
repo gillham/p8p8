@@ -82,6 +82,20 @@ for cpu in 45gs02 6502; do
         sed -n '/ RUN:/,$p' "$work/$program/screen.txt" | grep '^[0-9MH?]'
     done
 done
+echo "-- overlays, for the X16 with -nooverlays: one program"
+mkdir -p "$work/off"
+"$p8c" -lib "$lib" -target cx16 -nooverlays -out "$work/off" tests/overlay/overlays.p8 || exit 1
+ls "$work/off" | grep -E '\.(prg|non)$'
+(cd "$work/off" && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy x16emu -prg overlays.prg -run -warp -echo iso \
+    > screen.txt 2>&1 < /dev/null) &
+emulator=$!
+n=0
+while [ $n -lt "$seconds" ]; do n=$((n + 1)); /bin/sleep 1; done
+pkill -P $emulator 2> /dev/null
+kill $emulator 2> /dev/null
+wait $emulator 2> /dev/null
+tr -d '\000\r' < "$work/off/screen.txt" | sed 's/\\X[0-9A-F][0-9A-F]//g' \
+    | grep -a '^[A-Z0-9-][A-Z0-9 -]*$' | grep -a -v '^LOADING\|^READY\|^RUN'
 echo "-- overlays, for a machine without them (pet32): one program"
 mkdir -p "$work/flat"
 "$p8c" -lib "$lib" -target pet32 -out "$work/flat" tests/overlay/overlays.p8 || exit 1

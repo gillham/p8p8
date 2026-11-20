@@ -112,7 +112,8 @@ An overlay that does not fit is an error from the assembler that names it:
 
 On every other machine `%overlay` is ignored and the program is built in one
 piece, if it fits.  That is also a way to try a program on the host
-(`-target llvm64`) or to compare.
+(`-target llvm64`) or to compare.  `-nooverlays` does the same on a machine
+that has overlays: one source, built with them and without.
 
 **Commander X16.**  Overlay n is RAM bank n, so the numbers choose the
 banks: `%overlay 10` and `%overlay 11` leave banks 1 to 9 alone.  A program

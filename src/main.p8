@@ -346,6 +346,8 @@ main {
                 opt_verbose = true
             else if strings.compare(arg, "-meminfo") == 0
                 opt_meminfo = true
+            else if strings.compare(arg, "-nooverlays") == 0
+                gen6502.overlays_off = true
             else if strings.compare(arg, "-traceimports") == 0
                 importer.trace = true
             else if strings.compare(arg, "-warnunused") == 0
@@ -714,6 +716,8 @@ main {
         out.puts("  -traceimports  print which file every imported module comes from")
         out.nl()
         out.puts("  -verbose       print the commands that are run, and let the assembler print its summary of the program")
+        out.nl()
+        out.puts("  -nooverlays    take no notice of %overlay: the program in one piece, as for a machine without overlays")
         out.nl()
         out.puts("  -meminfo       for a 6502 machine: print what the program takes of main memory and of each overlay, and what is left")
         out.nl()
