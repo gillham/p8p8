@@ -81,6 +81,11 @@ genz80 {
     const ubyte RT_CHROUT = 18
     const ubyte RT_GETKEY = 19
     const ubyte RT_CHRIN = 20
+    const ubyte RT_WAIT = 21
+    const ubyte RT_ARGC = 22
+    const ubyte RT_ARGV = 23
+    const ubyte RT_ARGS = 24        ; what the two share
+    const ubyte RT_TICKS = 25
 
     sub error(str message, ^^ubyte detail) {
         out.err()
@@ -2700,6 +2705,36 @@ genz80 {
                 call_rt(RT_GETKEY, "p8rt_getkey")
             }
             218 -> call_rt(RT_WAITKEY, "p8rt_waitkey")
+            13 -> {
+                ; wait so many 60ths of a second
+                arg_pair(a0, "hl")
+                call_rt(RT_WAIT, "p8rt_wait")
+            }
+            14 -> {
+                line("ld  hl,1")
+                call_rt(RT_WAIT, "p8rt_wait")
+            }
+            216 -> call_rt(RT_TICKS, "p8rt_ticks")      ; the clock, in 60ths of a second
+            213 -> {
+                ; a byte from an I/O port: all 16 bits of its address are on the bus
+                arg_pair(a0, "bc")
+                line("in  a,(c)")
+            }
+            214 -> {
+                arg_a(a1)
+                line("ld  e,a")
+                arg_pair(a0, "bc")
+                line("out  (c),e")
+            }
+            200 -> {
+                need_rt[RT_ARGS] = true
+                call_rt(RT_ARGC, "p8rt_argc")
+            }
+            201 -> {
+                arg_pair(a0, "hl")
+                need_rt[RT_ARGS] = true
+                call_rt(RT_ARGV, "p8rt_argv")
+            }
             210 -> {
                 ; the digits of a float, as d.ddde+xx: the buffer, the float (a C function
                 ; of the float source that is linked along)
@@ -3261,6 +3296,125 @@ genz80 {
             line("ret")
             nl()
         }
+        if need_rt[RT_WAIT] {
+            raw("; waits HL 60ths of a second, one at a time as the target file says how")
+            raw("p8rt_wait:")
+            line("ld  a,h")
+            line("or  l")
+            line("ret  z")
+            line("push  hl")
+            line("call  p8rt_jiffy")
+            line("pop  hl")
+            line("dec  hl")
+            line("jr  p8rt_wait")
+            raw("p8rt_jiffy:")
+            if target.text("wait_jiffy") != 0
+                target_lines("wait_jiffy")
+            else
+                line("ret")
+            nl()
+        }
+        if need_rt[RT_TICKS] {
+            raw("; HL = the clock, in 60ths of a second (0 on a machine without one)")
+            raw("p8rt_ticks:")
+            if target.text("ticks") != 0
+                target_lines("ticks")
+            else {
+                line("ld  hl,0")
+                line("ret")
+            }
+            nl()
+        }
+        if need_rt[RT_ARGC] {
+            raw("; HL = the number of arguments of the command line, the program's name counted")
+            raw("p8rt_argc:")
+            line("call  p8rt_cmdline")
+            line("ld  de,1")
+            raw("p8rt_argc_next:")
+            line("call  p8rt_args_blanks")
+            line("ld  a,(hl)")
+            line("or  a")
+            line("jr  z,p8rt_argc_end")
+            line("inc  de")
+            line("call  p8rt_args_word")
+            line("jr  p8rt_argc_next")
+            raw("p8rt_argc_end:")
+            line("ex  de,hl")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_ARGV] {
+            raw("; HL = argument number HL of the command line, as a text of its own (empty when")
+            raw("; there is none; number 0, the program's name, is not known here)")
+            raw("p8rt_argv:")
+            line("ld  a,h")
+            line("or  l")
+            line("jr  z,p8rt_argv_none")
+            line("push  hl")
+            line("call  p8rt_cmdline")
+            line("pop  de")
+            raw("p8rt_argv_find:")
+            line("call  p8rt_args_blanks")
+            line("ld  a,(hl)")
+            line("or  a")
+            line("jr  z,p8rt_argv_none")
+            line("dec  de")
+            line("ld  a,d")
+            line("or  e")
+            line("jr  z,p8rt_argv_copy")
+            line("call  p8rt_args_word")
+            line("jr  p8rt_argv_find")
+            raw("p8rt_argv_copy:")
+            line("ld  de,p8_argument")
+            line("ld  b,127")
+            raw("p8rt_argv_char:")
+            line("ld  a,(hl)")
+            line("or  a")
+            line("jr  z,p8rt_argv_end")
+            line("cp  ' '")
+            line("jr  z,p8rt_argv_end")
+            line("ld  (de),a")
+            line("inc  hl")
+            line("inc  de")
+            line("djnz  p8rt_argv_char")
+            raw("p8rt_argv_end:")
+            line("xor  a")
+            line("ld  (de),a")
+            line("ld  hl,p8_argument")
+            line("ret")
+            raw("p8rt_argv_none:")
+            line("ld  hl,p8_argument")
+            line("ld  (hl),0")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_ARGS] {
+            raw("; HL past the blanks; HL past a word")
+            raw("p8rt_args_blanks:")
+            line("ld  a,(hl)")
+            line("cp  ' '")
+            line("ret  nz")
+            line("inc  hl")
+            line("jr  p8rt_args_blanks")
+            raw("p8rt_args_word:")
+            line("ld  a,(hl)")
+            line("or  a")
+            line("ret  z")
+            line("cp  ' '")
+            line("ret  z")
+            line("inc  hl")
+            line("jr  p8rt_args_word")
+            raw("; HL = the command line, a text that ends with 0, as the target file gives it")
+            raw("p8rt_cmdline:")
+            if target.text("command_line") != 0
+                target_lines("command_line")
+            else {
+                line("ld  hl,p8_argument")
+                line("ld  (hl),0")
+                line("ret")
+            }
+            nl()
+        }
         ; The console is the machine's: these three routines are lines of the target
         ; file.  Each ends by returning; the character or key is in A.
         if need_rt[RT_CHROUT] {
@@ -3581,6 +3735,8 @@ genz80 {
             nl()
             raw("p8_stack_top:")
         }
+        if need_rt[RT_ARGS]
+            raw("p8_argument:  defs  128")
         if need_vregs
             raw("p8_vregs:  defs  32")
         ubyte sn

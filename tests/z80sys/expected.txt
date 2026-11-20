@@ -1,0 +1,11 @@
+4 ONE TWO THREE||0
+1||0
+truefalse
+10:first line
+6:second
+21:third, without an end
+true 384 0
+true true 181
+falsetruefalse false
+FILES.COM
+LINES.TXT

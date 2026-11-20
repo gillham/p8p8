@@ -151,6 +151,9 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 | `console_out` | a routine: the character in A to the console |
 | `key_poll` | a routine: A = a key, or 0 when none is waiting |
 | `char_in` | a routine: A = a character that is waited for and shown |
+| `wait_jiffy` | a routine that takes a 60th of a second, for `sys.wait` (without it there is no wait) |
+| `ticks` | a routine: HL = the clock in 60ths of a second (without it `sys.ticks()` is 0) |
+| `command_line` | a routine: HL = the command line, a text that ends with 0 (without it there are no arguments) |
 | `run_command` | what `-run` runs, with `{file}` for the program (p8p8) |
 | `zcc_platform` | z88dk's platform for a program with floats, which `zcc` links (`+cpm`) |
 | `library` | for a Z80 machine the target's own directory is searched before it: `trs80` has its own `textio.p8` and takes the rest from `../llvm16` |

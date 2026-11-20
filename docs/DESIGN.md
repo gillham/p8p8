@@ -794,7 +794,19 @@ takes a result from A or HL (a long: DE and HL, HL the low half).  The IR's carr
 (clear for "less"), the Z80's is the other way round, so a branch on the
 carry looks at what set it.  System calls 2 and 3 (a character, a string)
 go to CP/M's BDOS.  An instruction that is not written yet is an error that
-names it: the system calls for files, the clock and the command line.
+names it: the system calls of the llvm targets' file routines, which the
+Z80 machines do not use.
+
+The wait, the clock and the command line are routines of the target file
+(`wait_jiffy`, `ticks`, `command_line`); the generator's part is the same
+for every machine: the loop over 60ths of a second, and the arguments,
+which it counts and copies out of the line the target gives.  The I/O
+ports (`sys.inp`, `sys.outp`) are the Z80's own instructions.  Files are
+not system calls here but a module of the target's library: `diskio` for
+CP/M is Prog8 with one routine of assembly, the call of the BDOS, and
+keeps a record of 128 bytes for the file that is read and one for the file
+that is written.  `make z80sys` runs the command line and the files in
+tnylpo against what they must print.
 
 A float is a 32-bit IEEE one in four bytes; loads, stores and moves are
 those of a long.  The arithmetic is z88dk's math32 library's (the left

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- More of the system on the Z80 machines: `sys.wait` and `sys.waitvsync`
+  (by counting; `sys.ticks` is 0 where there is no clock), `sys.inp` and
+  `sys.outp` for the Z80's I/O ports, and on CP/M the command line
+  (`sys.argc`, `sys.argv`) and files: a `diskio` module through the BDOS
+  with reading and writing by pieces and by lines, load and save, delete,
+  rename, exists and the directory.  The TRS-80 targets have no files and
+  no command line yet.
+
 - The Z80 code is much shorter: a pass over each subroutine's assembly
   takes out loads, stores and moves that are not needed, and the generator
   moves words as words and uses constants directly.  Variables without values are no longer zero bytes in the
