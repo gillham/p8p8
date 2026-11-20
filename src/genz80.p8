@@ -45,6 +45,7 @@ genz80 {
     bool need_div32 = false
     bool need_divs32 = false
     bool need_long = false          ; the cells of the long routines
+    bool[256] slot_used             ; the hardware register slots that the code names
     bool need_print = false
     bool need_jphl = false
     bool need_vregs = false
@@ -190,6 +191,19 @@ genz80 {
             }
             else
                 putn(address + extra)
+        }
+    }
+
+    ; A hardware register slot of the IR: on the Z80 a place in memory, four bytes.  The
+    ; values that a subroutine returns beside its first, and the one of a call through a
+    ; pointer, go through them.
+    sub slot(ubyte number, ubyte offset) {
+        slot_used[number] = true
+        put("p8_slot_")
+        putn(number)
+        if offset != 0 {
+            put("+")
+            putn(offset)
         }
     }
 
@@ -349,6 +363,7 @@ genz80 {
         need_divs32 = false
         need_long = false
         need_print = false
+        sys.memset(&slot_used, 256, 0)
         need_jphl = false
         need_vregs = false
         if nb == 0
@@ -1004,7 +1019,7 @@ genz80 {
             return
         when previous.op {
             ir.OP_LOAD, ir.OP_LOADM, ir.OP_LOADMZ, ir.OP_LOADR, ir.OP_LOADI, ir.OP_LOADX, ir.OP_STOREM, ir.OP_STOREI,
-            ir.OP_STOREX, ir.OP_LSIGB, ir.OP_LSIGW, ir.OP_MSIGB, ir.OP_MSIGW, ir.OP_EXT, ir.OP_EXTS, ir.OP_EXTL, ir.OP_EXTLS,
+            ir.OP_STOREX, ir.OP_LOADHR, ir.OP_LSIGB, ir.OP_LSIGW, ir.OP_MSIGB, ir.OP_MSIGW, ir.OP_EXT, ir.OP_EXTS, ir.OP_EXTL, ir.OP_EXTLS,
             ir.OP_CONCAT, ir.OP_INC, ir.OP_DEC, ir.OP_NEG, ir.OP_INV, ir.OP_SGN, ir.OP_POP,
             ir.OP_ADD, ir.OP_SUB, ir.OP_AND, ir.OP_OR, ir.OP_XOR, ir.OP_MUL, ir.OP_MULS, ir.OP_DIV, ir.OP_DIVS, ir.OP_MOD, ir.OP_MODS,
             ir.OP_ADDR, ir.OP_SUBR, ir.OP_ANDR, ir.OP_ORR, ir.OP_XORR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_DIVSR,
@@ -1175,6 +1190,30 @@ genz80 {
                     reg_from_hl(i.r1, size)
                 }
             }
+            ir.OP_LOADHR, ir.OP_STOREHR -> {
+                if size == 0 or i.slot >= ir.SLOT_FLAGS {
+                    unsupported(i)
+                    return
+                }
+                for k in 0 to size - 1 {
+                    if i.op == ir.OP_LOADHR {
+                        start("ld")
+                        put("a,(")
+                        slot(i.slot, k)
+                        put(")")
+                        nl()
+                        reg_from_a(i.r1, k)
+                    }
+                    else {
+                        a_from_reg(i.r1, k)
+                        start("ld")
+                        put("(")
+                        slot(i.slot, k)
+                        put("),a")
+                        nl()
+                    }
+                }
+            }
             ir.OP_STOREM -> {
                 if size == 1 {
                     a_from_reg(i.r1, 0)
@@ -1260,20 +1299,31 @@ genz80 {
                 pair_from_reg("hl", i.r1, 0)
                 line("call  p8rt_jphl")
                 need_jphl = true
+                ; (what it returns is taken from slot 10 by the code that follows: a byte
+                ; is returned in A and in L, see OP_RETURNR)
+                start("ld")
+                put("(")
+                slot(10, 0)
+                put("),hl")
+                nl()
             }
             ir.OP_SYSCALL -> syscall(i)
             ir.OP_RETURN -> line("ret")
             ir.OP_RETURNR -> {
                 if size != 0 {
                     fetch(i.r1, size)
+                    if size == 1
+                        line("ld  l,a")         ; (for a caller through a pointer, which takes HL)
                     line("ret")
                 }
                 else
                     unsupported(i)
             }
             ir.OP_RETURNI -> {
-                if size == 1
+                if size == 1 {
                     a_imm(i.value as long)
+                    line("ld  l,a")
+                }
                 else if size == 2
                     pair_imm("hl", i.value as long)
                 else if size == 4 {
@@ -2061,6 +2111,14 @@ genz80 {
         buf.add_bytes(o, cells.data, cells.len)
         if need_vregs
             raw("p8_vregs:  defs  32")
+        ubyte sn
+        for sn in 0 to 99 {
+            if slot_used[sn] {
+                put("p8_slot_")
+                putn(sn)
+                raw(":  defs  4")
+            }
+        }
         if need_long {
             raw("p8_la:  defs  4")
             raw("p8_lc:  defs  4")

@@ -10,7 +10,7 @@
   output work; floats and most system calls do not yet.  A subroutine's
   variables are in fixed places, as on the 6502 (on the host they are on the
   stack, which a subroutine that calls itself can tell).  `make z80cmp`
-  compares with the host: of the test programs 43 print the same and 25 are
+  compares with the host: of the test programs 47 print the same and 20 are
   not built yet.
 
 - `-meminfo` (and `-verbose`) prints after a 6502 program is built where

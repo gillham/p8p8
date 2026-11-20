@@ -740,7 +740,13 @@ takes a result from A or HL (a long: DE and HL, HL the low half).  The IR's carr
 (clear for "less"), the Z80's is the other way round, so a branch on the
 carry looks at what set it.  System calls 2 and 3 (a character, a string)
 go to CP/M's BDOS.  An instruction that is not written yet is an error that
-names it: floats, the hardware register slots, the other system calls.
+names it: floats, the other system calls.
+
+The IR's hardware register slots are places in memory here (`p8_slot_N`).
+A subroutine with several results stores them there before it returns, and
+the caller loads them; a call through a pointer leaves HL
+in slot 10, where the code after it looks, and a byte is returned in A and
+in L for that.
 
 Longs are worked byte by byte through A (addition, subtraction, logic,
 shifts, compares: a long compare leaves carry and zero as a short one does).
@@ -759,7 +765,7 @@ of the comparison for that).
 `make z80cmp` builds the test programs for the host and for CP/M and
 compares what they print; a program the generator cannot build yet is
 counted.  At the start: 19 the same, none different, 49 not built; with longs, signed
-division and structs: 43 the same, 25 not built.  The
+division and structs: 43 the same, 25 not built; with the slots: 47 and 20.  The
 library's virtual registers r0-r15, which it puts at addresses from $ff0000
 for the back end to place, are 32 bytes of the program's own.
 
