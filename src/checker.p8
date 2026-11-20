@@ -82,8 +82,8 @@ checker {
     str[] known_directives = ["address", "align", "asm", "asmbinary", "asminclude", "assert", "breakpoint", "bssaddress", "encoding",
         "import", "ir", "jmptable", "launcher", "link", "memtop", "option", "output", "overlay", "slabsaddress", "varsaddress",
         "zeropage", "zpallowed", "zpreserved"]
-    str[] option_names = ["enable_floats", "force_output", "no_sysinit", "merge", "verafxmuls", "no_symbol_prefixing", "ignore_unused", "romable", "amiga_chipram", "private_symbols", "noframe"]
-    str[] block_options = ["force_output", "merge", "verafxmuls", "no_symbol_prefixing", "ignore_unused", "amiga_chipram", "private_symbols"]
+    str[] option_names = ["enable_floats", "force_output", "no_sysinit", "merge", "verafxmuls", "no_symbol_prefixing", "ignore_unused", "romable", "amiga_chipram", "private_symbols", "noframe", "overlay_data"]
+    str[] block_options = ["force_output", "merge", "verafxmuls", "no_symbol_prefixing", "ignore_unused", "amiga_chipram", "private_symbols", "overlay_data"]
     str[] module_options = ["enable_floats", "no_sysinit", "no_symbol_prefixing", "ignore_unused", "romable", "private_symbols"]
     str[] zeropage_kinds = ["basicsafe", "floatsafe", "kernalsafe", "dontuse", "full"]
     str[] output_kinds = ["raw", "prg", "xex", "library"]

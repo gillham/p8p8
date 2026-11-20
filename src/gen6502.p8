@@ -2076,6 +2076,11 @@ gen6502 {
             ^^ir.Sub callee = find_sub(callee_name)
             if callee != 0 and callee.overlay != 0
                 return callee_name      ; (the same overlay, or through a thunk)
+            ; From a block with "%option overlay_data" a routine of the library is called
+            ; with the overlay still in the window: the block has data beside its code
+            ; (an asset), and hands the library its address to copy or unpack it.
+            if cur_block != 0 and cur_block.overlay_data and in_library(callee_name)
+                return callee_name
         }
         buf.clear(nb)
         buf.add_str(nb, "p8ovr_")
@@ -2116,6 +2121,23 @@ gen6502 {
         out_overlays[out_count] = cur_overlay
         out_count++
         return name
+    }
+
+    ; is this the name of a subroutine in a block of the library?
+    sub in_library(^^ubyte name) -> bool {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            if bl.library {
+                ^^ir.Sub s = bl.subs
+                while s != 0 {
+                    if s.name == name or strings.compare(s.name, name) == 0
+                        return true
+                    s = s.next
+                }
+            }
+            bl = bl.next
+        }
+        return false
     }
 
     ; the stubs, in main memory: each is the target's text (%t: what is called, %n: the
@@ -2354,7 +2376,10 @@ gen6502 {
     ; names; a subroutine that names another part is written there by itself, outside the
     ; block's scope but under its full name, so that it is the same subroutine to
     ; everything that names it.
+    ^^ir.Block cur_block = 0        ; the block whose code is being written
+
     sub block_code(^^ir.Block bl) {
+        cur_block = bl
         if bl.overlay != cur_overlay {
             ^^ir.Sub lone = bl.subs
             while lone != 0 {

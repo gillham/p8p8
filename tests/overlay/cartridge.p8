@@ -6,7 +6,7 @@
 ; it; without one the cartridge is built and its banks are looked at).  The main program
 ; is in the fixed bank.  Code in two banks that call each other and the main program; a
 ; bank with data in it (as an asset is, here four bytes) beside the subroutine that reads
-; it; and the bank the main program chooses itself is still chosen after a call.
+; it, also through a routine of the library (%option overlay_data).
 %overlay 128, sums, main.triple
 %overlay 129, asset
 
@@ -22,6 +22,8 @@ main {
         txt.print_ub(asset.third())
         txt.spc()
         txt.print_uw(asset.total())
+        txt.spc()
+        txt.print_ub(asset.copied())
         txt.spc()
         txt.print_uw(counter)
         txt.nl()
@@ -45,9 +47,21 @@ sums {
 }
 
 asset {
+    %option overlay_data        ; (the library is given addresses in this bank)
     %asm {{
 table   .byte  10, 20, 30, 40
     }}
+packed:
+    %asm {{
+        .byte  1, 2, 3, 4, 5, 6
+    }}
+
+    ; a routine of the library copies out of this bank
+    sub copied() -> ubyte {
+        ubyte[6] buffer
+        sys.memcopy(packed, &buffer, 6)
+        return buffer[0] + buffer[5] * 10
+    }
 
     asmsub third() -> ubyte @A {
         %asm {{

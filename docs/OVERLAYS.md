@@ -171,25 +171,33 @@ overlay, and when an overlay calls into the main program.
 
 What a block includes with `%asmbinary`, or defines in an `%asm` block, is in
 the block's bank with its code.  That is the place for an asset and the
-subroutine that uses it: the subroutine reads the asset at its address in
-the window, and whoever calls it need not know which bank that is.
+subroutine that uses it: whoever calls the subroutine need not know which
+bank the asset is in.
 
 ```prog8
 %overlay 130, title
 
 title {
-    %asm {{
-picture     .binary "title.gfx"
-    }}
+    %option overlay_data
+picture:
+    %asmbinary "title.rle"
 
-    asmsub show() {
-        %asm {{
-            ; copies from p8b_title.picture, which is in the window now
-            ...
-        }}
+    ; unpacks the picture into the sprite memory
+    sub show() -> uword {
+        return compression.decode_rle(picture, gametank.SCREENRAM, 128*128)
     }
 }
 ```
+
+`%option overlay_data` is what lets `show` hand the picture's address to a
+routine of the library: from such a block the library is called with the
+block's bank still in the window.  Without it every call out of an overlay
+finds the main program's bank there, which is right for code but would
+have `decode_rle` read something else at that address.  The program's own
+subroutines in the main program always get the main program's bank.
+
+A test picture of 10 KB, moved this way out of the fixed bank, leaves 11,397
+bytes free there where 1,190 were.
 
 ## What is where
 
@@ -223,11 +231,13 @@ there for every overlay, and are not counted against one.
   also when an overlay calls it, and stays chosen from one such call to
   the next.  So a subroutine that maps a page of data and leaves it mapped
   works as it does without overlays.
-- **An address in the window, on the X16.**  What the main program hands
-  out as an address in $a000-$bfff (a pointer into a mapped page) is of no
-  use to code in an overlay: there it points into the overlay itself.  A
-  subroutine that reads a file straight into such a page, or walks through
-  one, stays in the main program.
+- **An address in the window, on the X16 and the GameTank.**  What the
+  main program hands out as an address in the window (a pointer into a
+  mapped page) is of no use to code in an overlay: there it points into the
+  overlay itself.  A subroutine that reads a file straight into such a
+  page, or walks through one, stays in the main program.  (Handing such an
+  address on to a subroutine outside the overlay works: that one runs with
+  the main program's bank.)
 - **Inner loops across two overlays.**  A call into another overlay costs
   more than a plain call (see below).  Put what calls each other often into
   the same overlay, or into the main program.

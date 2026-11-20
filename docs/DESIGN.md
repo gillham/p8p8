@@ -609,7 +609,12 @@ the window only while the overlay's code runs:
 - a call from one overlay into another (`overlay_thunk_cross`) keeps the
   caller's bank on the stack.
 
-ROM routines called by their address are called as they are.  (The first
+ROM routines called by their address are called as they are.  So are
+routines of the library when the calling block has `%option overlay_data`
+(`ir.Block.overlay_data`): its overlay stays in the window, because the block
+has data beside its code and gives the library the address.  That is not
+the default: p8vi's code in an overlay passes an address in a text page on
+to `diskio.f_write`, which has to find the text's bank there.  (The first
 version put the overlay's bank back after the call, in the overlay: code
 that is not there when the call returns.  The second did it in a stub but
 left the main program with the overlay's bank, and the editor p8vi read
