@@ -151,6 +151,8 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 | `console_out` | a routine: the character in A to the console |
 | `key_poll` | a routine: A = a key, or 0 when none is waiting |
 | `char_in` | a routine: A = a character that is waited for and shown |
+| `console_tap` | lines that see every character first, with it in A (the tests' trs80gp variants send it to the printer) |
+| `machine_cells` | lines that are always part of the program: places that the machine's routines and its library share |
 | `wait_jiffy` | a routine that takes a 60th of a second, for `sys.wait` (without it there is no wait) |
 | `ticks` | a routine: HL = the clock in 60ths of a second (without it `sys.ticks()` is 0) |
 | `command_line` | a routine: HL = the command line, a text that ends with 0 (without it there are no arguments).  With it the program has a word `p8_entry_hl`, for what the first instructions are given, and 82 bytes at `p8_line` to copy a line to |

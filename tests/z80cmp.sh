@@ -63,10 +63,6 @@ for f in "$@"; do
     if [ "$name" = floatchains ]; then
         # (digits of floats: 32 bits here, 64 on the host; make z80ref compares these)
         skipped=$((skipped + 1))
-    elif [ "$name" = ownlocals ]; then
-        # (a subroutine that runs again inside its own call: its variables are on the stack
-        # on the host and in fixed places here, as on the 6502, so it prints other numbers)
-        skipped=$((skipped + 1))
     elif cmp -s "$work/host/$name.out" "$work/z80/$name.txt"; then
         same=$((same + 1))
         echo "ok: $f"

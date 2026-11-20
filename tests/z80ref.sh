@@ -34,9 +34,7 @@ for f in "$@"; do
         continue
     fi
     (cd "$work/own" && timeout 20 tnylpo t.com < /dev/null > out.txt 2>&1)
-    if [ "$name" = ownlocals ] || [ "$name" = addrconst ]; then
-        # ownlocals: a subroutine that runs again inside its own call has its variables
-        # on the stack with prog8c-llvm and in fixed places here, as on the 6502.
+    if [ "$name" = addrconst ]; then
         # addrconst: prog8c-llvm gets the address of a memory-mapped array's element
         # wrong for CP/M (p8c's is what the host prints).
         skipped=$((skipped + 1))

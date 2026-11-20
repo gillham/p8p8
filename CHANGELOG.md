@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- On the Z80 machines a subroutine may call itself, directly or by way of
+  others: a call that can come back into the calling subroutine keeps that
+  subroutine's variables on the stack over it.  (They are fixed memory
+  otherwise, as on the 6502, and nothing changes for a subroutine that does
+  not do this.)
+- A Z80 program can call routines of z88dk's C library: an `extsub` without
+  an address is one, by its own name (`extsub malloc(uword size) -> uword`).
+  Such a program is linked by `zcc`, and `-Xlink` passes it more options.
+- The `trs80` target writes text straight into the screen's memory: letters
+  are shown as they are, and there is no cursor on the screen.  Letters
+  typed come small unshifted on both models.  Both TRS-80 targets have a
+  `trs80` module (`model`, `dos`, `has_lowercase`, `caps_lock`, `capitals`),
+  as prog8c-llvm's TRS-80 profiles do.
+- In Z80 assembly of a program's own, a name has two underscores for each
+  dot (`txt.plot.col` is `_txt__plot__col`): with one, `main.page_lines`
+  and `main.page.lines` were the same name.
+
 - More of the system on the Z80 machines: `sys.wait` and `sys.waitvsync`
   (by counting; `sys.ticks` is 0 where there is no clock), `sys.inp` and
   `sys.outp` for the Z80's I/O ports, and on CP/M the command line
@@ -33,7 +50,7 @@
   test programs print there what they print on the host (`make trs80cmp4`).
 - `%asm` on a Z80 machine: Z80 assembly as it stands, for z88dk's z80asm.
   It names the program's variables as the generator writes them
-  (`txt.plot.col` is `_txt_plot_col`).  Subroutines written wholly in
+  (`txt.plot.col` is `_txt__plot__col`).  Subroutines written wholly in
   assembly (`asmsub`) are not there yet.
 - A target file can be made from another: `base = file`.
 

@@ -51,6 +51,19 @@ genz80 {
     bool need_jphl = false
     bool need_vregs = false
     bool uses_floats = false        ; the program has floats: it is linked by zcc with the maths library
+    ; Recursion.  A subroutine's variables and the places of its IR registers are fixed
+    ; memory, so a call that can come back into the calling subroutine saves them on the
+    ; stack around it (see call_graph and saved_call).
+    ^^pointer all_subs = 0          ; every subroutine of the program
+    long sub_count = 0
+    ^^ubyte reaches = 0             ; sub_count rows of sub_count bytes: row a, byte b: a's code can come to call b
+    ^^ir.Sub this_sub = 0           ; the subroutine being written, or 0
+    long this_index = -1
+    ^^ubyte reg_seen = 0            ; per IR register: named by the subroutine being written
+    ^^uword own_regs = 0            ; those registers
+    long own_count = 0
+    const long OWN_MAX = 4000
+    bool uses_c = false             ; it calls a routine of z88dk's C library (an extsub without an address): zcc links it
     ^^buf.Buf body = 0              ; everything after the first lines
     ^^ubyte[48] externs             ; the library's names that the code calls
     ubyte extern_count = 0
@@ -120,14 +133,15 @@ genz80 {
         buf.add_byte(o, '\n')
     }
 
-    ; a name of the program as the assembler takes it: its dots are underscores, and it
-    ; begins with an underscore, so that no name is one of the assembler's own words
+    ; A name of the program as the assembler takes it: it begins with an underscore, so
+    ; that no name is one of the assembler's own words, and each dot is two underscores
+    ; (one would not do: main.page_lines and main.page.lines are different things).
     sub name(^^ubyte sym) {
         buf.add_byte(o, '_')
         long k = 0
         while sym[k] != 0 {
             if sym[k] == '.'
-                buf.add_byte(o, '_')
+                buf.add_str(o, "__")
             else
                 buf.add_byte(o, sym[k])
             k++
@@ -438,6 +452,7 @@ genz80 {
         buf.clear(body)
         o = body
         uses_floats = false
+        uses_c = false
         extern_count = 0
         put("p8_init_globals:")
         nl()
@@ -447,6 +462,9 @@ genz80 {
         line("ret")
         nl()
         register_cells()
+        call_graph()
+        this_sub = 0
+        this_index = -1
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
             ^^ir.Chunk c = bl.chunks
@@ -479,7 +497,7 @@ genz80 {
         put(prog.name)
         nl()
         line("; written by p8p8's Z80 code generator, for z88dk-z80asm")
-        if uses_floats {
+        if linked() {
             if target.text("zcc_init") != 0 {
                 ; (lines of the target for the start of zcc's first instructions)
                 line("SECTION  code_crt_init")
@@ -523,7 +541,7 @@ genz80 {
         put("p8_cleared:")
         nl()
         line("call  p8_init_globals")
-        line("call  _main_start")
+        line("call  _main__start")
         ; How the program ends, as the target file says; sys.exit comes here too.  (A
         ; program that zcc linked does not go back through zcc's own last instructions:
         ; on the TRS-80 those leave the cursor at the top of the screen.)  Before the
@@ -536,6 +554,9 @@ genz80 {
         ; line: a place that the clearing of the variables leaves alone)
         if target.text("command_line") != 0
             raw("p8_entry_hl:  defw  0")
+        ; (places of the machine's own that its routines and its library share)
+        if target.text("machine_cells") != 0
+            target_lines("machine_cells")
         nl()
     }
 
@@ -588,6 +609,9 @@ genz80 {
         nl()
         long from = o.len
         part++
+        this_sub = s
+        this_index = index_of(s.name)
+        own_registers(s)
         carry_cell = carry_scan(s)
         ^^ir.Chunk c = s.chunks
         bool first = true
@@ -608,6 +632,8 @@ genz80 {
             label(s.name)
         line("ret")
         nl()
+        this_sub = 0
+        this_index = -1
         if optimize
             peepz80.run(o, from)
         register_cells()
@@ -742,12 +768,19 @@ genz80 {
             carry_clear()
         }
         if c.kind == ir.C_ASM {
-            if c.is_ir
-                error("IR text that was not turned into instructions", c.label)
+            if c.is_ir {
+                ; (IR text of a block, outside any subroutine.  With nothing in it, as
+                ; a block that only marks a place has, there is nothing to write.)
+                long tk = 0
+                while tk < c.textlen and (c.text[tk] == ' ' or c.text[tk] == '\n' or c.text[tk] == '\r' or c.text[tk] == '\t')
+                    tk++
+                if tk < c.textlen
+                    error("IR text outside a subroutine cannot be used on the Z80", c.label)
+            }
             else {
                 ; Z80 assembly of the program's own (%asm), as it stands.  It names the
                 ; program's variables as this generator writes them: an underscore, and
-                ; underscores for the dots (txt.plot.col is _txt_plot_col).
+                ; two underscores for each dot (txt.plot.col is _txt__plot__col).
                 raw(";%asm")
                 buf.add_bytes(o, c.text, c.textlen)
                 nl()
@@ -2162,6 +2195,9 @@ genz80 {
                     reg_from_a(i.r1, 1)
                 }
             }
+            ; (the IR's names are the 6502's: sei stops the interrupts, cli lets them come)
+            ir.OP_SEI -> line("di")
+            ir.OP_CLI -> line("ei")
             ir.OP_CLC -> line("or  a")
             ir.OP_SEC -> line("scf")
             else -> unsupported(i)
@@ -2519,7 +2555,97 @@ genz80 {
 
     ; A call: the arguments into the subroutine's parameters, by their names; a result
     ; comes back in A or HL.
+    ; is the program one that z88dk's zcc links (and not one that the assembler alone makes)?
+    sub linked() -> bool {
+        return uses_floats or uses_c
+    }
+
+    ; the subroutine of a name, or 0
+    sub sub_named(^^ubyte wanted) -> ^^ir.Sub {
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                if strings.compare(s.name, wanted) == 0
+                    return s
+                s = s.next
+            }
+            bl = bl.next
+        }
+        return 0
+    }
+
+    ; A call of a routine of z88dk's C library: an extsub without an address, by its own
+    ; name with an underscore before it (cbm.in_Inkey is _in_Inkey).  As the library's
+    ; routines are called from C (the small C convention): the arguments on the stack as
+    ; words, the first one first, taken off again here; a result in HL (a long: DE too).
+    sub c_call(^^ir.Instr i) {
+        uses_c = true
+        ^^ir.Arg a = i.args
+        ubyte pushed = 0
+        while a != 0 {
+            ubyte size = size_of(a.type)
+            if size != 1 and size != 2 {
+                error("an argument of this kind cannot be passed to a C routine yet", i.sym)
+                return
+            }
+            if a.reg != 0 {
+                if size == 1 {
+                    a_from_reg(a.reg, 0)
+                    line("ld  l,a")
+                    line("ld  h,0")
+                }
+                else
+                    pair_from_reg("hl", a.reg, 0)
+            }
+            else
+                pair_imm("hl", (a.value as long) & $ffff)
+            line("push  hl")
+            pushed++
+            a = a.next
+        }
+        ; (the name after the last dot)
+        long dot = -1
+        long k = 0
+        while i.sym[k] != 0 {
+            if i.sym[k] == '.'
+                dot = k
+            k++
+        }
+        buf.clear(nb)
+        buf.add_byte(nb, '_')
+        buf.add_str(nb, i.sym + dot + 1)
+        ^^ubyte cname = strtab.intern(nb.data, nb.len as uword)
+        library(cname)
+        repeat pushed
+            line("pop  bc")
+        ^^ir.Arg r = i.results
+        if r != 0 and r.reg != 0 {
+            ubyte rsize = size_of(r.type)
+            if rsize == 1 {
+                line("ld  a,l")
+                reg_from_a(r.reg, 0)
+            }
+            else if rsize == 2 or rsize == 4
+                keep(r.reg, rsize)
+            else
+                error("the result of this C routine cannot be taken yet", i.sym)
+        }
+    }
+
     sub call_instruction(^^ir.Instr i) {
+        ^^ir.Sub callee = sub_named(i.sym)
+        if callee != 0 and callee.is_external {
+            c_call(i)
+            return
+        }
+        ; (a call that can come back into this subroutine: its variables are kept on
+        ; the stack over it)
+        long callee_index = index_of(i.sym)
+        bool comes_back = this_index >= 0 and callee_index >= 0 and reaches[callee_index * sub_count + this_index] != 0
+        long kept_from = 0
+        if comes_back
+            kept_from = save_own(i)
         ^^ir.Arg a = i.args
         while a != 0 {
             ubyte size = size_of(a.type)
@@ -2548,7 +2674,7 @@ genz80 {
                 ; (the parameter: a variable of the subroutine, named there without its scope)
                 if not text_has(a.name, ".") {
                     name(i.sym)
-                    put("_")
+                    put("__")
                     put(a.name)
                 }
                 else
@@ -2580,6 +2706,276 @@ genz80 {
                 return
             }
             keep(r.reg, rsize)
+        }
+        if comes_back
+            restore_own(kept_from)
+    }
+
+    ; ---- recursion ----
+
+    sub index_of(^^ubyte wanted) -> long {
+        long k = 0
+        while k < sub_count {
+            ^^ir.Sub s = all_subs[k] as ^^ir.Sub
+            if strings.compare(s.name, wanted) == 0
+                return k
+            k++
+        }
+        return -1
+    }
+
+    ; Which subroutine's code can come to call which: first who calls whom, from the
+    ; instructions, then everything that follows from that.  (A call through a pointer
+    ; is not followed: where it goes is not known here.)
+    sub call_graph() {
+        sub_count = 0
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                sub_count++
+                s = s.next
+            }
+            bl = bl.next
+        }
+        if sub_count == 0
+            return
+        all_subs = mem.alloc(sub_count * sizeof(pointer))
+        reaches = mem.alloc(sub_count * sub_count)
+        long k = 0
+        bl = prog.blocks
+        while bl != 0 {
+            s = bl.subs
+            while s != 0 {
+                all_subs[k] = s
+                k++
+                ; (IR text of the subroutine becomes instructions now, so that its
+                ; calls are seen)
+                if not s.is_external and not (s.is_asm and s.asmtext != 0 and not s.asm_is_ir)
+                    void irparse.expand(s)
+                s = s.next
+            }
+            bl = bl.next
+        }
+        long n
+        for n in 0 to sub_count * sub_count - 1
+            reaches[n] = 0
+        for k in 0 to sub_count - 1 {
+            s = all_subs[k] as ^^ir.Sub
+            ^^ir.Chunk c = s.chunks
+            while c != 0 {
+                if c.kind != ir.C_ASM {
+                    ^^ir.Instr i = c.first
+                    while i != 0 {
+                        if i.op == ir.OP_CALL and i.sym != 0 {
+                            long to_index = index_of(i.sym)
+                            if to_index >= 0
+                                reaches[k * sub_count + to_index] = 1
+                        }
+                        i = i.next
+                    }
+                }
+                c = c.next
+            }
+        }
+        ; everything that follows: when a comes to b and b to c, a comes to c
+        long mid
+        long from_sub
+        long to_sub
+        for mid in 0 to sub_count - 1 {
+            for from_sub in 0 to sub_count - 1 {
+                if reaches[from_sub * sub_count + mid] != 0 {
+                    for to_sub in 0 to sub_count - 1 {
+                        if reaches[mid * sub_count + to_sub] != 0
+                            reaches[from_sub * sub_count + to_sub] = 1
+                    }
+                }
+            }
+        }
+    }
+
+    ; the IR registers that the subroutine names anywhere
+    sub own_registers(^^ir.Sub s) {
+        long k
+        if reg_seen == 0 {
+            reg_seen = mem.alloc(70000)
+            for k in 0 to 69999
+                reg_seen[k] = 0
+            own_regs = mem.alloc(OWN_MAX * sizeof(uword))
+        }
+        if own_count != 0 {
+            for k in 0 to own_count - 1
+                reg_seen[own_regs[k]] = 0
+        }
+        own_count = 0
+        ; (only a subroutine that can come back into itself needs them)
+        if this_index < 0 or reaches[this_index * sub_count + this_index] == 0
+            return
+        ^^ir.Chunk c = s.chunks
+        while c != 0 {
+            if c.kind != ir.C_ASM {
+                ^^ir.Instr i = c.first
+                while i != 0 {
+                    own_register(i.r1)
+                    own_register(i.r2)
+                    own_register(i.r3)
+                    ^^ir.Arg a = i.args
+                    while a != 0 {
+                        own_register(a.reg)
+                        a = a.next
+                    }
+                    a = i.results
+                    while a != 0 {
+                        own_register(a.reg)
+                        a = a.next
+                    }
+                    i = i.next
+                }
+            }
+            c = c.next
+        }
+    }
+
+    sub own_register(uword r) {
+        if r == 0 or reg_seen[r] != 0 or own_count >= OWN_MAX
+            return
+        if size_of(ir.regtypes[r]) == 0
+            return
+        reg_seen[r] = 1
+        own_regs[own_count] = r
+        own_count++
+    }
+
+    ; is the variable one of the subroutine being written: "name.x", a single value?
+    sub own_variable(^^ir.Var v) -> bool {
+        if v.kind != ir.V_VAR or text_has(v.typestr, "[")
+            return false
+        long k = 0
+        while this_sub.name[k] != 0 {
+            if v.name[k] != this_sub.name[k]
+                return false
+            k++
+        }
+        if v.name[k] != '.'
+            return false
+        k++
+        while v.name[k] != 0 {
+            if v.name[k] == '.'
+                return false
+            k++
+        }
+        return element_size(v.typestr) != 0 and struct_of(v.typestr) == 0
+    }
+
+    ; Before a call that can come back into this subroutine: its variables and the places
+    ; of its IR registers go on the stack (not the register that takes the call's result).
+    ; Gives the number of words pushed for variables... the registers follow in own_regs.
+    sub save_own(^^ir.Instr i) -> long {
+        uword result_reg = 0
+        if i.results != 0
+            result_reg = i.results.reg
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if own_variable(v) {
+                ubyte vsize = element_size(v.typestr)
+                push_place(v.name, 0, vsize)
+            }
+            v = v.next
+        }
+        long k
+        if own_count != 0 {
+            for k in 0 to own_count - 1 {
+                if own_regs[k] != result_reg
+                    push_place(0, own_regs[k], size_of(ir.regtypes[own_regs[k]]))
+            }
+        }
+        return result_reg
+    }
+
+    ; after it: back from the stack, in the other order
+    sub restore_own(long result_reg) {
+        long k = own_count
+        while k != 0 {
+            k--
+            if own_regs[k] != result_reg
+                pop_place(0, own_regs[k], size_of(ir.regtypes[own_regs[k]]))
+        }
+        ; (the variables in the other order: counted, then the last one first)
+        long count = 0
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if own_variable(v)
+                count++
+            v = v.next
+        }
+        while count != 0 {
+            long seen = 0
+            v = prog.vars
+            while v != 0 {
+                if own_variable(v) {
+                    seen++
+                    if seen == count
+                        break
+                }
+                v = v.next
+            }
+            pop_place(v.name, 0, element_size(v.typestr))
+            count--
+        }
+    }
+
+    ; a variable (by its name) or the place of an IR register, as an operand
+    sub place_operand(^^ubyte variable, uword r, ubyte offset) {
+        put("(")
+        if variable != 0 {
+            name(variable)
+            if offset != 0 {
+                put("+")
+                putn(offset)
+            }
+        }
+        else
+            reg(r, offset)
+        put(")")
+    }
+
+    sub push_place(^^ubyte variable, uword r, ubyte size) {
+        if size == 1 {
+            start("ld")
+            put("a,")
+            place_operand(variable, r, 0)
+            nl()
+            line("push  af")
+            return
+        }
+        ubyte k = 0
+        while k < size {
+            start("ld")
+            put("hl,")
+            place_operand(variable, r, k)
+            nl()
+            line("push  hl")
+            k += 2
+        }
+    }
+
+    sub pop_place(^^ubyte variable, uword r, ubyte size) {
+        if size == 1 {
+            line("pop  af")
+            start("ld")
+            place_operand(variable, r, 0)
+            put(",a")
+            nl()
+            return
+        }
+        ubyte k = size
+        while k != 0 {
+            k -= 2
+            line("pop  hl")
+            start("ld")
+            place_operand(variable, r, k)
+            put(",hl")
+            nl()
         }
     }
 
@@ -3421,9 +3817,21 @@ genz80 {
         }
         ; The console is the machine's: these three routines are lines of the target
         ; file.  Each ends by returning; the character or key is in A.
+        ; (a character in is shown: the routine for that may call the other two)
+        if need_rt[RT_CHRIN] {
+            need_rt[RT_CHROUT] = true
+            need_rt[RT_GETKEY] = true
+        }
         if need_rt[RT_CHROUT] {
             raw("; a character (in A) to the console")
             raw("p8rt_chrout:")
+            if target.text("console_tap") != 0 {
+                ; (lines of the target that see every character first: the tests'
+                ; variants send it to the printer)
+                line("push  af")
+                target_lines("console_tap")
+                line("pop  af")
+            }
             target_lines("console_out")
             nl()
         }
@@ -3759,7 +4167,7 @@ genz80 {
             raw("p8_lb:  defs  4")
         }
         raw("p8_bss_end:")
-        if not uses_floats
+        if not linked()
             outside_file(bss_from)
     }
 
@@ -3898,7 +4306,7 @@ genz80 {
                 buf.add_byte(o, '_')
                 while init[p] != 0 and init[p] != ',' {
                     if init[p] == '.'
-                        buf.add_byte(o, '_')
+                        buf.add_str(o, "__")
                     else
                         buf.add_byte(o, init[p])
                     p++
@@ -3997,7 +4405,7 @@ genz80 {
                 buf.add_byte(o, '_')
                 while v.init[p] != 0 and v.init[p] != ',' {
                     if v.init[p] == '.'
-                        buf.add_byte(o, '_')
+                        buf.add_str(o, "__")
                     else
                         buf.add_byte(o, v.init[p])
                     p++

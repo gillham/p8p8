@@ -24,7 +24,7 @@ main {
         show()
         ; and as the DOS would: HL at the rest of the line
         %asm {{
-            ld  hl,_main_line
+            ld  hl,_main__line
             ld  (p8_entry_hl),hl
         }}
         show()

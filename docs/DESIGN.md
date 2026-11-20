@@ -762,7 +762,7 @@ each.
 screen, and everything through the DOS's supervisor calls (`rst $28`).  Its
 `textio` is the first library module with Z80 assembly: `%asm` on a Z80
 machine is written into the program as it stands, and names variables as
-the generator does (`_txt_plot_col`); an `asmsub` is not possible yet,
+the generator does (`_txt__plot__col`: two underscores for each dot, so that `main.page_lines` and `main.page.lines` stay apart); an `asmsub` is not possible yet,
 because its register names are the 6502's.  z88dk has no Model 4 platform,
 so a program with floats is linked for its TRS-80 one without the DOS
 library (as prog8c-llvm's profile does).  `make trs80cmp4`: 65 the same,
@@ -796,6 +796,13 @@ carry looks at what set it.  System calls 2 and 3 (a character, a string)
 go to CP/M's BDOS.  An instruction that is not written yet is an error that
 names it: the system calls of the llvm targets' file routines, which the
 Z80 machines do not use.
+
+An `extsub` without an address is a routine of z88dk's C library, called by
+its own name with an underscore (`c_call`): the arguments on the stack as
+words, the first one first, taken off again after the call, and the result
+in HL, as the library's routines are called from C.  A program with such a
+call is linked by `zcc` like one with floats (`linked()`); `-Xlink` adds
+options to that link (a heap for `malloc`).
 
 The wait, the clock and the command line are routines of the target file
 (`wait_jiffy`, `ticks`, `command_line`); the generator's part is the same
@@ -936,9 +943,18 @@ zero or on the sign tests the register again unless a compare came before:
 the Z80's 16-bit additions and its loads leave no such flags.
 
 A subroutine's variables and registers are in fixed places, as on the 6502.
-On the host they are on the stack, so a subroutine that calls itself keeps
-them there and loses them here (`tests/programs/ownlocals.p8` is left out
-of the comparison for that).
+A subroutine that calls itself, straight or by way of others, would lose
+them, where the host and prog8c-llvm's Z80 code keep them on the stack; and
+programs are written for that (an editor's `out_dec` that prints a number's
+digits by calling itself).  So the generator works out which subroutine's
+code can come to call which (`call_graph`: the calls in the instructions,
+then everything that follows from them; a call through a pointer is not
+followed), and a call whose callee can come back into the caller is wrapped
+(`save_own`, `restore_own`): the caller's single-value variables and the
+places of every IR register it names go on the stack before the arguments
+are stored, and come back after the result is taken (the register of the
+result is left out).  A subroutine that no call can come back into is as
+before.
 
 `make z80cmp` builds the test programs for the host and for CP/M and
 compares what they print; a program the generator cannot build yet is

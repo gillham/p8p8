@@ -2379,31 +2379,41 @@ main {
             ^^ubyte zmade = zext
             if as_cmd
                 zmade = ".bin"
-            if genz80.uses_floats {
-                ; A program with floats is linked by z88dk's zcc for the machine
-                ; (zcc_platform), with its 32-bit maths library and the target's float
-                ; source, a C file beside the target file.
+            if genz80.linked() {
+                ; A program with floats, or one that calls routines of z88dk's C library,
+                ; is linked by z88dk's zcc for the machine (zcc_platform); with floats
+                ; also with its 32-bit maths library and the target's float source, a C
+                ; file beside the target file.
                 ^^ubyte zplat = target.text("zcc_platform")
                 ^^ubyte zsrc = target.text("float_source")
-                if zplat == 0 or zsrc == 0 or target.dir == 0 {
+                if zplat == 0 or target.dir == 0 or (genz80.uses_floats and zsrc == 0) {
                     out.err()
-                    out.puts("error: floats: the target file has no zcc_platform and float_source for this machine\n")
+                    out.puts("error: floats or C routines: the target file has no zcc_platform (and float_source) for this machine\n")
                     out.exit(1)
                 }
                 buf.add_str(cmd, "PATH=\"${Z88DK:+$Z88DK/bin:}$PATH\" ZCCCFG=\"${ZCCCFG:-${Z88DK:+$Z88DK/lib/config}}\" zcc ")
                 buf.add_str(cmd, zplat)
-                buf.add_str(cmd, " --math32 -o ")
+                if genz80.uses_floats
+                    buf.add_str(cmd, " --math32")
+                ; (-Xlink: more for zcc, as a heap for malloc: -pragma-define:CRT_HEAP_ENABLE=1)
+                if xlink != 0 and xlink.len != 0 {
+                    buf.add_byte(cmd, ' ')
+                    buf.add_bytes(cmd, xlink.data, xlink.len)
+                }
+                buf.add_str(cmd, " -o ")
                 add_output(name, zmade)
                 buf.add_byte(cmd, ' ')
                 add_output(name, ".asm")
-                buf.add_str(cmd, " \"")
-                if zsrc[0] != '/' {
-                    ; (beside the target file, unless it is a whole path)
-                    buf.add_str(cmd, target.dir)
-                    buf.add_byte(cmd, '/')
+                if genz80.uses_floats {
+                    buf.add_str(cmd, " \"")
+                    if zsrc[0] != '/' {
+                        ; (beside the target file, unless it is a whole path)
+                        buf.add_str(cmd, target.dir)
+                        buf.add_byte(cmd, '/')
+                    }
+                    buf.add_str(cmd, zsrc)
+                    buf.add_str(cmd, "\"")
                 }
-                buf.add_str(cmd, zsrc)
-                buf.add_str(cmd, "\"")
                 run_cmd("linking the program with z88dk")
             }
             else {
