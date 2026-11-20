@@ -32,6 +32,9 @@
 - Overlays on the GameTank: `%overlay n` is bank n of the cartridge (128
   to 254), with what the block includes as assembly or binary beside its
   code, and `p8c` writes the whole 2 MB cartridge as `name.gtr`.
+- An overlay that the program names but whose subroutines nothing calls is
+  reported, and the program is still built as one with overlays (it was
+  built in one piece without a word).
 - `%overlay n, name, name...` at the top of a module lists the blocks and
   subroutines of an overlay in one place, with nothing in the blocks
   themselves.

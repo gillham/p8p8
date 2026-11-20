@@ -1944,6 +1944,29 @@ gen6502 {
             }
             bl = bl.next
         }
+        ; An overlay that the program names but that has nothing in it (none of its
+        ; subroutines is used, so there is no code): said, and the program is still built
+        ; as one with overlays, so that what is written does not depend on it.
+        if possible {
+            ubyte wanted = 1
+            repeat 255 {
+                if ir.overlay_wanted[wanted] {
+                    if not overlay_used(wanted) {
+                        out.err()
+                        out.puts("warning: overlay ")
+                        buf.clear(nb)
+                        buf.add_long(nb, wanted)
+                        buf.add_byte(nb, 0)
+                        out.puts(nb.data)
+                        out.puts(" has nothing in it: none of its subroutines is used")
+                        out.nl()
+                    }
+                    if wanted > overlay_max
+                        overlay_max = wanted
+                }
+                wanted++
+            }
+        }
         long most = target.number("overlay_max", 255)
         if overlay_max > most {
             error("the target has no room for an overlay of that number", target.text("overlay_max"))
@@ -2247,7 +2270,7 @@ gen6502 {
     sub overlay_used(ubyte n) -> bool {
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
-            if bl.overlay == n
+            if bl.overlay == n and (bl.subs != 0 or bl.chunks != 0)
                 return true
             ^^ir.Sub s = bl.subs
             while s != 0 {

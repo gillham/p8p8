@@ -272,6 +272,7 @@ Measured, 20,000 calls of a subroutine that adds one to a byte, in jiffies:
 | `?cannot load the program's overlays` (C64, C128, MEGA65) | the same, at the first call into an overlay |
 | `?overlays need a ram expansion unit` (C64, C128) | no REU answers |
 | "overlay n is too large by ... bytes" when building | more code than the window holds |
+| "warning: overlay n has nothing in it" when building | nothing in the program calls a subroutine of that overlay, so it has no code (the program is still built as one with overlays) |
 | "Program too long" when building | the main program reaches the window; on the C64, C128 and MEGA65 it ends below it |
 
 ## Trying it in an emulator

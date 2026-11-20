@@ -300,6 +300,10 @@ ir {
         ^^ubyte asmtype     ; and its type as the asmsub declaration spells it ("ubyte", "^^ubyte")
     }
 
+    ; the overlay numbers that the program's %overlay directives name (a block or a
+    ; subroutine that nothing uses has no code, and its overlay may then be empty)
+    bool[256] overlay_wanted
+
     struct Sub {
         ^^Sub next
         ^^ubyte name        ; scoped name

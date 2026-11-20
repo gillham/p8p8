@@ -134,6 +134,7 @@ irgen {
             while d != 0 {
                 if d.kind == ast.N_DIRECTIVE and d.a != 0 and d.a.kind == ast.N_INT and strings.compare(d.name, "overlay") == 0 {
                     listed = true
+                    ir.overlay_wanted[d.a.value as ubyte] = true
                     ^^ast.Node name = d.a.next
                     while name != 0 {
                         if name.kind == ast.N_IDENT
@@ -1753,6 +1754,7 @@ irgen {
             while od != 0 {
                 if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0 {
                     block.overlay = od.a.value as ubyte
+                    ir.overlay_wanted[block.overlay] = true
                     overlay_inline = od
                 }
                 od = od.next
@@ -2305,6 +2307,7 @@ irgen {
         while od != 0 {
             if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0 {
                 cursub.overlay = od.a.value as ubyte
+                ir.overlay_wanted[cursub.overlay] = true
                 overlay_inline = od
             }
             od = od.next
