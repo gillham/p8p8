@@ -736,6 +736,13 @@ library it names (`importer.own_library`), so `trs80` has a `textio` of
 its own (the 64 by 16 screen at $3c00, the ROM's cursor address) and
 `cpm` one whose keys go through the target's routines.
 
+The TRS-80's DOS calls a program on its own stack, which is small: a
+program with floats overran it (103 bytes of the DOS's variables changed,
+and the DOS showed rubbish after the program), so the target gives the
+program a stack of its own (`stack_size`).  A program that zcc linked ends
+by returning to zcc's first instructions, with the stack pointer they
+called it with; another ends as the target file says.
+
 `make trs80cmp` is `make z80cmp` for the TRS-80: the programs are built
 with `tests/z80/trs80gp.properties`, a variant of the target whose console
 also writes to the printer and whose end tells the emulator to stop, and

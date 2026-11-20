@@ -2395,8 +2395,11 @@ main {
                 buf.add_byte(cmd, ' ')
                 add_output(name, ".asm")
                 buf.add_str(cmd, " \"")
-                buf.add_str(cmd, target.dir)
-                buf.add_byte(cmd, '/')
+                if zsrc[0] != '/' {
+                    ; (beside the target file, unless it is a whole path)
+                    buf.add_str(cmd, target.dir)
+                    buf.add_byte(cmd, '/')
+                }
                 buf.add_str(cmd, zsrc)
                 buf.add_str(cmd, "\"")
                 run_cmd("linking the program with z88dk")

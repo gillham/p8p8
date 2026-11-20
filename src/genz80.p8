@@ -467,6 +467,9 @@ genz80 {
                 }
             }
             raw("_main:")
+            ; (where zcc's first instructions called from: the end goes back there)
+            line("ld  (p8_exit_sp),sp")
+            own_stack()
         }
         else {
             ; (the load address is the target's: $0100 for CP/M)
@@ -476,6 +479,7 @@ genz80 {
             ; (the machine's first instructions, when it needs any: where the stack is)
             if target.text("startup_code") != 0
                 target_lines("startup_code")
+            own_stack()
         }
         ; the variables without values are zero
         line("ld  hl,p8_bss_start")
@@ -493,10 +497,29 @@ genz80 {
         nl()
         line("call  p8_init_globals")
         line("call  _main_start")
-        ; (how the program ends: the target's; sys.exit comes here too)
+        ; How the program ends; sys.exit comes here too.  A program that zcc linked
+        ; returns to zcc's first instructions, which put back what they changed and
+        ; leave as the machine wants; another ends as the target file says.  Before
+        ; either, what the target wants done at the end (exit_hook), when it has that.
         raw("p8_exit:")
-        target_lines("exit_code")
+        if target.text("exit_hook") != 0
+            target_lines("exit_hook")
+        if uses_floats {
+            line("ld  sp,(p8_exit_sp)")
+            line("ld  hl,0")
+            line("ret")
+            raw("p8_exit_sp:  defw  0")
+        }
+        else
+            target_lines("exit_code")
         nl()
+    }
+
+    ; A stack of the program's own, when the target file gives it a size (stack_size):
+    ; for a machine whose system calls the program on a stack that is too small for it.
+    sub own_stack() {
+        if target.number("stack_size", 0) > 0
+            line("ld  sp,p8_stack_top")
     }
 
     ; the lines of a key of the target file, as instructions
@@ -3223,6 +3246,12 @@ genz80 {
             v = v.next
         }
         buf.add_bytes(o, cells.data, cells.len)
+        if target.number("stack_size", 0) > 0 {
+            put("p8_stack:  defs  ")
+            putn(target.number("stack_size", 0))
+            nl()
+            raw("p8_stack_top:")
+        }
         if need_vregs
             raw("p8_vregs:  defs  32")
         ubyte sn

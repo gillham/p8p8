@@ -137,7 +137,9 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 | `output_extension` | of the program file (`.com`, `.cmd`) |
 | `output_format` | `cmd`: a TRS-80 command file (load records and a start address), which p8c makes of the assembler's plain image; without it the plain image |
 | `startup_code` | the first instructions, when the machine needs any: where the stack is (`\n` between lines) |
-| `exit_code` | how the program ends; `sys.exit` comes here too |
+| `stack_size` | the program gets a stack of its own of this many bytes (the TRS-80, whose DOS calls a program on a small stack) |
+| `exit_code` | how the program ends; `sys.exit` comes here too.  A program that `zcc` linked returns to zcc's own first instructions instead |
+| `exit_hook` | lines before the end, whichever it is (the tests' trs80gp variant stops the emulator there) |
 | `console_out` | a routine: the character in A to the console |
 | `key_poll` | a routine: A = a key, or 0 when none is waiting |
 | `char_in` | a routine: A = a character that is waited for and shown |
