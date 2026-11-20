@@ -2729,6 +2729,27 @@ gen6502 {
         thunks_of_kind(false)
         if target.text("overlay_thunk_cross") != 0
             thunks_of_kind(true)
+        ; (what the thunks of an overlay share: the target's "overlay_in" texts, once for
+        ; each overlay, so that a thunk itself can be three instructions)
+        ubyte ov
+        for ov in 1 to overlay_max {
+            if overlay_used(ov) {
+                if target.text("overlay_in") != 0 {
+                    put("p8_overlay_in_")
+                    putn(ov)
+                    raw("  .proc")
+                    put_template(target.text("overlay_in"), 0, ov)
+                    raw("    .pend")
+                }
+                if target.text("overlay_in_full") != 0 {
+                    put("p8_overlay_inp_")
+                    putn(ov)
+                    raw("  .proc")
+                    put_template(target.text("overlay_in_full"), 0, ov)
+                    raw("    .pend")
+                }
+            }
+        }
         raw("p8ov_thunks_end:")
         ^^ubyte support = target.text("overlay_support")
         raw("p8ov_support_start:")

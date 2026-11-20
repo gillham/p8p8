@@ -587,9 +587,13 @@ Every subroutine of an overlay block gets a thunk; the assembler leaves out
 the ones nothing names.  A target may give two thunks: `overlay_thunk`
 keeps A, X, Y and the flags both ways, which a subroutine in assembly may
 need, and `overlay_thunk_fast` keeps A, X and Y, which is all an ordinary
-subroutine takes and gives.  The X16's are written out for each subroutine
-(save the bank, choose, call, put back), without the ROM's JSRFAR: 20,000
-calls take 15 jiffies where JSRFAR took 37 and a plain call takes 8.
+subroutine takes and gives.  The X16's do without the ROM's JSRFAR, and are three instructions each:
+`jsr p8_overlay_in_N / jsr subroutine / jmp p8_overlay_out`.  The first is
+written once for each overlay (the target's `overlay_in`: keep the bank,
+choose the overlay's), the last is in the support file.  A thunk is nine
+bytes so, where it was 24 with all of it written out (33 on the GameTank),
+and 20,000 calls take 17 jiffies (15 written out, 37 with JSRFAR, 8 for
+plain calls).
 
 A call out of an overlay is a plain `jsr` unless the target has
 `overlay_return` (the X16).  There the window's bank is also what a program

@@ -48,6 +48,9 @@
   beside the code (on the GameTank: out of the fixed bank), and routines of
   the library are called with the overlay still in the window, so that
   they can print, copy or unpack what is there.
+- X16 and GameTank: the way into an overlay is nine bytes of main memory
+  for each subroutine (24 and 33 before), with what they share written
+  once for each overlay.
 - `%option overlay_safe` in a block of the program: it is called like the
   library from an `overlay_data` block, for a decompressor or a copy
   routine of your own that is handed data in an overlay.

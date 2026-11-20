@@ -81,6 +81,7 @@ Numbers are decimal, `$hex`, `0xhex` or `%binary`.  A list of addresses is
 | `virtual_registers` | where the library has the 32 bytes of R0-R15; when that is in the zero page they are not given to variables |
 | `overlay_window_start`, `overlay_window_end` | (optional) where an overlay's code is while it runs (the end is the first address after it); with `overlay_thunk` this gives the machine overlays (`%overlay n`) |
 | `overlay_thunk` | the code a call into an overlay goes through, in main memory: `%t` is the subroutine, `%n` the overlay's number; it has to keep A, X, Y and the flags both ways |
+| `overlay_in`, `overlay_in_full` | (optional) routines written once for each overlay (`p8_overlay_in_N`, `p8_overlay_inp_N`), for thunks that call them first and so stay short |
 | `overlay_thunk_fast` | (optional) the thunk for an ordinary subroutine, which only has to keep A, X and Y |
 | `overlay_max` | (optional) the highest overlay number the machine has room for |
 | `overlay_thunk_cross`, `overlay_thunk_cross_fast` | (optional) the thunks for a call from one overlay into another, where that differs from a call out of the main program |

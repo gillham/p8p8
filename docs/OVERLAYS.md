@@ -358,10 +358,13 @@ in main memory of nine bytes for each subroutine that an overlay calls
 Into an overlay from outside it:
 
 - on the X16, a dozen instructions that choose the bank, call, and put back
-  the bank that was there: about twice a plain call;
-- on the GameTank the same, but choosing a bank there is a subroutine of
-  some fifty instructions (the bank's number goes out a bit at a time), and
-  it runs twice for a call;
+  the bank that was there: about twice a plain call.  In main memory each
+  subroutine that is called from outside its overlay takes nine bytes, and
+  each overlay 18 more once;
+- on the GameTank the same (nine bytes in the fixed bank for each such
+  subroutine, 18 for each bank that has any), but choosing a bank there is
+  a subroutine of some fifty instructions (the bank's number goes out a bit
+  at a time), and it runs twice for a call;
 - on the C64, the C128 and the MEGA65, about twice a plain call when the
   overlay is in the window already, and a copy of the overlay's code (as
   many bytes as it has) when another one is.  After the call the caller's
@@ -371,7 +374,7 @@ Measured, 20,000 calls of a subroutine that adds one to a byte, in jiffies:
 
 | | plain call | into an overlay that is there | 4,000 calls, two overlays in turn |
 |---|---|---|---|
-| X16 | 8 | 15 | 3 |
+| X16 | 8 | 17 | 4 |
 | C64 with an REU | 76 | 150 | 72 |
 | C128 with an REU | 77 | 156 | 74 |
 
