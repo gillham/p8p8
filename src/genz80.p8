@@ -1061,12 +1061,66 @@ genz80 {
         }
     }
 
+    ; Is a multiplication by this constant better done by doubling and adding than by the
+    ; routine?  (Not by 0; up to a dozen additions.)
+    sub worth_adding(long factor, ubyte size) -> bool {
+        if size == 1
+            factor &= 255
+        if factor == 0
+            return false
+        ubyte steps = 0
+        ubyte bits = 0
+        long f = factor
+        while f != 0 {
+            steps++
+            if (f & 1) != 0
+                bits++
+            f >>= 1
+        }
+        return steps + bits <= 14
+    }
+
     ; an arithmetic instruction of any size
     sub arith(^^ir.Instr i, ubyte group) {
         ubyte size = size_of(i.type)
         ubyte kind = kind_of(i.op)
         ubyte k
-        if size == 1 and kind <= 4 and (group == 1 or group == 4) {
+        if kind == 5 and (group == 1 or group == 4) and (size == 1 or size == 2) and worth_adding((i.value as long) & $ffff, size) {
+            ; (times a constant: doubling and adding, from the constant's top bit down)
+            long factor = (i.value as long) & $ffff
+            if size == 1
+                factor &= 255
+            ; (bit: the constant's top bit, then each one below it)
+            long bit = $8000
+            while bit != 1 and (factor & bit) == 0
+                bit >>= 1
+            if size == 1 {
+                first_a(i, group, 0)
+                line("ld  b,a")
+                while bit != 1 {
+                    bit >>= 1
+                    line("add  a,a")
+                    if (factor & bit) != 0
+                        line("add  a,b")
+                }
+                a_first(i, group, 0)
+            }
+            else {
+                first_pair("hl", i, group, 0)
+                if (factor & (factor - 1)) != 0 {
+                    line("ld  d,h")
+                    line("ld  e,l")
+                }
+                while bit != 1 {
+                    bit >>= 1
+                    line("add  hl,hl")
+                    if (factor & bit) != 0
+                        line("add  hl,de")
+                }
+                pair_first(i, group, 0, "hl")
+            }
+        }
+        else if size == 1 and kind <= 4 and (group == 1 or group == 4) {
             ; (a byte and a constant: the constant is the instruction's operand)
             first_a(i, group, 0)
             when kind {
@@ -1088,6 +1142,11 @@ genz80 {
             combine(kind, 1)
             a_first(i, group, 0)
         }
+        else if size == 2 and kind >= 2 and kind <= 4 and (group == 1 or group == 4) {
+            first_pair("hl", i, group, 0)
+            logic16_constant(kind, i.value as long)
+            pair_first(i, group, 0, "hl")
+        }
         else if size == 2 {
             second_pair("de", i, group, 0)
             first_pair("hl", i, group, 0)
@@ -1096,11 +1155,63 @@ genz80 {
         }
         else if size == 4 {
             if kind <= 4 {
+                ; A long, a byte at a time with the carry, through pointers: DE walks
+                ; what is changed, HL the other operand (or HL walks what is changed,
+                ; and the other operand is a constant's bytes).
+                bool constant = group == 1 or group == 4
+                if constant
+                    put("    ld  hl,")
+                else
+                    put("    ld  de,")
+                if group <= 2
+                    reg(i.r1, 0)
+                else
+                    mem_name(i, 0)
+                nl()
+                if not constant {
+                    put("    ld  hl,")
+                    if group == 2
+                        reg(i.r2, 0)
+                    else
+                        reg(i.r1, 0)
+                    nl()
+                }
                 for k in 0 to 3 {
-                    second_b(i, group, k)
-                    first_a(i, group, k)
-                    bytewise(kind, k)
-                    a_first(i, group, k)
+                    if constant
+                        line("ld  a,(hl)")
+                    else
+                        line("ld  a,(de)")
+                    when kind {
+                        0 -> {
+                            if k == 0
+                                put("    add  a,")
+                            else
+                                put("    adc  a,")
+                        }
+                        1 -> {
+                            if k == 0
+                                start("sub")
+                            else
+                                put("    sbc  a,")
+                        }
+                        2 -> start("and")
+                        3 -> start("or")
+                        else -> start("xor")
+                    }
+                    if constant
+                        putn(((i.value >> (k * 8)) as long) & 255)
+                    else
+                        put("(hl)")
+                    nl()
+                    if constant
+                        line("ld  (hl),a")
+                    else
+                        line("ld  (de),a")
+                    if k != 3 {
+                        line("inc  hl")
+                        if not constant
+                            line("inc  de")
+                    }
                 }
             }
             else {
@@ -1250,6 +1361,61 @@ genz80 {
         line("rrca")
     }
 
+    ; Does what follows instruction i read the flags it leaves?  A branch on the status
+    ; as the next instruction does, and so may whatever comes after the end of the chunk.
+    sub flags_wanted(^^ir.Instr i) -> bool {
+        if i.next == 0
+            return true
+        when i.next.op {
+            ir.OP_BSTEQ, ir.OP_BSTNE, ir.OP_BSTNEG, ir.OP_BSTPOS -> return true
+        }
+        return false
+    }
+
+    ; HL op= a constant, a byte at a time: a byte that the constant leaves as it is costs
+    ; nothing, one that it makes 0 or 255 is loaded
+    sub logic16_constant(ubyte kind, long value) {
+        ubyte half
+        for half in 0 to 1 {
+            ubyte part = (value & 255) as ubyte
+            if half == 1
+                part = ((value >> 8) & 255) as ubyte
+            ^^ubyte from = "ld  a,l"
+            ^^ubyte back = "ld  l,a"
+            ^^ubyte clear = "ld  l,0"
+            ^^ubyte full = "ld  l,255"
+            if half == 1 {
+                from = "ld  a,h"
+                back = "ld  h,a"
+                clear = "ld  h,0"
+                full = "ld  h,255"
+            }
+            if kind == 2 {
+                if part == 0
+                    line(clear)
+                else if part != 255 {
+                    line(from)
+                    start("and")
+                    putn(part)
+                    nl()
+                    line(back)
+                }
+            }
+            else if kind == 3 and part == 255
+                line(full)
+            else if part != 0 {
+                line(from)
+                if kind == 3
+                    start("or")
+                else
+                    start("xor")
+                putn(part)
+                nl()
+                line(back)
+            }
+        }
+    }
+
     sub logic16(str mnemonic) {
         line("ld  a,l")
         start(mnemonic)
@@ -1355,6 +1521,13 @@ genz80 {
             else
                 putn((i.value as long) & 255)
             nl()
+            return
+        }
+        if size == 2 and not with_register and not signed and ((i.value as long) & $ffff) == 0 {
+            ; (a word against 0: equal when both its bytes are 0, and never less)
+            fetch(i.r1, 2)
+            line("ld  a,h")
+            line("or  l")
             return
         }
         if with_register
@@ -1734,8 +1907,10 @@ genz80 {
                     else
                         line("dec  hl")
                     reg_from_pair(i.r1, 0, "hl")
-                    line("ld  a,h")
-                    line("or  l")
+                    if flags_wanted(i) {
+                        line("ld  a,h")
+                        line("or  l")
+                    }
                 }
                 else if size == 4
                     step_long(i, 1, i.op == ir.OP_INC)
@@ -1760,8 +1935,10 @@ genz80 {
                     else
                         line("dec  hl")
                     mem_from_pair(i, 0, "hl")
-                    line("ld  a,h")
-                    line("or  l")
+                    if flags_wanted(i) {
+                        line("ld  a,h")
+                        line("or  l")
+                    }
                 }
                 else if size == 4 {
                     step_long(i, 3, i.op == ir.OP_INCM)
@@ -2304,6 +2481,29 @@ genz80 {
         }
         if carry_rotation(i.op)
             carry_in(i)
+        bool rotation = false
+        when i.op {
+            ir.OP_ROL, ir.OP_ROR, ir.OP_ROXL, ir.OP_ROXR, ir.OP_ROLM, ir.OP_RORM, ir.OP_ROXLM, ir.OP_ROXRM -> rotation = true
+        }
+        if size == 2 and not rotation and count != 0 {
+            ; (a word is shifted in HL; the last bit out is in the carry, as the IR has it)
+            first_pair("hl", i, place, 0)
+            repeat count {
+                when i.op {
+                    ir.OP_LSL, ir.OP_LSLI, ir.OP_LSLM -> line("add  hl,hl")
+                    ir.OP_ASR, ir.OP_ASRI, ir.OP_ASRM -> {
+                        line("sra  h")
+                        line("rr  l")
+                    }
+                    else -> {
+                        line("srl  h")
+                        line("rr  l")
+                    }
+                }
+            }
+            pair_first(i, place, 0, "hl")
+            return
+        }
         repeat count
             shift_once(i.op, i, place, size)
     }
@@ -3144,6 +3344,14 @@ genz80 {
             line("adc  hl,de")
             line("ld  (p8_lc+2),hl")
             raw("p8rt_mul32_next:")
+            ; (nothing left of the multiplier: done, however many of the 32 steps remain)
+            line("ld  hl,(p8_la)")
+            line("ld  a,h")
+            line("or  l")
+            line("ld  hl,(p8_la+2)")
+            line("or  h")
+            line("or  l")
+            line("ret  z")
             line("ld  hl,p8_lb")
             line("sla  (hl)")
             repeat 3 {
@@ -3161,6 +3369,24 @@ genz80 {
             line("ld  (p8_lc),hl")
             line("ld  (p8_lc+2),hl")
             line("ld  b,32")
+            ; (while the dividend's top byte is empty it moves up a byte at once: eight
+            ; steps less, and the result is the same)
+            raw("p8rt_div32_skip:")
+            line("ld  a,(p8_la+3)")
+            line("or  a")
+            line("jr  nz,p8rt_div32_bit")
+            line("ld  a,b")
+            line("cp  16")
+            line("jr  c,p8rt_div32_bit")
+            line("sub  8")
+            line("ld  b,a")
+            line("ld  hl,(p8_la+1)")
+            line("ld  (p8_la+2),hl")
+            line("ld  a,(p8_la)")
+            line("ld  (p8_la+1),a")
+            line("xor  a")
+            line("ld  (p8_la),a")
+            line("jr  p8rt_div32_skip")
             raw("p8rt_div32_bit:")
             line("ld  hl,p8_la")            ; (p8_lc follows p8_la: one shift of 64 bits)
             line("sla  (hl)")

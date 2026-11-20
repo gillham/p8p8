@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	z80bench z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -508,6 +508,10 @@ trs80screen:	$(P8P8)
 # make trs80dos: the DOS must still work after a program has ended (with floats and without)
 trs80dos:	$(P8P8)
 	@tests/trs80dos.sh $(P8P8)
+
+# make z80bench: the size and running time of a small benchmark as a CP/M program
+z80bench:	$(P8P8)
+	@tests/z80bench.sh $(P8P8)
 
 # make z80ref: the same programs built for CP/M by prog8c-llvm (llvm-z80 and z88dk) and by
 # p8c, both run in tnylpo.  The comparison for floats, which are 32 bits there and 64 on

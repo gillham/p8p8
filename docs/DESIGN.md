@@ -870,10 +870,30 @@ the program's file: they are names for addresses after its end, memory
 that the first instructions clear.  (Not in a program that zcc links,
 where the memory after this module is another module's.)
 
+The pass also follows ordinary variables in A, HL and DE (a store through
+a pointer or a call forgets them; memory-mapped ones are never followed),
+and makes a jump to a label within 30 lines the short one: no instruction
+the generator writes is longer than four bytes, so that is in reach
+whatever the lines are.
+
+More in the generator: a multiplication by a constant is doubling and
+adding from the constant's top bit down; a word is shifted in HL; word
+logic with a constant touches only the bytes the constant changes; a word
+against 0 is `ld a,h / or l`; the flags of a word's increment are made
+only when a branch reads them; long addition, subtraction and logic walk
+two pointers.  The long multiplication stops when nothing of the
+multiplier is left, and the long division moves the dividend up a byte at
+a time while its top byte is empty.
+
 Measured on CP/M programs, bytes without and with all of this: the string
-routines' test 10,263 and 4,898; long arithmetic 4,564 and 3,305;
-fromtests 4,469 and 3,041; fromdocs_builtins 3,362 and 2,057; hello 138
-and 80.
+routines' test 10,263 and 4,694; long arithmetic 4,564 and 3,200;
+fromtests 4,469 and 2,975; fromdocs_builtins 3,362 and 1,821; hello 138
+and 80.  `make z80bench` times a sieve, a word loop and a long loop in
+tnylpo: 9.4 seconds before any of this, 3.4 now (most of it from the
+multiplications and divisions).  prog8c-llvm's build of the same program
+runs in 0.6 seconds and is 16,156 bytes against 1,654: the code here is
+small, and slow by comparison, because every value still lives in memory
+between instructions.
 
 The IR's hardware register slots are places in memory here (`p8_slot_N`).
 A subroutine with several results stores them there before it returns, and

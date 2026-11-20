@@ -47,6 +47,7 @@ peepz80 {
     const ubyte F_A_IS = 11         ; ld a,<with>
     const ubyte F_WIDE_DE = 12      ; ld e,a / xor a / ld d,a   (in place of "xor a")
     const ubyte F_WIDE_HL = 13      ; ld l,a / xor a / ld h,a
+    const ubyte F_SHORT = 14        ; jr in place of jp
 
     ; what a register holds: the text of a place (in src), or nothing (length 0)
     long hl_at
@@ -91,6 +92,7 @@ peepz80 {
             superseded()
             dead_loads()
             dead_stores()
+            short_jumps()
             bool worked = write(b)
             rounds++
             if not worked or rounds == 6
@@ -133,6 +135,11 @@ peepz80 {
                 F_A_IS -> loaded(b, k, "    ld  a,")
                 F_WIDE_DE -> buf.add_str(b, "    ld  e,a\n    xor  a\n    ld  d,a\n")
                 F_WIDE_HL -> buf.add_str(b, "    ld  l,a\n    xor  a\n    ld  h,a\n")
+                F_SHORT -> {
+                    buf.add_str(b, "    jr")
+                    buf.add_bytes(b, src.data + starts[k] + 6, lengths[k] - 6)
+                    buf.add_byte(b, '\n')
+                }
             }
         }
         return worked
@@ -213,6 +220,8 @@ peepz80 {
         o2_at = 0
         if q < n and t[q] == ',' {
             q++
+            while q < n and t[q] == ' '
+                q++
             p = q
             while q < n and t[q] != ';'
                 q++
@@ -288,6 +297,16 @@ peepz80 {
                 return false
         }
         return src.data[at2 + n1 - 1] == '+' and src.data[at2 + n1] == '1' and src.data[at2 + n1 + 1] == ')'
+    }
+
+    ; what the registers hold of variables is forgotten; of IR registers' places it stays
+    sub forget_variables() {
+        if hl_len != 0 and not place(hl_at, hl_len)
+            hl_len = 0
+        if de_len != 0 and not place(de_at, de_len)
+            de_len = 0
+        if a_len != 0 and not place(a_at, a_len)
+            a_len = 0
     }
 
     sub forget() {
@@ -411,10 +430,16 @@ peepz80 {
                 }
             }
             else if is(m_at, m_len, "inc") or is(m_at, m_len, "dec") or is(m_at, m_len, "sla") or is(m_at, m_len, "sra")
-                    or is(m_at, m_len, "srl") or is(m_at, m_len, "rl") or is(m_at, m_len, "rr") or is(m_at, m_len, "pop")
+                    or is(m_at, m_len, "srl") or is(m_at, m_len, "rl") or is(m_at, m_len, "rr") or is(m_at, m_len, "pop") {
+                if o1_len != 0 and src.data[o1_at] == '('
+                    forget_variables()      ; (memory through a pointer)
                 changed(o1_at, o1_len)
-            else if is(m_at, m_len, "set") or is(m_at, m_len, "res")
+            }
+            else if is(m_at, m_len, "set") or is(m_at, m_len, "res") {
+                if o2_len != 0 and src.data[o2_at] == '('
+                    forget_variables()
                 changed(o2_at, o2_len)
+            }
             else if is(m_at, m_len, "or") or is(m_at, m_len, "and") {
                 ; (with A itself the value stays)
                 if not is(o1_at, o1_len, "a")
@@ -433,8 +458,16 @@ peepz80 {
 
     ; a load: "ld  to,from"
     sub load(long k) {
-        bool from_place = place(o2_at, o2_len)
-        bool to_place = place(o1_at, o1_len)
+        ; (an ordinary variable is followed like the place of an IR register; a
+        ; memory-mapped one is not)
+        bool from_place = place(o2_at, o2_len) or (direct(o2_at, o2_len) and not is_volatile(o2_at, o2_len))
+        bool to_place = place(o1_at, o1_len) or (direct(o1_at, o1_len) and not is_volatile(o1_at, o1_len))
+        if not to_place and o1_len != 0 and src.data[o1_at] == '(' {
+            ; a store through a pointer, or to memory-mapped memory: any variable may
+            ; have changed (the places of IR registers have not)
+            forget_variables()
+            return
+        }
         if from_place {
             if is(o1_at, o1_len, "hl") {
                 if same(o2_at, o2_len, hl_at, hl_len)
@@ -507,6 +540,36 @@ peepz80 {
         }
         ; anything else: the register it loads no longer holds a place
         changed(o1_at, o1_len)
+        ; The address of an IR register's place ("ld hl,p8r_2_14"): what comes next
+        ; writes that place through the pointer, so what a register held of it is
+        ; no longer its value.
+        if o2_len > 4 and src.data[o2_at] == 'p' and src.data[o2_at + 1] == '8' and src.data[o2_at + 2] == 'r'
+                and src.data[o2_at + 3] == '_' {
+            if named(hl_at, hl_len, o2_at, o2_len)
+                hl_len = 0
+            if named(de_at, de_len, o2_at, o2_len)
+                de_len = 0
+            if named(a_at, a_len, o2_at, o2_len)
+                a_len = 0
+        }
+    }
+
+    ; is the place "(p8r_2_14+1)" one of the IR register that the name "p8r_2_14" is?
+    sub named(long at, uword n, long name_at, uword name_len) -> bool {
+        if n == 0 or not place(at, n)
+            return false
+        uword b = base_len(at, n) - 1
+        uword nb = 0
+        while nb < name_len and src.data[name_at + nb] != '+'
+            nb++
+        if b != nb
+            return false
+        uword k
+        for k in 0 to b - 1 {
+            if src.data[at + 1 + k] != src.data[name_at + k]
+                return false
+        }
+        return true
     }
 
     ; ---- more of the same kind ----
@@ -772,6 +835,71 @@ peepz80 {
             }
             else if (fates[j] == F_HL_IS and which == 1) or (fates[j] == F_DE_IS and which == 2) or (fates[j] == F_A_IS and which == 3)
                 fates[k] = F_DROP
+        }
+    }
+
+    ; ---- short jumps ----
+
+    ; A jump to a label that is near becomes the short one (two bytes, not three).  Near:
+    ; at most 30 lines away, counted as they will be written.  No instruction that the
+    ; generator writes is longer than four bytes, so that is within the 126 that a short
+    ; jump reaches, whatever the lines are.  Only the conditions that the short jump has.
+    sub short_jumps() {
+        long k
+        for k in 0 to count - 1 {
+            if not kept(k) or not is(m_at, m_len, "jp")
+                continue
+            long t_at = o1_at
+            uword t_len = o1_len
+            if o2_len != 0 {
+                if not (is(o1_at, o1_len, "z") or is(o1_at, o1_len, "nz") or is(o1_at, o1_len, "c") or is(o1_at, o1_len, "nc"))
+                    continue
+                t_at = o2_at
+                t_len = o2_len
+            }
+            if t_len == 0 or src.data[t_at] == '('
+                continue
+            if near(k, t_at, t_len, 1) or near(k, t_at, t_len, -1)
+                fates[k] = F_SHORT
+        }
+    }
+
+    ; is the label a line within reach of line k, in this direction?
+    sub near(long k, long t_at, uword t_len, byte direction) -> bool {
+        ubyte lines = 0
+        long j = k
+        repeat {
+            if direction > 0
+                j++
+            else
+                j--
+            if j < 0 or j >= count or lines > 30
+                return false
+            uword n = lengths[j]
+            if n == 0 or fates[j] == F_DROP
+                continue
+            ^^ubyte t = src.data + starts[j]
+            if t[0] == ';' {
+                if n >= 2 and t[1] == '%'
+                    return false        ; (assembly of the program's own: of unknown length)
+                continue
+            }
+            if t[0] != ' ' {
+                ; a label: this one?
+                if n == t_len + 1 and t[n - 1] == ':' {
+                    uword q = 0
+                    while q < t_len and t[q] == src.data[t_at + q]
+                        q++
+                    if q == t_len
+                        return true
+                }
+                continue
+            }
+            when fates[j] {
+                F_WIDE_DE, F_WIDE_HL -> lines += 3
+                F_DE_HL, F_HL_DE -> lines += 2
+                else -> lines++
+            }
         }
     }
 
