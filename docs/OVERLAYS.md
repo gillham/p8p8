@@ -115,7 +115,9 @@ piece, if it fits.  That is also a way to try a program on the host
 (`-target llvm64`) or to compare.
 
 **Commander X16.**  Overlay n is RAM bank n, so the numbers choose the
-banks: `%overlay 10` and `%overlay 11` leave banks 1 to 9 alone.  `game.prg` is a small loader:
+banks: `%overlay 10` and `%overlay 11` leave banks 1 to 9 alone.  A program
+that keeps data in banks has to keep it out of the overlays' banks: nothing
+stops it from writing over its own code there.  `game.prg` is a small loader:
 it reads `game.non`, which has the main program and all overlays in it, and
 starts the program.  The banks above the last overlay are the program's.
 
@@ -159,8 +161,12 @@ there for every overlay, and are not counted against one.
 - **Code that works on banked data, on the X16.**  An overlay runs in the
   window at $a000, so it cannot look at another bank there.  The
   subroutines that read and write a program's own banks (the text of an
-  editor, say) belong in a block without `%overlay`; overlays call them.
-  The bank a program has chosen is the same after a call into an overlay.
+  editor, say) belong in the main program; overlays call them, and get what
+  they need in variables or in a buffer in main memory, not as an address
+  in the window.  Such a subroutine may leave its bank chosen when it
+  returns: a call out of an overlay comes back through a few instructions
+  in main memory that choose the overlay's bank again.  And the bank a
+  program has chosen is the same after a call into an overlay.
 - **Inner loops across two overlays.**  A call into another overlay costs
   more than a plain call (see below).  Put what calls each other often into
   the same overlay, or into the main program.
@@ -171,8 +177,11 @@ there for every overlay, and are not counted against one.
 
 ## What a call costs
 
-Within an overlay, and from an overlay into the main program or the library:
-nothing more than any call.
+Within an overlay: nothing more than any call.  From an overlay into the
+main program or the library: the same on the C64, the C128 and the MEGA65;
+on the X16 a few instructions more, in a stub in main memory of about a
+dozen bytes for each subroutine that an overlay calls (routines of the ROM
+are called as they are).
 
 Into an overlay from outside it:
 

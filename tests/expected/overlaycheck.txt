@@ -7,7 +7,7 @@ MAIN FIRST 42 SECOND FIRST 1238 2
 -- banks, 65c02
 banks.non
 banks.prg
-8 5 55 66
+8 5 55 66 376 6
 -- words, 65c02
 words.non
 words.prg
@@ -25,7 +25,7 @@ MAIN FIRST 42 SECOND FIRST 1238 2
 -- banks, 65816
 banks.non
 banks.prg
-8 5 55 66
+8 5 55 66 376 6
 -- words, 65816
 words.non
 words.prg

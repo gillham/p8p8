@@ -1871,7 +1871,9 @@ gen6502 {
         }
         overlay_thunks()
         global_inits_code()
+        out_count = 0
         overlay_code()
+        overlay_out_stubs()
     }
 
     ; ---- overlays ----
@@ -1898,6 +1900,7 @@ gen6502 {
         overlay_start = target.number("overlay_window_start", 0)
         overlay_end = target.number("overlay_window_end", 0)
         bool possible = overlay_start != 0 and target.text("overlay_thunk") != 0
+        overlay_returns = possible and target.text("overlay_return") != 0
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
             if not possible
@@ -1986,6 +1989,127 @@ gen6502 {
         return thunk_name(sym)
     }
 
+    ; a target's text with %t as the subroutine and %n as the overlay, its lines indented
+    sub put_template(^^ubyte template, ^^ubyte subroutine, ubyte overlay) {
+        long k = 0
+        put("    ")
+        while template[k] != 0 {
+            if template[k] == '%' and template[k + 1] == 't' {
+                put(subroutine)
+                k++
+            }
+            else if template[k] == '%' and template[k + 1] == 'n' {
+                putn(overlay)
+                k++
+            }
+            else if template[k] == '\n' {
+                nl()
+                put("    ")
+            }
+            else
+                buf.add_byte(w(), template[k])
+            k++
+        }
+        nl()
+    }
+
+    ; A call out of an overlay into the main program or the library.  What is called may
+    ; leave another bank in the window (a program's own data), and then the code that
+    ; called is not there to go on.  So on a target with "overlay_return" such a call
+    ; goes to a stub in main memory that calls the subroutine, puts the overlay back
+    ; (that text: %n is the overlay) and returns into it.  There is one stub for each
+    ; subroutine and overlay that calls it; the fast text is for an ordinary
+    ; subroutine, after which the flags need not survive.  A call through a pointer has
+    ; a stub of its own for each overlay.  (A call into another overlay goes through
+    ; that one's thunk, which puts back what was there itself.)
+    const uword OUT_STUBS = 1024
+    bool overlay_returns = false    ; the target has "overlay_return"
+    ^^pointer out_names = 0         ; the stubs' names
+    ^^pointer out_callees = 0       ; what each calls (0: through the pointer in the scratch word)
+    ^^ubyte out_overlays = 0
+    uword out_count = 0
+
+    sub overlay_out(^^ubyte callee_name) -> ^^ubyte {
+        if cur_overlay == 0 or not overlay_returns
+            return callee_name
+        if callee_name != 0 and (callee_name[0] == '$' or (callee_name[0] >= '0' and callee_name[0] <= '9'))
+            return callee_name          ; (a routine of the ROM by its address: it leaves the bank as it is)
+        if callee_name != 0 {
+            ^^ir.Sub callee = find_sub(callee_name)
+            if callee != 0 and callee.overlay != 0
+                return callee_name      ; (the same overlay, or through a thunk)
+        }
+        buf.clear(nb)
+        buf.add_str(nb, "p8ovr_")
+        buf.add_long(nb, cur_overlay)
+        buf.add_byte(nb, '_')
+        if callee_name == 0
+            buf.add_str(nb, "pointer")
+        else {
+            long k = 0
+            while callee_name[k] != 0 {
+                if callee_name[k] == '.'
+                    buf.add_byte(nb, '_')
+                else
+                    buf.add_byte(nb, callee_name[k])
+                k++
+            }
+        }
+        buf.add_byte(nb, 0)
+        ^^ubyte name = strtab.intern_cstr(nb.data)
+        if out_names == 0 {
+            out_names = mem.alloc(OUT_STUBS as long * sizeof(pointer))
+            out_callees = mem.alloc(OUT_STUBS as long * sizeof(pointer))
+            out_overlays = mem.alloc(OUT_STUBS)
+        }
+        uword n = 0
+        while n < out_count {
+            ^^ubyte known = out_names[n]
+            if known == name
+                return name
+            n++
+        }
+        if out_count == OUT_STUBS {
+            error("too many different calls out of overlays for this code generator (1024)", callee_name)
+            return callee_name
+        }
+        out_names[out_count] = name
+        out_callees[out_count] = callee_name
+        out_overlays[out_count] = cur_overlay
+        out_count++
+        return name
+    }
+
+    ; the stubs, in main memory
+    sub overlay_out_stubs() {
+        if out_count == 0
+            return
+        raw("; ---- the ways out of the overlays and back ----")
+        uword n
+        for n in 0 to out_count - 1 {
+            ^^ubyte callee_name = out_callees[n]
+            ^^ubyte template = target.text("overlay_return")
+            put(out_names[n])
+            raw("  .proc")
+            if callee_name == 0
+                raw("    jsr  _through")
+            else {
+                ^^ir.Sub callee = find_sub(callee_name)
+                if callee != 0 and not callee.is_asm and target.text("overlay_return_fast") != 0
+                    template = target.text("overlay_return_fast")
+                put("    jsr  ")
+                put(callee_name)
+                nl()
+            }
+            put_template(template, callee_name, out_overlays[n])
+            raw("    rts")
+            if callee_name == 0
+                raw("_through  jmp  (P8ZP_SCRATCH_W1)")
+            raw("    .pend")
+        }
+        raw("")
+    }
+
     ; a thunk for every subroutine of the overlay blocks (the assembler leaves out the
     ; ones nothing calls)
     sub overlay_thunks() {
@@ -2008,26 +2132,7 @@ gen6502 {
                             template = full
                         put(thunk_name(s.name))
                         raw("  .proc")
-                        long k = 0
-                        put("    ")
-                        while template[k] != 0 {
-                            if template[k] == '%' and template[k + 1] == 't' {
-                                put(s.name)
-                                k++
-                            }
-                            else if template[k] == '%' and template[k + 1] == 'n' {
-                                putn(s.overlay)
-                                k++
-                            }
-                            else if template[k] == '\n' {
-                                nl()
-                                put("    ")
-                            }
-                            else
-                                buf.add_byte(w(), template[k])
-                            k++
-                        }
-                        nl()
+                        put_template(template, s.name, s.overlay)
                         raw("    .pend")
                     }
                     s = s.next
@@ -6768,12 +6873,16 @@ gen6502 {
             ir.OP_CALLI -> {
                 ; a subroutine call through a pointer: the return address by hand
                 pointer_to_scratch(i.r1)
-                ins("lda", "#>((+)-1)")
-                ins("pha", 0)
-                ins("lda", "#<((+)-1)")
-                ins("pha", 0)
-                ins("jmp", "(P8ZP_SCRATCH_W1)")
-                anon_label("+")
+                if cur_overlay != 0 and overlay_returns
+                    ins("jsr", overlay_out(0))          ; (out of the overlay and back into it)
+                else {
+                    ins("lda", "#>((+)-1)")
+                    ins("pha", 0)
+                    ins("lda", "#<((+)-1)")
+                    ins("pha", 0)
+                    ins("jmp", "(P8ZP_SCRATCH_W1)")
+                    anon_label("+")
+                }
             }
             ir.OP_SYSCALL -> syscall(i)
             ir.OP_BSTCC -> ins("bcc", i.sym)
@@ -7487,7 +7596,10 @@ gen6502 {
                         raw("    sec")
                         raw("    xce")
                     }
-                    ins("jsr", overlay_entry(i.sym))
+                    ^^ubyte call_name = overlay_entry(i.sym)
+                    if call_name == i.sym
+                        call_name = overlay_out(i.sym)
+                    ins("jsr", call_name)
                     ubyte used = call_uses(i, in_registers)
                     ^^ir.Sub callee = find_sub(i.sym)
                     if callee == 0 or callee.is_asm

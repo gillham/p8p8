@@ -587,6 +587,15 @@ subroutine takes and gives.  The X16's are written out for each subroutine
 (save the bank, choose, call, put back), without the ROM's JSRFAR: 20,000
 calls take 15 jiffies where JSRFAR took 37 and a plain call takes 8.
 
+A call out of an overlay is a plain `jsr` unless the target has
+`overlay_return` (the X16): there the subroutine that is called may leave
+another bank in the window, a program's own data, and the overlay's code
+would not be there to return to.  So the call goes to a stub in main memory,
+one for each subroutine and overlay that calls it (`overlay_out`), which
+calls, chooses the overlay's bank again and returns; a call through a
+pointer has such a stub too.  ROM routines called by their address are
+called as they are.
+
 In the assembly the overlay blocks come last, each overlay as a segment
 that is placed at the window's address when `prog8_overlay` is its number
 and is virtual otherwise.  So the driver runs the assembler once for each
