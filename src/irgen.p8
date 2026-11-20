@@ -132,13 +132,14 @@ irgen {
         while m != 0 {
             ^^ast.Node d = m.tree.a
             while d != 0 {
-                if d.kind == ast.N_DIRECTIVE and d.a != 0 and d.a.kind == ast.N_INT and strings.compare(d.name, "overlay") == 0 {
+                if d.kind == ast.N_DIRECTIVE and d.a != 0 and strings.compare(d.name, "overlay") == 0 {
                     listed = true
-                    ir.overlay_wanted[d.a.value as ubyte] = true
+                    ubyte number = overlay_number(d)
+                    ir.overlay_wanted[number] = true
                     ^^ast.Node name = d.a.next
                     while name != 0 {
-                        if name.kind == ast.N_IDENT
-                            overlay_listed(name, d.a.value as ubyte)
+                        if name.kind == ast.N_IDENT and number != 0
+                            overlay_listed(name, number)
                         name = name.next
                     }
                 }
@@ -148,6 +149,23 @@ irgen {
         }
         if listed and overlay_inline != 0
             diag.warning_at(source.get(overlay_inline.file), overlay_inline.line, overlay_inline.col, "%overlay here and in a list at the top of a module: the list is the place to see what is where (it is what counts where both name the same thing)")
+    }
+
+    ; the overlay's number in a directive: written out, or a constant's name (0, with an
+    ; error, when it is neither or not from 1 to 255)
+    sub overlay_number(^^ast.Node d) -> ubyte {
+        bool ok
+        quad v
+        ok, v = typer.directive_number(d.a)
+        if not ok {
+            error(d.a, "%overlay: expected a number from 1 to 255, or the name of a constant that is one")
+            return 0
+        }
+        if v < 1 or v > 255 {
+            error(d.a, "%overlay: the constant is not a number from 1 to 255")
+            return 0
+        }
+        return v as ubyte
     }
 
     sub overlay_listed(^^ast.Node name, ubyte number) {
@@ -1754,8 +1772,8 @@ irgen {
             block.overlay_safe = symtab.has_option(b.a, strtab.intern_cstr("overlay_safe")) or symtab.has_option(module.tree.a, strtab.intern_cstr("overlay_safe"))
             ^^ast.Node od = b.a
             while od != 0 {
-                if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0 {
-                    block.overlay = od.a.value as ubyte
+                if od.kind == ast.N_DIRECTIVE and od.a != 0 and strings.compare(od.name, "overlay") == 0 {
+                    block.overlay = overlay_number(od)
                     ir.overlay_wanted[block.overlay] = true
                     overlay_inline = od
                 }
@@ -2307,8 +2325,8 @@ irgen {
         crumb.name = cursub.name
         ^^ast.Node od = n.c
         while od != 0 {
-            if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0 {
-                cursub.overlay = od.a.value as ubyte
+            if od.kind == ast.N_DIRECTIVE and od.a != 0 and strings.compare(od.name, "overlay") == 0 {
+                cursub.overlay = overlay_number(od)
                 ir.overlay_wanted[cursub.overlay] = true
                 overlay_inline = od
             }

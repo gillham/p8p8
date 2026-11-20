@@ -91,6 +91,21 @@ that are in it.
 %overlay 2, report
 ```
 
+The number can be the name of a constant, here and inside a block or a
+subroutine, so that an overlay is moved by changing one number:
+
+```prog8
+%overlay banks.CODE, view, main.execute
+%overlay banks.TITLE, title
+
+banks {
+    const ubyte CODE = 128
+    const ubyte TITLE = CODE + 2
+}
+```
+
+Write the constant with its block's name; it has to come out at 1 to 255.
+
 Then nothing in the blocks themselves says anything about overlays.  That
 suits a program whose sources are shared between machines or between
 compilers: the list is in the one file that is for the machine with

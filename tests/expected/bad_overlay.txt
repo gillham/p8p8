@@ -2,4 +2,4 @@ tests/bad_overlay.p8:2:1: error: %overlay in a module needs the blocks and subro
 tests/bad_overlay.p8:3:18: error: expected the name of a block or of a subroutine (block.name)
 tests/bad_overlay.p8:12:5: error: invalid overlay directive, expected a number from 1 to 255
 tests/bad_overlay.p8:14:9: error: invalid overlay directive, expected a number from 1 to 255
-tests/bad_overlay.p8:19:5: error: invalid overlay directive, expected a number from 1 to 255
+tests/bad_overlay.p8:19:5: error: invalid overlay directive, expected a number from 1 to 255 or the name of a constant that is one

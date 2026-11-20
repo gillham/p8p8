@@ -566,6 +566,10 @@ overlay of that one).  Such a subroutine is written in its overlay's part
 outside its block's scope but under its full name
 (`p8b_main.p8s_name  .proc`), so nothing that names it changes.
 
+The number of an `%overlay` may be a constant's name: nothing resolves names
+in directives, so `typer.directive_number` looks it up when irgen reads the
+directive.
+
 `%overlay n, name, name...` at module level is the same said from outside:
 `irgen.overlay_lists` looks each name up after all blocks are generated
 and sets the block's or the subroutine's overlay.

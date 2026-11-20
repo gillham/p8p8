@@ -367,7 +367,14 @@ checker {
             ; overlay on a machine that has them)
             ; In a module it is a list: the number, then the blocks and subroutines that
             ; are in that overlay ("%overlay 2, view, main.execute").
-            if nargs < 1 or arg.kind != ast.N_INT or arg.value < 1 or arg.value > 255
+            ; (the number may be the name of a constant)
+            bool onum_ok = false
+            quad onum = 0
+            if nargs >= 1 and (arg.kind == ast.N_INT or arg.kind == ast.N_IDENT)
+                onum_ok, onum = typer.directive_number(arg)
+            if nargs >= 1 and arg.kind == ast.N_IDENT and not onum_ok
+                error(d, "invalid overlay directive, expected a number from 1 to 255 or the name of a constant that is one")
+            else if not onum_ok or onum < 1 or onum > 255
                 error(d, "invalid overlay directive, expected a number from 1 to 255")
             else if level == L_MODULE {
                 if nargs == 1

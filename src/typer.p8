@@ -872,6 +872,26 @@ typer {
 
     bool sizing = false         ; inside sizeof(): a name has its declared type
 
+    ; The number that a directive is given: written out, or the name of a constant (which
+    ; nothing has looked up yet where it stands in a directive).  For %overlay.
+    sub directive_number(^^ast.Node arg) -> bool, quad {
+        if arg == 0
+            return false, 0
+        if arg.kind == ast.N_IDENT and arg.extra == 0 and arg.name != 0 {
+            ^^symtab.Sym s = resolver.lookup_name(arg.name, arg)
+            if s == 0 or s.kind != symtab.K_CONST or s.decl == 0 or s.decl.b == 0
+                return false, 0
+            bool ok
+            quad v
+            ok, v = const_eval(s.decl.b)
+            return ok, v
+        }
+        bool ok2
+        quad v2
+        ok2, v2 = const_eval(arg)
+        return ok2, v2
+    }
+
     ; the name of a memory mapped variable at an address of more than 16 bits, on a
     ; machine with far memory
     sub far_memvar(^^ast.Node e) -> bool {
