@@ -9215,6 +9215,8 @@ gen6502 {
             if memtop > 0
                 vars_end = memtop
         }
+        if overlay_max != 0 and vars_start >= 0 and vars_start < overlay_end and vars_end >= overlay_start
+            error("the memory chosen for the variables (-varshigh, -varsgolden or -varsaddress) is where this machine's overlays are brought in; choose another place, or -nooverlays", 0)
         put("PROG8_VARSHIGH_RAMBANK = ")
         if vars_high_bank >= 0
             putn(vars_high_bank)

@@ -318,6 +318,11 @@ test:	$(TESTBIN) $(P8P8)
 	    [ $$? -eq 1 ] || { echo "expected exit status 1"; exit 1; }; \
 	    diff -u tests/expected/$(TARGET)_$$t.txt $(OUT)/$$t.out || exit 1; \
 	done
+	@echo "test -asm (the assembly and no more)"
+	@rm -rf build/asmtest && mkdir -p build/asmtest/6502 build/asmtest/z80
+	@$(P8P8) -lib lib -target cx16 -asm -out build/asmtest/6502 tests/hello.p8
+	@$(P8P8) -lib lib -target cpm -asm -out build/asmtest/z80 tests/hello.p8
+	@test "$$(ls build/asmtest/6502 build/asmtest/z80 | tr '\n' ' ')" = "build/asmtest/6502: hello.asm  build/asmtest/z80: hello.asm "
 	@echo "test bad_overlay (%overlay: where it may stand)"
 	@$(P8P8) -lib lib -target cx16 -check tests/bad_overlay.p8 2>&1 | diff -u tests/expected/bad_overlay.txt -
 	@echo "test bad_far (far memory on the MEGA65: what is refused)"

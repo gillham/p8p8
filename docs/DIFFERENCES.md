@@ -176,7 +176,7 @@ Options are upstream's where both have them, with one dash or two.
   `-compareir`.
 - `-O`, `-clang` and `-Xlink` apply to the programs clang builds for
   llvm64 and llvm32; llvm16 keeps its own level.
-- **p8p8's own:** `-codegen own|upstream`, `-encoding`, `-lib`, `-libpath`,
+- **p8p8's own:** `-asm`, `-codegen own|upstream`, `-encoding`, `-lib`, `-libpath`,
   `-verbose`, `-ir`, `-llvm`, `-build`, `-run`, `-report` and
   `-reportnosource` (everything about one run in a directory, to attach to
   a report of a problem), and options that print the compiler's internal

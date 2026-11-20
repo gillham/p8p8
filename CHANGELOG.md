@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- A program with overlays whose variables are put into the overlay window
+  (`-varshigh` on the C64, for one) is refused; it was built and went wrong
+  when an overlay was brought in.
+
+- `-asm` (an option of p8p8's own) writes the assembly of p8p8's code
+  generator and stops: for whoever assembles and links it their own way.
+  No assembler has to be installed for it.
+
 - A beginning of a Z80 code generator: `-target cpm` builds a CP/M
   program with z88dk's z80asm, and `-run` starts it in tnylpo.  (A Z80
   machine is a target of its own, with `cpu = z80` in its target file;

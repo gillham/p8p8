@@ -362,6 +362,15 @@ there for every overlay, and are not counted against one.
   subroutine in another overlay when its name is written in full
   (`p8b_block.p8s_name`).
 
+### Variables in the window
+
+`-varshigh`, `-varsgolden` and `-varsaddress` must not put the variables
+where the overlays are brought in: the compiler refuses that.  On the C64
+this means no `-varshigh` in a program with overlays, since its high memory
+($c000-$cfdf) is the window.  The virtual registers at $cfe0 are above the
+window and are left alone: an overlay that would reach them is an error of
+the assembler ("overlay n is too large").
+
 ## What a call costs
 
 Within an overlay: nothing more than any call.  From an overlay into the

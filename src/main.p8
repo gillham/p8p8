@@ -48,6 +48,7 @@ main {
     bool opt_check = false
     bool opt_ir = false
     bool opt_llvm = false
+    bool opt_asm = false            ; -asm: the assembly that p8p8's code generator writes, and no more (p8p8)
     bool opt_build = false          ; -build: go on to the executable or program file
     bool opt_run = false            ; -run: and start it
     bool cross = false              ; -triple names the platform of an llvm64 program
@@ -149,6 +150,7 @@ main {
                 arg = "-symbols"
             if strings.compare(arg, "-check") == 0 or strings.compare(arg, "-ir") == 0 or strings.compare(arg, "-llvm") == 0
                     or strings.compare(arg, "-build") == 0 or strings.compare(arg, "-run") == 0 or strings.compare(arg, "-modules") == 0
+                    or strings.compare(arg, "-asm") == 0
                     or strings.compare(arg, "-symbols") == 0 or strings.compare(arg, "-types") == 0 or strings.compare(arg, "-tokens") == 0
                     or strings.compare(arg, "-ast") == 0 or strings.compare(arg, "-parse") == 0 or strings.compare(arg, "-print") == 0
                     or strings.compare(arg, "-stats") == 0
@@ -261,6 +263,12 @@ main {
                 opt_llvm = true
             else if strings.compare(arg, "-build") == 0
                 opt_build = true
+            else if strings.compare(arg, "-asm") == 0 {
+                ; (the code generator runs as for a build; the assembler and what
+                ; follows it do not)
+                opt_build = true
+                opt_asm = true
+            }
             else if strings.compare(arg, "-run") == 0 {
                 opt_build = true
                 opt_run = true
@@ -733,6 +741,7 @@ main {
         out.nl()
         out.puts("  -llvm          generate the IR and write it as LLVM IR text <module>.ll")
         out.nl()
+        out.puts("  -asm           write the assembly of p8p8's code generator (name.asm) and stop: no assembler or linker is run\n")
         out.puts("  -build         also build the program: clang for the llvm targets, prog8c-llvm's back end for the others")
         out.nl()
         out.puts("  -run           build the program and run it (in wasmtime, mos-sim, x16emu or x64sc where that applies)")
@@ -1138,6 +1147,11 @@ main {
         if not opt_keepunused
             irprune.run(p)
         ^^buf.Buf b = buf.new(65536)
+        if opt_asm and not is_z80 and (is_llvm or not opt_own) {
+            out.err()
+            out.puts("error: -asm: p8p8 writes no assembly for this target (it has a code generator for the 6502 family, the 68000 and the Z80)\n")
+            out.exit(1)
+        }
         if opt_build {
             ; what the build step starts from
             if is_z80 {
@@ -1183,7 +1197,7 @@ main {
                 out.exit(1)
             write_output(oname, ".asm", b)
         }
-        if opt_build {
+        if opt_build and not opt_asm {
             crumb.at("building the program")
             build(oname, is_llvm)
             if out_ext != 0 and built_ext != 0 and strings.compare(out_ext, built_ext) != 0 {

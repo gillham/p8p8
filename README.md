@@ -255,6 +255,7 @@ Options p8p8 has that the reference compiler does not:
 | `-cpu 6502\|65c02\|65816\|45gs02` | the CPU a 6502 machine's program is written for, in place of the target's |
 | `-triple <name>` | the platform of an llvm32 program: a profile in the library's `triples/` (WebAssembly, 32-bit ARM and RISC-V Linux) |
 | `-noopt` | the own code generator without its optimizations |
+| `-asm` | write the assembly of p8p8's code generator (`name.asm`) and stop: no assembler or linker is run, and none needs to be installed.  For the 6502 family, the 68000 and the Z80 |
 | `-verbose` | print the commands that are run and the assembler's summary |
 | `-nooverlays` | take no notice of `%overlay`: the program is built in one piece, as on a machine without overlays |
 | `-overlayinfo` | after a 6502 program is built: every block (and the larger subroutines of the ones that stay) with its bytes and whether it could go into an overlay, or why not |
