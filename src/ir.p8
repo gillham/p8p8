@@ -345,6 +345,7 @@ ir {
         ubyte overlay       ; %overlay n: its code goes into that overlay (0: the main program)
         ^^ubyte why_not     ; -overlayinfo: why the block cannot go into an overlay, or 0
         bool keeps_data     ; -overlayinfo: its assembly writes to places in its own text
+        bool overlay_safe   ; %option overlay_safe: it never chooses a bank, and is called like the library from an overlay_data block
         bool overlay_data   ; %option overlay_data: the library is called with this block's overlay left in the window
         bool no_prefixing
         bool ignore_unused

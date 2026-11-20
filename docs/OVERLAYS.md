@@ -288,9 +288,16 @@ That is where they belong on the GameTank, whose fixed bank is 16 KB for
 everything else.  What it asks of the block:
 
 - only its own code uses them, or routines of the library that it hands
-  them to (those are called with the overlay left in the window).  A
+  them to (those are called with the overlay left in the window).  The
+  library is what comes from the library directory (`txt`, `strings`,
+  `compression`...), not a module of your own, whatever it is for.  A
   subroutine of the main program, or of another overlay, that is given such
   a string finds something else at that address;
+- a block of your own that such data may be handed to says so with
+  `%option overlay_safe` (in the block, or once for its module): it is then
+  called like the library.  That is a promise that it never chooses a bank
+  itself and needs nothing from the bank the main program had chosen: a
+  decompressor, a copy routine, a text routine;
 - they are not written to.  In a cartridge they cannot be; on the C64, the
   C128 and the MEGA65 what is written is gone when the overlay is brought
   in again.

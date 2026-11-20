@@ -1751,6 +1751,7 @@ irgen {
             block.force_output = symtab.has_option(b.a, strtab.intern_cstr("force_output"))
             block.chipram = symtab.has_option(b.a, strtab.intern_cstr("amiga_chipram"))
             block.overlay_data = symtab.has_option(b.a, strtab.intern_cstr("overlay_data"))
+            block.overlay_safe = symtab.has_option(b.a, strtab.intern_cstr("overlay_safe")) or symtab.has_option(module.tree.a, strtab.intern_cstr("overlay_safe"))
             ^^ast.Node od = b.a
             while od != 0 {
                 if od.kind == ast.N_DIRECTIVE and od.a != 0 and od.a.kind == ast.N_INT and strings.compare(od.name, "overlay") == 0 {

@@ -2568,7 +2568,8 @@ gen6502 {
                 return callee_name      ; (the same overlay, or through a thunk)
             ; From a block with "%option overlay_data" a routine of the library is called
             ; with the overlay still in the window: the block has data beside its code
-            ; (an asset), and hands the library its address to copy or unpack it.
+            ; (an asset), and hands the library its address to copy or unpack it.  A block
+            ; of the program with "%option overlay_safe" is called the same way.
             if cur_block != 0 and cur_block.overlay_data and in_library(callee_name)
                 return callee_name
         }
@@ -2613,11 +2614,12 @@ gen6502 {
         return name
     }
 
-    ; is this the name of a subroutine in a block of the library?
+    ; is this the name of a subroutine in a block of the library, or in one of the
+    ; program's that says it can be called like the library (%option overlay_safe)?
     sub in_library(^^ubyte name) -> bool {
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
-            if bl.library {
+            if bl.library or bl.overlay_safe {
                 ^^ir.Sub s = bl.subs
                 while s != 0 {
                     if s.name == name or strings.compare(s.name, name) == 0

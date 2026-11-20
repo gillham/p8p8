@@ -23,7 +23,7 @@ LISTED 42 123 REPORT 7 5
 -- data, 65c02
 data.non
 data.prg
-DATA IN THE OVERLAY A LITERAL TOO 15 2000 IN MAIN MEMORY
+DATA IN THE OVERLAY A LITERAL TOO 15 2000 14 IN MAIN MEMORY
 -- overlays, 65816
 overlays.non
 overlays.prg
@@ -49,7 +49,7 @@ LISTED 42 123 REPORT 7 5
 -- data, 65816
 data.non
 data.prg
-DATA IN THE OVERLAY A LITERAL TOO 15 2000 IN MAIN MEMORY
+DATA IN THE OVERLAY A LITERAL TOO 15 2000 14 IN MAIN MEMORY
 -- overlays, c64 with an REU
 overlays.non
 overlays.prg
@@ -72,7 +72,7 @@ LISTED 42 123 REPORT 7 5
 data.non
 data.prg
 DATA IN THE OVERLAY A LITERAL TOO 15 200
-0 IN MAIN MEMORY
+0 14 IN MAIN MEMORY
 -- overlays, c128 with an REU
 overlays.non
 overlays.prg
@@ -95,7 +95,7 @@ LISTED 42 123 REPORT 7 5
 data.non
 data.prg
 DATA IN THE OVERLAY A LITERAL TOO 15 200
-0 IN MAIN MEMORY
+0 14 IN MAIN MEMORY
 -- overlays, mega65, 45gs02
 overlays.non
 overlays.prg
@@ -117,7 +117,7 @@ LISTED 42 123 REPORT 7 5
 -- data, mega65, 45gs02
 data.non
 data.prg
-DATA IN THE OVERLAY A LITERAL TOO 15 2000 IN MAIN MEMORY
+DATA IN THE OVERLAY A LITERAL TOO 15 2000 14 IN MAIN MEMORY
 -- overlays, mega65, 6502
 overlays.non
 overlays.prg
@@ -139,7 +139,7 @@ LISTED 42 123 REPORT 7 5
 -- data, mega65, 6502
 data.non
 data.prg
-DATA IN THE OVERLAY A LITERAL TOO 15 2000 IN MAIN MEMORY
+DATA IN THE OVERLAY A LITERAL TOO 15 2000 14 IN MAIN MEMORY
 -- cartridge, gametank: the banks of the cartridge
 cartridge.gtr
 2097152 bytes

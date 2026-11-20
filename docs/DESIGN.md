@@ -616,7 +616,8 @@ that only its code names (`overlay_data_homes` gives each such variable its
 code).
 
 ROM routines called by their address are called as they are.  So are
-routines of the library when the calling block has `%option overlay_data`
+routines of the library, and of a block of the program with `%option
+overlay_safe`, when the calling block has `%option overlay_data`
 (`ir.Block.overlay_data`): its overlay stays in the window, because the block
 has data beside its code and gives the library the address.  That is not
 the default: p8vi's code in an overlay passes an address in a text page on

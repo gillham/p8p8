@@ -227,7 +227,8 @@ directive.
 `%option overlay_data` in a block of an overlay puts the block's strings and
 arrays with values into the overlay too, and has routines of the library
 called with the overlay left in the window, so that they can be given the
-address of what is there.
+address of what is there.  `%option overlay_safe` in a block of the program
+has it called the same way.
 
 [OVERLAYS.md](OVERLAYS.md) is the guide: the machines, what belongs in an
 overlay and what does not, what a call costs.
