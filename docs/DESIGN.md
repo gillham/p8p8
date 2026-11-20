@@ -750,6 +750,14 @@ instructions leave the cursor at the top of the screen.  `make trs80dos`
 types DIR after a program with floats and one without, and looks for the
 directory on the screen that trs80gp saves.
 
+One target serves the Model I and the Model III: they share the ROM calls
+and the DOS's "ready" entry.  TRSDOS 1.3 on the Model III starts a program
+with its stack in the system's memory, which zcc's first instructions would
+overwrite, so the target's `zcc_init` lines move the stack to the
+program's own before anything else.  `make trs80cmp3` is the comparison on
+a Model III, with TRSDOS 1.3 and with LDOS: 65 the same, none different,
+each.
+
 `make trs80cmp` is `make z80cmp` for the TRS-80: the programs are built
 with `tests/z80/trs80gp.properties`, a variant of the target whose console
 also writes to the printer and whose end tells the emulator to stop, and

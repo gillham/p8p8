@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	z80cmp z80ref trs80cmp trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	z80cmp z80ref trs80cmp trs80cmp3 trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -491,6 +491,11 @@ z80cmp:	$(P8P8)
 # names it), which opens a window for each program.
 trs80cmp:	$(P8P8)
 	@Z80CMP_MACHINE=trs80 tests/z80cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
+
+# make trs80cmp3: the same on the Model III, with TRSDOS 1.3 and then with LDOS
+trs80cmp3:	$(P8P8)
+	@TRS80_MODEL="-m3" Z80CMP_MACHINE=trs80 tests/z80cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
+	@TRS80_MODEL="-m3 -ld" Z80CMP_MACHINE=trs80 tests/z80cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
 
 # make trs80dos: the DOS must still work after a program has ended (with floats and without)
 trs80dos:	$(P8P8)

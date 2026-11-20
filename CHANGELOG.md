@@ -6,7 +6,8 @@
   DOS.  The program is a command file (`.cmd`), which p8c writes itself;
   the screen, the console and the keys are the ROM's.  All the test
   programs print on a Model I in trs80gp what they print on the host
-  (`make trs80cmp`: 65 the same, none different).  What is the machine's is
+  (`make trs80cmp`: 65 the same, none different), and on a Model III with
+  TRSDOS 1.3 and with LDOS (`make trs80cmp3`).  What is the machine's is
   in its target file: the console and key routines moved there from the
   code generator, for CP/M as well.
 

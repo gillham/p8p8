@@ -17,7 +17,7 @@ lib=${P8P8_LIB:-lib}
 here=$(cd "$(dirname "$0")" && pwd)
 machine=${Z80CMP_MACHINE:-cpm}
 where="CP/M in tnylpo"
-[ "$machine" = trs80 ] && where="TRS-80 Model I in trs80gp"
+[ "$machine" = trs80 ] && where="TRS-80 in trs80gp ${TRS80_MODEL:--m1}"
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_z80cmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/host" "$work/z80"
