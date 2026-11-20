@@ -2,9 +2,11 @@
 %zeropage basicsafe
 
 ; Overlays beside data in banks of the program's own (make overlaycheck, the X16 only):
-; a call into an overlay leaves the bank that was chosen as it was, and code in an
-; overlay goes on after it called a subroutine of the main program that left another
-; bank in the window (the way a program reads its banked data).
+; the bank the main program chooses is its own.  A call into an overlay leaves it as it
+; was; code in an overlay goes on after it called a subroutine of the main program that
+; chose another bank (the way a program reads its banked data); and the bank such a
+; subroutine chose is still chosen when the main program runs next, as if the overlay's
+; code were part of it (the last number: bank 5, which data_byte_asm chose).
 main {
     sub start() {
         ; a byte in bank 5 and another in bank 6, at the same address

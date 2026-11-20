@@ -83,7 +83,9 @@ Numbers are decimal, `$hex`, `0xhex` or `%binary`.  A list of addresses is
 | `overlay_thunk` | the code a call into an overlay goes through, in main memory: `%t` is the subroutine, `%n` the overlay's number; it has to keep A, X, Y and the flags both ways |
 | `overlay_thunk_fast` | (optional) the thunk for an ordinary subroutine, which only has to keep A, X and Y |
 | `overlay_max` | (optional) the highest overlay number the machine has room for |
-| `overlay_return`, `overlay_return_fast` | (optional) for a machine where what an overlay calls can take the overlay out of its window: the code that brings overlay `%n` back, put into a stub in main memory behind the call (the fast one after an ordinary subroutine, where only A has to be kept) |
+| `overlay_thunk_cross`, `overlay_thunk_cross_fast` | (optional) the thunks for a call from one overlay into another, where that differs from a call out of the main program |
+| `overlay_return`, `overlay_return_fast` | (optional) for a machine where the window is also the program's for its data: the whole stub, in main memory, that a call out of overlay `%n` to `%t` goes through |
+| `overlay_back`, `overlay_back_full` | (optional) routines written once for each overlay (`p8_overlay_back_N`, `p8_overlay_backp_N`), for the stubs to end in |
 | `overlay_select` | the address where one byte chooses the overlay that the next record of the program's file is loaded into |
 | `overlay_loader` | (optional) an assembly file beside the target file: the loader of a program with overlays, assembled as `name.prg` with `p8_entry` and the macro `p8_file` defined; `name.non` then has the main program in it too.  Without it `name.prg` is the main program and `name.non` has the overlays only |
 | `overlay_store` | (optional) where the overlays are kept, for a support file that wants to know (the MEGA65: an address beyond 64 KB) |

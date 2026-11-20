@@ -25,9 +25,10 @@
   calls), on the C64 150 jiffies from 398 (76 plain).  An overlay that is
   brought in is copied by its size, not the window's (4,000 calls into two
   overlays in turn on a C64: 72 jiffies, from 1,162).
-- X16: code in an overlay may call a subroutine of the main program that
-  leaves another RAM bank chosen (a program's own data); the overlay's bank
-  is chosen again before the call returns into it.
+- X16: the RAM bank a program's main part chooses stays its own.  Code in
+  an overlay may call a subroutine there that chooses a bank for the
+  program's data and leaves it chosen; the overlay comes back for its own
+  code, and the main program finds its bank as it left it.
 - `%overlay n` in a subroutine puts that one subroutine into the overlay:
   the way to move code out of `main`.
 - [docs/OVERLAYS.md](docs/OVERLAYS.md): a guide to overlays.

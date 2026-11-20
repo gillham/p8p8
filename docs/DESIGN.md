@@ -588,13 +588,28 @@ subroutine takes and gives.  The X16's are written out for each subroutine
 calls take 15 jiffies where JSRFAR took 37 and a plain call takes 8.
 
 A call out of an overlay is a plain `jsr` unless the target has
-`overlay_return` (the X16): there the subroutine that is called may leave
-another bank in the window, a program's own data, and the overlay's code
-would not be there to return to.  So the call goes to a stub in main memory,
-one for each subroutine and overlay that calls it (`overlay_out`), which
-calls, chooses the overlay's bank again and returns; a call through a
-pointer has such a stub too.  ROM routines called by their address are
-called as they are.
+`overlay_return` (the X16).  There the window's bank is also what a program
+keeps its data in, and its main part may choose a bank and count on it
+staying chosen (a page store that maps a page and remembers that it did).
+So the bank register is the main program's own, and the overlay's bank is in
+the window only while the overlay's code runs:
+
+- a call from the main program into an overlay (`overlay_thunk`) keeps the
+  bank in a byte of main memory, chooses the overlay's, and afterwards
+  chooses what that byte holds;
+- a call out of an overlay goes to a stub in main memory, one for each
+  subroutine and overlay that calls it (`overlay_out`): it chooses the
+  main program's bank, calls, keeps what is chosen then, and chooses the
+  overlay's bank again (two shared routines, the second one for each
+  overlay: `overlay_back`); a call through a pointer has such a stub too;
+- a call from one overlay into another (`overlay_thunk_cross`) keeps the
+  caller's bank on the stack.
+
+ROM routines called by their address are called as they are.  (The first
+version put the overlay's bank back after the call, in the overlay: code
+that is not there when the call returns.  The second did it in a stub but
+left the main program with the overlay's bank, and the editor p8vi read
+its text out of its own code.)
 
 In the assembly the overlay blocks come last, each overlay as a segment
 that is placed at the window's address when `prog8_overlay` is its number

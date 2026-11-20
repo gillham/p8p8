@@ -163,10 +163,17 @@ there for every overlay, and are not counted against one.
   subroutines that read and write a program's own banks (the text of an
   editor, say) belong in the main program; overlays call them, and get what
   they need in variables or in a buffer in main memory, not as an address
-  in the window.  Such a subroutine may leave its bank chosen when it
-  returns: a call out of an overlay comes back through a few instructions
-  in main memory that choose the overlay's bank again.  And the bank a
-  program has chosen is the same after a call into an overlay.
+  in the window.  The bank register stays the main program's own: the
+  overlay's bank is in the window only while the overlay's code runs, and
+  whatever the main program chose is chosen again whenever its code runs,
+  also when an overlay calls it, and stays chosen from one such call to
+  the next.  So a subroutine that maps a page of data and leaves it mapped
+  works as it does without overlays.
+- **An address in the window, on the X16.**  What the main program hands
+  out as an address in $a000-$bfff (a pointer into a mapped page) is of no
+  use to code in an overlay: there it points into the overlay itself.  A
+  subroutine that reads a file straight into such a page, or walks through
+  one, stays in the main program.
 - **Inner loops across two overlays.**  A call into another overlay costs
   more than a plain call (see below).  Put what calls each other often into
   the same overlay, or into the main program.
@@ -179,9 +186,9 @@ there for every overlay, and are not counted against one.
 
 Within an overlay: nothing more than any call.  From an overlay into the
 main program or the library: the same on the C64, the C128 and the MEGA65;
-on the X16 a few instructions more, in a stub in main memory of about a
-dozen bytes for each subroutine that an overlay calls (routines of the ROM
-are called as they are).
+on the X16 the bank changes hands on the way out and back, through a stub
+in main memory of nine bytes for each subroutine that an overlay calls
+(routines of the ROM are called as they are).
 
 Into an overlay from outside it:
 

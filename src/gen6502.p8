@@ -1964,8 +1964,20 @@ gen6502 {
 
     ; "p8ovt_" and the subroutine's name with its dots as underscores
     sub thunk_name(^^ubyte sym) -> ^^ubyte {
+        return thunk_named("p8ovt_", sym)
+    }
+
+    ; (the thunk for a call from another overlay, on a target that has one of its own for
+    ; that: "overlay_thunk_cross")
+    sub cross_thunk_name(^^ubyte sym) -> ^^ubyte {
+        if target.text("overlay_thunk_cross") == 0
+            return thunk_name(sym)
+        return thunk_named("p8ovx_", sym)
+    }
+
+    sub thunk_named(str prefix, ^^ubyte sym) -> ^^ubyte {
         buf.clear(nb)
-        buf.add_str(nb, "p8ovt_")
+        buf.add_str(nb, prefix)
         long k = 0
         while sym[k] != 0 {
             if sym[k] == '.'
@@ -1986,6 +1998,8 @@ gen6502 {
         ubyte ov = overlay_of(sym)
         if ov == 0 or ov == cur_overlay
             return sym
+        if cur_overlay != 0
+            return cross_thunk_name(sym)
         return thunk_name(sym)
     }
 
@@ -2080,7 +2094,9 @@ gen6502 {
         return name
     }
 
-    ; the stubs, in main memory
+    ; the stubs, in main memory: each is the target's text (%t: what is called, %n: the
+    ; overlay to come back into), and for each overlay that has any the routines they
+    ; end in (the target's "overlay_back" and "overlay_back_full")
     sub overlay_out_stubs() {
         if out_count == 0
             return
@@ -2092,22 +2108,71 @@ gen6502 {
             put(out_names[n])
             raw("  .proc")
             if callee_name == 0
-                raw("    jsr  _through")
+                put_template(template, "_through", out_overlays[n])
             else {
                 ^^ir.Sub callee = find_sub(callee_name)
                 if callee != 0 and not callee.is_asm and target.text("overlay_return_fast") != 0
                     template = target.text("overlay_return_fast")
-                put("    jsr  ")
-                put(callee_name)
-                nl()
+                put_template(template, callee_name, out_overlays[n])
             }
-            put_template(template, callee_name, out_overlays[n])
-            raw("    rts")
             if callee_name == 0
                 raw("_through  jmp  (P8ZP_SCRATCH_W1)")
             raw("    .pend")
         }
+        ubyte ov
+        for ov in 1 to overlay_max {
+            if overlay_used(ov) {
+                if target.text("overlay_back") != 0 {
+                    put("p8_overlay_back_")
+                    putn(ov)
+                    raw("  .proc")
+                    put_template(target.text("overlay_back"), 0, ov)
+                    raw("    .pend")
+                }
+                if target.text("overlay_back_full") != 0 {
+                    put("p8_overlay_backp_")
+                    putn(ov)
+                    raw("  .proc")
+                    put_template(target.text("overlay_back_full"), 0, ov)
+                    raw("    .pend")
+                }
+            }
+        }
         raw("")
+    }
+
+    ; the thunks of one kind: for calls from the main program, or (cross) from another
+    ; overlay where the target has other code for that
+    sub thunks_of_kind(bool cross) {
+        ^^ubyte full = target.text("overlay_thunk")
+        ^^ubyte fast = target.text("overlay_thunk_fast")
+        if cross {
+            full = target.text("overlay_thunk_cross")
+            fast = target.text("overlay_thunk_cross_fast")
+        }
+        if fast == 0
+            fast = full
+        ^^ir.Block bl = prog.blocks
+        while bl != 0 {
+            ^^ir.Sub s = bl.subs
+            while s != 0 {
+                if s.overlay != 0 and parent_of(bl, s) == 0 and not (s.is_asm and s.is_inline) {
+                    ; (a subroutine in assembly may take and give anything, flags too)
+                    ^^ubyte template = fast
+                    if s.is_asm
+                        template = full
+                    if cross
+                        put(cross_thunk_name(s.name))
+                    else
+                        put(thunk_name(s.name))
+                    raw("  .proc")
+                    put_template(template, s.name, s.overlay)
+                    raw("    .pend")
+                }
+                s = s.next
+            }
+            bl = bl.next
+        }
     }
 
     ; a thunk for every subroutine of the overlay blocks (the assembler leaves out the
@@ -2115,31 +2180,10 @@ gen6502 {
     sub overlay_thunks() {
         if overlay_max == 0
             return
-        ^^ubyte full = target.text("overlay_thunk")
-        ^^ubyte fast = target.text("overlay_thunk_fast")
-        if fast == 0
-            fast = full
         raw("; ---- the ways into the overlays ----")
-        ^^ir.Block bl = prog.blocks
-        while bl != 0 {
-            if true {
-                ^^ir.Sub s = bl.subs
-                while s != 0 {
-                    if s.overlay != 0 and parent_of(bl, s) == 0 and not (s.is_asm and s.is_inline) {
-                        ; (a subroutine in assembly may take and give anything, flags too)
-                        ^^ubyte template = fast
-                        if s.is_asm
-                            template = full
-                        put(thunk_name(s.name))
-                        raw("  .proc")
-                        put_template(template, s.name, s.overlay)
-                        raw("    .pend")
-                    }
-                    s = s.next
-                }
-            }
-            bl = bl.next
-        }
+        thunks_of_kind(false)
+        if target.text("overlay_thunk_cross") != 0
+            thunks_of_kind(true)
         ^^ubyte support = target.text("overlay_support")
         if support != 0 {
             ; the target's code that brings an overlay in, and what it needs to know
