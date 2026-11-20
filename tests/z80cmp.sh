@@ -35,7 +35,11 @@ for f in "$@"; do
     (cd "$work/z80" && cp "$name.com" t.com && timeout 20 tnylpo t.com < /dev/null > "$name.out" 2>&1)
     # (CP/M ends its lines with CR LF)
     tr -d '\r' < "$work/z80/$name.out" > "$work/z80/$name.txt"
-    if cmp -s "$work/host/$name.out" "$work/z80/$name.txt"; then
+    if [ "$name" = ownlocals ]; then
+        # (a subroutine that runs again inside its own call: its variables are on the stack
+        # on the host and in fixed places here, as on the 6502, so it prints other numbers)
+        skipped=$((skipped + 1))
+    elif cmp -s "$work/host/$name.out" "$work/z80/$name.txt"; then
         same=$((same + 1))
         echo "ok: $f"
     else

@@ -40,6 +40,11 @@ genz80 {
     ^^ir.Instr previous = 0         ; the instruction before the one being written, in its chunk
     bool need_mul = false
     bool need_div = false
+    bool need_divs = false          ; the signed division of words
+    bool need_mul32 = false
+    bool need_div32 = false
+    bool need_divs32 = false
+    bool need_long = false          ; the cells of the long routines
     bool need_print = false
     bool need_jphl = false
     bool need_vregs = false
@@ -171,14 +176,21 @@ genz80 {
                 putn(i.offset + extra)
             }
         }
-        else if (i.value as long) + i.offset >= $ff0000 {
-            ; (one of the library's virtual registers, by its made-up address)
-            put("p8_vregs+")
-            putn((i.value as long) + i.offset - $ff0000 + extra)
-            need_vregs = true
+        else {
+            ; (a fixed address: in the value, or in the offset alone when the value is
+            ; the instruction's immediate)
+            long address = (i.value as long) + i.offset
+            if i.op == ir.OP_STOREIM or i.op == ir.OP_ADDIM or i.op == ir.OP_SUBIM
+                address = i.offset
+            if address >= $ff0000 {
+                ; (one of the library's virtual registers, by its made-up address)
+                put("p8_vregs+")
+                putn(address - $ff0000 + extra)
+                need_vregs = true
+            }
+            else
+                putn(address + extra)
         }
-        else
-            putn((i.value as long) + i.offset + extra)
     }
 
     ; "ld a,(reg)" and its relatives
@@ -331,6 +343,11 @@ genz80 {
         labels = 0
         need_mul = false
         need_div = false
+        need_divs = false
+        need_mul32 = false
+        need_div32 = false
+        need_divs32 = false
+        need_long = false
         need_print = false
         need_jphl = false
         need_vregs = false
@@ -494,19 +511,26 @@ genz80 {
         error("this instruction is not written for the Z80 yet", nb.data)
     }
 
-    ; the value of register r into A (a byte) or HL (a word), by the type
+    ; the value of register r into A (a byte), HL (a word) or DE and HL (a long, HL the
+    ; low half), by the type
     sub fetch(uword r, ubyte size) {
         if size == 1
             a_from_reg(r, 0)
-        else
+        else {
             pair_from_reg("hl", r, 0)
+            if size == 4
+                pair_from_reg("de", r, 2)
+        }
     }
 
     sub keep(uword r, ubyte size) {
         if size == 1
             reg_from_a(r, 0)
-        else
+        else {
             reg_from_pair(r, 0, "hl")
+            if size == 4
+                reg_from_pair(r, 2, "de")
+        }
     }
 
     ; A op= the byte in register r2 / the immediate, HL op= DE for words: the second
@@ -531,16 +555,124 @@ genz80 {
             pair_imm("de", value)
     }
 
-    ; first (A or HL) op= second (B or DE); the result is in A or HL
-    sub combine(ubyte op, ubyte size) {
+    ; What an arithmetic instruction does, whatever its operands are: 0 add, 1 subtract,
+    ; 2 and, 3 or, 4 xor, 5 multiply, 6 divide, 7 remainder, 8 signed divide, 9 signed
+    ; remainder.
+    sub kind_of(ubyte op) -> ubyte {
         when op {
-            ir.OP_ADD, ir.OP_ADDR, ir.OP_ADDM, ir.OP_ADDIM -> {
+            ir.OP_ADD, ir.OP_ADDR, ir.OP_ADDM, ir.OP_ADDIM -> return 0
+            ir.OP_SUB, ir.OP_SUBR, ir.OP_SUBM, ir.OP_SUBIM -> return 1
+            ir.OP_AND, ir.OP_ANDR, ir.OP_ANDM -> return 2
+            ir.OP_OR, ir.OP_ORR, ir.OP_ORM -> return 3
+            ir.OP_XOR, ir.OP_XORR, ir.OP_XORM -> return 4
+            ir.OP_MUL, ir.OP_MULR, ir.OP_MULM, ir.OP_MULS, ir.OP_MULSR, ir.OP_MULSM -> return 5
+            ir.OP_DIV, ir.OP_DIVR, ir.OP_DIVM, ir.OP_DIVMOD, ir.OP_DIVMODR -> return 6
+            ir.OP_MOD, ir.OP_MODR -> return 7
+            ir.OP_DIVS, ir.OP_DIVSR, ir.OP_DIVSM, ir.OP_SDIVMOD, ir.OP_SDIVMODR -> return 8
+            ir.OP_MODS, ir.OP_MODSR -> return 9
+        }
+        return 255
+    }
+
+    ; The operands of an arithmetic instruction, by its group:
+    ;   1  register r1 op= the immediate       2  register r1 op= register r2
+    ;   3  memory op= register r1              4  memory op= the immediate
+    ; "first" is what is changed, "second" the other one; k is the byte of it.
+    sub first_a(^^ir.Instr i, ubyte group, ubyte k) {
+        if group <= 2
+            a_from_reg(i.r1, k)
+        else
+            a_from_mem(i, k)
+    }
+
+    sub a_first(^^ir.Instr i, ubyte group, ubyte k) {
+        if group <= 2
+            reg_from_a(i.r1, k)
+        else
+            mem_from_a(i, k)
+    }
+
+    sub first_pair(str pair, ^^ir.Instr i, ubyte group, ubyte k) {
+        if group <= 2
+            pair_from_reg(pair, i.r1, k)
+        else
+            pair_from_mem(pair, i, k)
+    }
+
+    sub pair_first(^^ir.Instr i, ubyte group, ubyte k, str pair) {
+        if group <= 2
+            reg_from_pair(i.r1, k, pair)
+        else
+            mem_from_pair(i, k, pair)
+    }
+
+    sub second_b(^^ir.Instr i, ubyte group, ubyte k) {
+        when group {
+            1, 4 -> {
+                start("ld")
+                put("b,")
+                putn(((i.value >> (k * 8)) as long) & 255)
+                nl()
+            }
+            2 -> {
+                a_from_reg(i.r2, k)
+                line("ld  b,a")
+            }
+            else -> {
+                a_from_reg(i.r1, k)
+                line("ld  b,a")
+            }
+        }
+    }
+
+    sub second_pair(str pair, ^^ir.Instr i, ubyte group, ubyte k) {
+        when group {
+            1, 4 -> pair_imm(pair, (i.value >> (k * 8)) as long)
+            2 -> pair_from_reg(pair, i.r2, k)
+            else -> pair_from_reg(pair, i.r1, k)
+        }
+    }
+
+    ; HL = first / second, DE = the remainder.  Words are in HL and DE; bytes are in A
+    ; and B and are made words here.
+    sub divide(ubyte kind, ubyte size) {
+        if size == 1 {
+            line("ld  l,a")
+            if kind >= 8 {
+                line("rlca")
+                line("sbc  a,a")
+                line("ld  h,a")
+                line("ld  a,b")
+                line("ld  e,a")
+                line("rlca")
+                line("sbc  a,a")
+                line("ld  d,a")
+            }
+            else {
+                line("ld  h,0")
+                line("ld  e,b")
+                line("ld  d,0")
+            }
+        }
+        if kind >= 8 {
+            line("call  p8rt_divs16")
+            need_divs = true
+        }
+        else
+            line("call  p8rt_div16")
+        need_div = true
+    }
+
+    ; first (A or HL) op= second (B or DE); the result is in A or HL
+    sub combine(ubyte kind, ubyte size) {
+        when kind {
+            0 -> {
                 if size == 1
                     line("add  a,b")
                 else
                     line("add  hl,de")
             }
-            ir.OP_SUB, ir.OP_SUBR, ir.OP_SUBM, ir.OP_SUBIM -> {
+            1 -> {
                 if size == 1
                     line("sub  b")
                 else {
@@ -548,25 +680,25 @@ genz80 {
                     line("sbc  hl,de")
                 }
             }
-            ir.OP_AND, ir.OP_ANDR, ir.OP_ANDM -> {
+            2 -> {
                 if size == 1
                     line("and  b")
                 else
                     logic16("and")
             }
-            ir.OP_OR, ir.OP_ORR, ir.OP_ORM -> {
+            3 -> {
                 if size == 1
                     line("or  b")
                 else
                     logic16("or")
             }
-            ir.OP_XOR, ir.OP_XORR, ir.OP_XORM -> {
+            4 -> {
                 if size == 1
                     line("xor  b")
                 else
                     logic16("xor")
             }
-            ir.OP_MUL, ir.OP_MULR, ir.OP_MULM, ir.OP_MULS, ir.OP_MULSR, ir.OP_MULSM -> {
+            5 -> {
                 if size == 1 {
                     ; (a byte product is the low byte of the word product)
                     line("ld  l,a")
@@ -580,21 +712,239 @@ genz80 {
                     line("call  p8rt_mul16")
                 need_mul = true
             }
-            ir.OP_DIV, ir.OP_DIVR, ir.OP_DIVM, ir.OP_MOD, ir.OP_MODR -> {
-                if size == 1 {
-                    line("ld  l,a")
-                    line("ld  h,0")
-                    line("ld  e,b")
-                    line("ld  d,0")
-                }
-                line("call  p8rt_div16")
-                need_div = true
-                if op == ir.OP_MOD or op == ir.OP_MODR
+            else -> {
+                divide(kind, size)
+                if kind == 7 or kind == 9
                     line("ex  de,hl")           ; (the remainder)
                 if size == 1
                     line("ld  a,l")
             }
         }
+    }
+
+    ; one byte of a long addition, subtraction or logic operation: A op= B, with the carry
+    ; of the byte before
+    sub bytewise(ubyte kind, ubyte k) {
+        when kind {
+            0 -> {
+                if k == 0
+                    line("add  a,b")
+                else
+                    line("adc  a,b")
+            }
+            1 -> {
+                if k == 0
+                    line("sub  b")
+                else
+                    line("sbc  a,b")
+            }
+            2 -> line("and  b")
+            3 -> line("or  b")
+            else -> line("xor  b")
+        }
+    }
+
+    ; the operands of a long multiplication or division into the cells of the routines
+    sub long_cells(^^ir.Instr i, ubyte group) {
+        first_pair("hl", i, group, 0)
+        line("ld  (p8_la),hl")
+        first_pair("hl", i, group, 2)
+        line("ld  (p8_la+2),hl")
+        second_pair("hl", i, group, 0)
+        line("ld  (p8_lb),hl")
+        second_pair("hl", i, group, 2)
+        line("ld  (p8_lb+2),hl")
+        need_long = true
+    }
+
+    ; the routine: the product and a remainder come in p8_lc, a quotient in p8_la
+    sub long_call(ubyte kind) {
+        if kind == 5 {
+            line("call  p8rt_mul32")
+            need_mul32 = true
+        }
+        else if kind >= 8 {
+            line("call  p8rt_divs32")
+            need_divs32 = true
+            need_div32 = true
+        }
+        else {
+            line("call  p8rt_div32")
+            need_div32 = true
+        }
+    }
+
+    ; an arithmetic instruction of any size
+    sub arith(^^ir.Instr i, ubyte group) {
+        ubyte size = size_of(i.type)
+        ubyte kind = kind_of(i.op)
+        ubyte k
+        if size == 1 {
+            second_b(i, group, 0)
+            first_a(i, group, 0)
+            combine(kind, 1)
+            a_first(i, group, 0)
+        }
+        else if size == 2 {
+            second_pair("de", i, group, 0)
+            first_pair("hl", i, group, 0)
+            combine(kind, 2)
+            pair_first(i, group, 0, "hl")
+        }
+        else if size == 4 {
+            if kind <= 4 {
+                for k in 0 to 3 {
+                    second_b(i, group, k)
+                    first_a(i, group, k)
+                    bytewise(kind, k)
+                    a_first(i, group, k)
+                }
+            }
+            else {
+                long_cells(i, group)
+                long_call(kind)
+                if kind == 6 or kind == 8 {
+                    line("ld  hl,(p8_la)")
+                    pair_first(i, group, 0, "hl")
+                    line("ld  hl,(p8_la+2)")
+                    pair_first(i, group, 2, "hl")
+                }
+                else {
+                    line("ld  hl,(p8_lc)")
+                    pair_first(i, group, 0, "hl")
+                    line("ld  hl,(p8_lc+2)")
+                    pair_first(i, group, 2, "hl")
+                }
+            }
+        }
+        else
+            unsupported(i)
+    }
+
+    ; r1 = r1 / the second operand, r2 = the remainder
+    sub quotient_and_rest(^^ir.Instr i) {
+        ubyte size = size_of(i.type)
+        ubyte kind = kind_of(i.op)
+        ubyte group = 2
+        if i.op == ir.OP_DIVMOD or i.op == ir.OP_SDIVMOD
+            group = 1
+        if size == 1 {
+            second_b(i, group, 0)
+            a_from_reg(i.r1, 0)
+            divide(kind, 1)
+            line("ld  a,l")
+            reg_from_a(i.r1, 0)
+            line("ld  a,e")
+            reg_from_a(i.r2, 0)
+        }
+        else if size == 2 {
+            second_pair("de", i, group, 0)
+            pair_from_reg("hl", i.r1, 0)
+            divide(kind, 2)
+            reg_from_pair(i.r1, 0, "hl")
+            reg_from_pair(i.r2, 0, "de")
+        }
+        else if size == 4 {
+            long_cells(i, group)
+            long_call(kind)
+            line("ld  hl,(p8_la)")
+            reg_from_pair(i.r1, 0, "hl")
+            line("ld  hl,(p8_la+2)")
+            reg_from_pair(i.r1, 2, "hl")
+            line("ld  hl,(p8_lc)")
+            reg_from_pair(i.r2, 0, "hl")
+            line("ld  hl,(p8_lc+2)")
+            reg_from_pair(i.r2, 2, "hl")
+        }
+        else
+            unsupported(i)
+    }
+
+    ; first = -first, byte by byte
+    sub negate(^^ir.Instr i, ubyte group, ubyte size) {
+        ubyte k
+        for k in 0 to size - 1 {
+            first_a(i, group, k)
+            if k == 0
+                line("neg")
+            else {
+                line("ld  b,a")
+                line("ld  a,0")
+                line("sbc  a,b")
+            }
+            a_first(i, group, k)
+        }
+    }
+
+    ; first += 1 or -= 1, a long
+    sub step_long(^^ir.Instr i, ubyte group, bool up) {
+        ubyte k
+        for k in 0 to 3 {
+            first_a(i, group, k)
+            if up {
+                if k == 0
+                    line("add  a,1")
+                else
+                    line("adc  a,0")
+            }
+            else {
+                if k == 0
+                    line("sub  1")
+                else
+                    line("sbc  a,0")
+            }
+            a_first(i, group, k)
+        }
+    }
+
+    ; A long compare: r1 against r2 or the immediate.  It leaves what the short ones
+    ; leave: carry is "less", zero is "equal".
+    sub long_compare(^^ir.Instr i, bool with_register, bool signed) {
+        ubyte k
+        ubyte group = 1
+        if with_register
+            group = 2
+        if signed {
+            ; (the top bytes with their top bit turned over, in H and C until they are needed)
+            if with_register
+                a_from_reg(i.r2, 3)
+            else
+                a_imm((i.value >> 24) as long)
+            line("xor  $80")
+            line("ld  h,a")
+            a_from_reg(i.r1, 3)
+            line("xor  $80")
+            line("ld  c,a")
+        }
+        for k in 0 to 3 {
+            if k == 3 and signed {
+                line("ld  b,h")
+                line("ld  a,c")
+            }
+            else {
+                second_b(i, group, k)
+                a_from_reg(i.r1, k)
+            }
+            if k == 0
+                line("sub  b")
+            else
+                line("sbc  a,b")
+            when k {
+                0 -> line("ld  e,a")
+                1 -> line("ld  d,a")
+                2 -> line("ld  l,a")
+                else -> line("ld  h,a")
+            }
+        }
+        ; (the carry is kept while the difference is tested for zero)
+        line("sbc  a,a")
+        line("ld  c,a")
+        line("ld  a,e")
+        line("or  d")
+        line("or  l")
+        line("or  h")
+        line("ld  a,c")
+        line("rrca")
     }
 
     sub logic16(str mnemonic) {
@@ -625,30 +975,43 @@ genz80 {
         mem_from_pair(i, 2, "hl")
     }
 
-    ; flags for the branch that follows: the value of register r as it is
-    sub test_reg(uword r, ubyte size) {
-        if size == 1 {
-            a_from_reg(r, 0)
+    ; flags for the branch that follows: the value of register r as it is (zero or not;
+    ; for the sign, its top byte)
+    sub test_reg(uword r, ubyte size, bool sign) {
+        if size == 0
+            return
+        if sign or size == 1 {
+            a_from_reg(r, size - 1)
             line("or  a")
         }
         else {
             pair_from_reg("hl", r, 0)
             line("ld  a,h")
             line("or  l")
+            if size == 4 {
+                pair_from_reg("hl", r, 2)
+                line("or  h")
+                line("or  l")
+            }
         }
     }
 
     ; Is the flag state that a status branch needs what the instruction before left?  A
-    ; compare, an addition and so on leave it; after a load or a store the value is
+    ; compare leaves it; after anything else that gave a register its value, the value is
     ; tested again here.
-    sub flags_for_branch() {
+    sub flags_for_branch(bool sign) {
         if previous == 0
             return
         when previous.op {
             ir.OP_LOAD, ir.OP_LOADM, ir.OP_LOADMZ, ir.OP_LOADR, ir.OP_LOADI, ir.OP_LOADX, ir.OP_STOREM, ir.OP_STOREI,
-            ir.OP_STOREX, ir.OP_LSIGB, ir.OP_MSIGB, ir.OP_EXT, ir.OP_EXTS, ir.OP_CONCAT -> {
+            ir.OP_STOREX, ir.OP_LSIGB, ir.OP_LSIGW, ir.OP_MSIGB, ir.OP_MSIGW, ir.OP_EXT, ir.OP_EXTS, ir.OP_EXTL, ir.OP_EXTLS,
+            ir.OP_CONCAT, ir.OP_INC, ir.OP_DEC, ir.OP_NEG, ir.OP_INV, ir.OP_SGN, ir.OP_POP,
+            ir.OP_ADD, ir.OP_SUB, ir.OP_AND, ir.OP_OR, ir.OP_XOR, ir.OP_MUL, ir.OP_MULS, ir.OP_DIV, ir.OP_DIVS, ir.OP_MOD, ir.OP_MODS,
+            ir.OP_ADDR, ir.OP_SUBR, ir.OP_ANDR, ir.OP_ORR, ir.OP_XORR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_DIVSR,
+            ir.OP_MODR, ir.OP_MODSR, ir.OP_LSL, ir.OP_LSR, ir.OP_ASR, ir.OP_LSLI, ir.OP_LSRI, ir.OP_ASRI,
+            ir.OP_LSLN, ir.OP_LSRN, ir.OP_ASRN -> {
                 if previous.r1 != 0 and previous.mode != ir.M_IM
-                    test_reg(previous.r1, size_of(ir.regtypes[previous.r1]))
+                    test_reg(previous.r1, size_of(ir.regtypes[previous.r1]), sign)
             }
         }
     }
@@ -710,11 +1073,14 @@ genz80 {
     ; a compare and a branch: carry is "less", zero is "equal"
     sub compare_branch(^^ir.Instr i, bool with_register, bool signed, ubyte relation) {
         ubyte size = size_of(type1(i))
-        if size != 1 and size != 2 {
+        if size == 4
+            long_compare(i, with_register, signed)
+        else if size == 1 or size == 2
+            compare_operands(i, size, with_register, signed)
+        else {
             unsupported(i)
             return
         }
-        compare_operands(i, size, with_register, signed)
         when relation {
             0 -> {
                 ; greater: not less and not equal
@@ -898,7 +1264,7 @@ genz80 {
             ir.OP_SYSCALL -> syscall(i)
             ir.OP_RETURN -> line("ret")
             ir.OP_RETURNR -> {
-                if size == 1 or size == 2 {
+                if size != 0 {
                     fetch(i.r1, size)
                     line("ret")
                 }
@@ -910,24 +1276,28 @@ genz80 {
                     a_imm(i.value as long)
                 else if size == 2
                     pair_imm("hl", i.value as long)
+                else if size == 4 {
+                    pair_imm("hl", i.value as long)
+                    pair_imm("de", (i.value >> 16) as long)
+                }
                 else
                     unsupported(i)
                 line("ret")
             }
             ir.OP_BSTEQ -> {
-                flags_for_branch()
+                flags_for_branch(false)
                 jump_if("z", i.sym)
             }
             ir.OP_BSTNE -> {
-                flags_for_branch()
+                flags_for_branch(false)
                 jump_if("nz", i.sym)
             }
             ir.OP_BSTNEG -> {
-                flags_for_branch()
+                flags_for_branch(true)
                 jump_if("m", i.sym)
             }
             ir.OP_BSTPOS -> {
-                flags_for_branch()
+                flags_for_branch(true)
                 jump_if("p", i.sym)
             }
             ; (the IR's carry is the 6502's: clear after a compare means "less".  A compare
@@ -947,12 +1317,16 @@ genz80 {
             ir.OP_CMP -> {
                 if size == 1 or size == 2
                     compare_operands(i, size, true, false)
+                else if size == 4
+                    long_compare(i, true, false)
                 else
                     unsupported(i)
             }
             ir.OP_CMPI -> {
                 if size == 1 or size == 2
                     compare_operands(i, size, false, false)
+                else if size == 4
+                    long_compare(i, false, false)
                 else
                     unsupported(i)
             }
@@ -987,6 +1361,8 @@ genz80 {
                     line("ld  a,h")
                     line("or  l")
                 }
+                else if size == 4
+                    step_long(i, 1, i.op == ir.OP_INC)
                 else
                     unsupported(i)
             }
@@ -1011,131 +1387,102 @@ genz80 {
                     line("ld  a,h")
                     line("or  l")
                 }
-                else
-                    unsupported(i)
-            }
-            ir.OP_ADD, ir.OP_SUB, ir.OP_AND, ir.OP_OR, ir.OP_XOR, ir.OP_MUL, ir.OP_MULS, ir.OP_DIV, ir.OP_MOD -> {
-                ; register op= immediate
-                if size == 1 or size == 2 {
-                    second_imm(i.value as long, size)
-                    fetch(i.r1, size)
-                    combine(i.op, size)
-                    keep(i.r1, size)
-                }
-                else
-                    unsupported(i)
-            }
-            ir.OP_ADDR, ir.OP_SUBR, ir.OP_ANDR, ir.OP_ORR, ir.OP_XORR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_MODR -> {
-                ; register op= register
-                if size == 1 or size == 2 {
-                    second_reg(i.r2, size)
-                    fetch(i.r1, size)
-                    combine(i.op, size)
-                    keep(i.r1, size)
-                }
-                else if size == 4 and (i.op == ir.OP_ADDR or i.op == ir.OP_SUBR) {
-                    for k in 0 to 3 {
-                        a_from_reg(i.r2, k)
-                        line("ld  b,a")
-                        a_from_reg(i.r1, k)
-                        if i.op == ir.OP_ADDR {
-                            if k == 0
-                                line("add  a,b")
-                            else
-                                line("adc  a,b")
-                        }
-                        else {
-                            if k == 0
-                                line("sub  b")
-                            else
-                                line("sbc  a,b")
-                        }
-                        reg_from_a(i.r1, k)
-                    }
-                }
-                else
-                    unsupported(i)
-            }
-            ir.OP_ADDM, ir.OP_SUBM, ir.OP_ANDM, ir.OP_ORM, ir.OP_XORM, ir.OP_MULM, ir.OP_MULSM, ir.OP_DIVM -> {
-                ; memory op= register
-                if size == 1 {
-                    second_reg(i.r1, 1)
-                    a_from_mem(i, 0)
-                    combine(i.op, 1)
-                    mem_from_a(i, 0)
-                }
-                else if size == 2 {
-                    second_reg(i.r1, 2)
+                else if size == 4 {
+                    step_long(i, 3, i.op == ir.OP_INCM)
                     pair_from_mem("hl", i, 0)
-                    combine(i.op, 2)
-                    mem_from_pair(i, 0, "hl")
+                    line("ld  a,h")
+                    line("or  l")
+                    pair_from_mem("hl", i, 2)
+                    line("or  h")
+                    line("or  l")
                 }
                 else
                     unsupported(i)
             }
-            ir.OP_ADDIM, ir.OP_SUBIM -> {
-                ; memory op= immediate
-                if size == 1 {
-                    second_imm(i.value as long, 1)
-                    a_from_mem(i, 0)
-                    combine(i.op, 1)
-                    mem_from_a(i, 0)
-                }
-                else if size == 2 {
-                    second_imm(i.value as long, 2)
-                    pair_from_mem("hl", i, 0)
-                    combine(i.op, 2)
-                    mem_from_pair(i, 0, "hl")
-                }
-                else
-                    unsupported(i)
-            }
+            ir.OP_ADD, ir.OP_SUB, ir.OP_AND, ir.OP_OR, ir.OP_XOR, ir.OP_MUL, ir.OP_MULS, ir.OP_DIV, ir.OP_DIVS,
+            ir.OP_MOD, ir.OP_MODS -> arith(i, 1)
+            ir.OP_ADDR, ir.OP_SUBR, ir.OP_ANDR, ir.OP_ORR, ir.OP_XORR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_DIVSR,
+            ir.OP_MODR, ir.OP_MODSR -> arith(i, 2)
+            ir.OP_ADDM, ir.OP_SUBM, ir.OP_ANDM, ir.OP_ORM, ir.OP_XORM, ir.OP_MULM, ir.OP_MULSM, ir.OP_DIVM,
+            ir.OP_DIVSM -> arith(i, 3)
+            ir.OP_ADDIM, ir.OP_SUBIM -> arith(i, 4)
+            ir.OP_DIVMOD, ir.OP_DIVMODR, ir.OP_SDIVMOD, ir.OP_SDIVMODR -> quotient_and_rest(i)
             ir.OP_NEG -> {
-                if size == 1 {
-                    a_from_reg(i.r1, 0)
-                    line("neg")
-                    reg_from_a(i.r1, 0)
-                }
-                else if size == 2 {
-                    pair_from_reg("de", i.r1, 0)
-                    line("ld  hl,0")
-                    line("or  a")
-                    line("sbc  hl,de")
-                    reg_from_pair(i.r1, 0, "hl")
-                }
-                else
+                if size == 0
                     unsupported(i)
+                else
+                    negate(i, 1, size)
             }
-            ir.OP_INV -> {
+            ir.OP_NEGM -> {
+                if size == 0
+                    unsupported(i)
+                else
+                    negate(i, 3, size)
+            }
+            ir.OP_INV, ir.OP_INVM -> {
+                ubyte where = 1
+                if i.op == ir.OP_INVM
+                    where = 3
                 if size == 0
                     unsupported(i)
                 else for k in 0 to size - 1 {
-                    a_from_reg(i.r1, k)
+                    first_a(i, where, k)
                     line("cpl")
-                    reg_from_a(i.r1, k)
+                    a_first(i, where, k)
                 }
             }
-            ir.OP_LSL, ir.OP_LSR, ir.OP_ASR -> shift_register(i, 1, size)
-            ir.OP_LSLI, ir.OP_LSRI, ir.OP_ASRI -> shift_register(i, (i.value & 255) as ubyte, size)
-            ir.OP_LSLN, ir.OP_LSRN, ir.OP_ASRN -> {
-                ; by the number in r2: one bit at a time
-                if size != 1 and size != 2 {
+            ir.OP_SGN -> {
+                ; r1 (a byte) = the sign of r2: -1, 0 or 1
+                if size == 0 {
+                    unsupported(i)
+                    return
+                }
+                long signed = new_label()
+                a_from_reg(i.r2, size - 1)
+                line("or  a")
+                line("ld  a,255")
+                jump_if_local("m", signed)
+                a_from_reg(i.r2, 0)
+                if size == 1
+                    line("or  a")
+                else for k in 1 to size - 1 {
+                    line("ld  b,a")
+                    a_from_reg(i.r2, k)
+                    line("or  b")
+                }
+                jump_if_local("z", signed)
+                line("ld  a,1")
+                local(signed)
+                reg_from_a(i.r1, 0)
+            }
+            ir.OP_LSL, ir.OP_LSR, ir.OP_ASR, ir.OP_ROL, ir.OP_ROR, ir.OP_ROXL, ir.OP_ROXR -> shift_register(i, 1, size, 1)
+            ir.OP_LSLM, ir.OP_LSRM, ir.OP_ASRM, ir.OP_ROLM, ir.OP_RORM, ir.OP_ROXLM, ir.OP_ROXRM -> shift_register(i, 1, size, 3)
+            ir.OP_LSLI, ir.OP_LSRI, ir.OP_ASRI -> shift_register(i, (i.value & 255) as ubyte, size, 1)
+            ir.OP_LSLN, ir.OP_LSRN, ir.OP_ASRN, ir.OP_LSLNM, ir.OP_LSRNM, ir.OP_ASRNM -> {
+                ; by the number in a register (r2; r1 when memory is shifted): one bit at a time
+                if size == 0 {
                     unsupported(i)
                     return
                 }
                 long again = new_label()
                 long done = new_label()
-                a_from_reg(i.r2, 0)
+                ubyte place = 1
+                if i.op == ir.OP_LSLNM or i.op == ir.OP_LSRNM or i.op == ir.OP_ASRNM {
+                    place = 3
+                    a_from_reg(i.r1, 0)
+                }
+                else
+                    a_from_reg(i.r2, 0)
                 line("or  a")
                 jump_if_local("z", done)
                 line("ld  c,a")
                 local(again)
-                shift_once(i.op, i.r1, size)
+                shift_once(i.op, i, place, size)
                 line("dec  c")
                 jump_if_local("nz", again)
                 local(done)
             }
-            ir.OP_EXT, ir.OP_EXTS -> {
+            ir.OP_EXT, ir.OP_EXTS, ir.OP_EXTL, ir.OP_EXTLS -> {
                 ; r1 (the next wider type) = r2 (the instruction's type)
                 ubyte wide = size_of(ir.regtypes[i.r1])
                 if size == 0 or wide <= size {
@@ -1146,7 +1493,7 @@ genz80 {
                     a_from_reg(i.r2, k)
                     reg_from_a(i.r1, k)
                 }
-                if i.op == ir.OP_EXTS {
+                if i.op == ir.OP_EXTS or i.op == ir.OP_EXTLS {
                     ; (A is the top byte still: all ones when it is negative)
                     line("rlca")
                     line("sbc  a,a")
@@ -1199,6 +1546,12 @@ genz80 {
                     pair_from_reg("hl", i.r1, 0)
                     line("push  hl")
                 }
+                else if size == 4 {
+                    pair_from_reg("hl", i.r1, 2)
+                    line("push  hl")
+                    pair_from_reg("hl", i.r1, 0)
+                    line("push  hl")
+                }
                 else
                     unsupported(i)
             }
@@ -1211,6 +1564,12 @@ genz80 {
                     line("pop  hl")
                     reg_from_pair(i.r1, 0, "hl")
                 }
+                else if size == 4 {
+                    line("pop  hl")
+                    reg_from_pair(i.r1, 0, "hl")
+                    line("pop  hl")
+                    reg_from_pair(i.r1, 2, "hl")
+                }
                 else
                     unsupported(i)
             }
@@ -1220,44 +1579,69 @@ genz80 {
         }
     }
 
-    ; one bit: the register's bytes from the end that the bit leaves
-    sub shift_once(ubyte op, uword r, ubyte size) {
+    ; One bit, of a register (place 1) or of memory (place 3): the bytes from the end that
+    ; the bit leaves.  The rox ones take the carry in; rol and ror put the bit that left
+    ; in at the other end.
+    sub shift_once(ubyte op, ^^ir.Instr i, ubyte place, ubyte size) {
         ubyte k
-        if op == ir.OP_LSL or op == ir.OP_LSLI or op == ir.OP_LSLN {
+        bool through = op == ir.OP_ROXL or op == ir.OP_ROXLM or op == ir.OP_ROXR or op == ir.OP_ROXRM
+        bool around = op == ir.OP_ROL or op == ir.OP_ROLM or op == ir.OP_ROR or op == ir.OP_RORM
+        bool left = false
+        when op {
+            ir.OP_LSL, ir.OP_LSLI, ir.OP_LSLN, ir.OP_LSLM, ir.OP_LSLNM, ir.OP_ROL, ir.OP_ROLM, ir.OP_ROXL, ir.OP_ROXLM -> left = true
+        }
+        long skip = 0
+        if left {
             for k in 0 to size - 1 {
-                a_from_reg(r, k)
-                if k == 0
+                first_a(i, place, k)
+                if k == 0 and not through
                     line("add  a,a")
                 else
                     line("rla")
-                reg_from_a(r, k)
+                a_first(i, place, k)
+            }
+            if around {
+                skip = new_label()
+                jump_if_local("nc", skip)
+                first_a(i, place, 0)
+                line("inc  a")
+                a_first(i, place, 0)
+                local(skip)
             }
         }
         else {
             k = size
             while k != 0 {
                 k--
-                a_from_reg(r, k)
-                if k == size - 1 {
-                    if op == ir.OP_ASR or op == ir.OP_ASRI or op == ir.OP_ASRN
+                first_a(i, place, k)
+                if k == size - 1 and not through {
+                    if op == ir.OP_ASR or op == ir.OP_ASRI or op == ir.OP_ASRN or op == ir.OP_ASRM or op == ir.OP_ASRNM
                         line("sra  a")
                     else
                         line("srl  a")
                 }
                 else
                     line("rra")
-                reg_from_a(r, k)
+                a_first(i, place, k)
+            }
+            if around {
+                skip = new_label()
+                jump_if_local("nc", skip)
+                first_a(i, place, size - 1)
+                line("set  7,a")
+                a_first(i, place, size - 1)
+                local(skip)
             }
         }
     }
 
-    sub shift_register(^^ir.Instr i, ubyte count, ubyte size) {
+    sub shift_register(^^ir.Instr i, ubyte count, ubyte size, ubyte place) {
         if size == 0 {
             unsupported(i)
             return
         }
         repeat count
-            shift_once(i.op, i.r1, size)
+            shift_once(i.op, i, place, size)
     }
 
     ; A call: the arguments into the subroutine's parameters, by their names; a result
@@ -1301,7 +1685,7 @@ genz80 {
         ^^ir.Arg r = i.results
         if r != 0 {
             ubyte rsize = size_of(r.type)
-            if r.next != 0 or r.reg == 0 or (rsize != 1 and rsize != 2) {
+            if r.next != 0 or r.reg == 0 or rsize == 0 {
                 error("the results of this call cannot be taken on the Z80 yet", i.sym)
                 return
             }
@@ -1386,6 +1770,7 @@ genz80 {
             line("ret")
             nl()
         }
+        runtime_long()
         if need_div {
             raw("; HL = HL / DE, DE = the remainder (unsigned; a division by 0 gives $ffff)")
             raw("p8rt_div16:")
@@ -1408,6 +1793,151 @@ genz80 {
             line("ex  de,hl")
             line("ld  h,b")
             line("ld  l,c")
+            line("ret")
+            nl()
+        }
+    }
+
+    sub runtime_long() {
+        if need_divs {
+            raw("; HL = HL / DE, DE = the remainder (signed: towards zero, the remainder with the dividend's sign)")
+            raw("p8rt_divs16:")
+            line("ld  c,h")
+            line("ld  a,h")
+            line("xor  d")
+            line("ld  b,a")
+            line("push  bc")
+            line("bit  7,h")
+            line("call  nz,p8rt_neghl")
+            line("bit  7,d")
+            line("jr  z,p8rt_divs16_go")
+            line("ex  de,hl")
+            line("call  p8rt_neghl")
+            line("ex  de,hl")
+            raw("p8rt_divs16_go:")
+            line("call  p8rt_div16")
+            line("pop  bc")
+            line("bit  7,b")
+            line("call  nz,p8rt_neghl")
+            line("bit  7,c")
+            line("ret  z")
+            line("ex  de,hl")
+            line("call  p8rt_neghl")
+            line("ex  de,hl")
+            line("ret")
+            raw("p8rt_neghl:")
+            line("xor  a")
+            line("sub  l")
+            line("ld  l,a")
+            line("sbc  a,a")
+            line("sub  h")
+            line("ld  h,a")
+            line("ret")
+            nl()
+        }
+        if need_mul32 {
+            raw("; p8_lc = p8_la * p8_lb (the low 32 bits)")
+            raw("p8rt_mul32:")
+            line("ld  hl,0")
+            line("ld  (p8_lc),hl")
+            line("ld  (p8_lc+2),hl")
+            line("ld  b,32")
+            raw("p8rt_mul32_bit:")
+            line("ld  hl,p8_la+3")
+            line("srl  (hl)")
+            repeat 3 {
+                line("dec  hl")
+                line("rr  (hl)")
+            }
+            line("jr  nc,p8rt_mul32_next")
+            line("ld  hl,(p8_lc)")
+            line("ld  de,(p8_lb)")
+            line("add  hl,de")
+            line("ld  (p8_lc),hl")
+            line("ld  hl,(p8_lc+2)")
+            line("ld  de,(p8_lb+2)")
+            line("adc  hl,de")
+            line("ld  (p8_lc+2),hl")
+            raw("p8rt_mul32_next:")
+            line("ld  hl,p8_lb")
+            line("sla  (hl)")
+            repeat 3 {
+                line("inc  hl")
+                line("rl  (hl)")
+            }
+            line("djnz  p8rt_mul32_bit")
+            line("ret")
+            nl()
+        }
+        if need_div32 {
+            raw("; p8_la = p8_la / p8_lb, p8_lc = the remainder (unsigned)")
+            raw("p8rt_div32:")
+            line("ld  hl,0")
+            line("ld  (p8_lc),hl")
+            line("ld  (p8_lc+2),hl")
+            line("ld  b,32")
+            raw("p8rt_div32_bit:")
+            line("ld  hl,p8_la")            ; (p8_lc follows p8_la: one shift of 64 bits)
+            line("sla  (hl)")
+            repeat 7 {
+                line("inc  hl")
+                line("rl  (hl)")
+            }
+            line("ld  hl,(p8_lc)")
+            line("ld  de,(p8_lb)")
+            line("or  a")
+            line("sbc  hl,de")
+            line("push  hl")
+            line("ld  hl,(p8_lc+2)")
+            line("ld  de,(p8_lb+2)")
+            line("sbc  hl,de")
+            line("pop  de")
+            line("jr  c,p8rt_div32_next")
+            line("ld  (p8_lc),de")
+            line("ld  (p8_lc+2),hl")
+            line("ld  hl,p8_la")
+            line("inc  (hl)")
+            raw("p8rt_div32_next:")
+            line("djnz  p8rt_div32_bit")
+            line("ret")
+            nl()
+        }
+        if need_divs32 {
+            raw("; the same, signed: towards zero, the remainder with the dividend's sign")
+            raw("p8rt_divs32:")
+            line("ld  a,(p8_la+3)")
+            line("ld  c,a")
+            line("ld  a,(p8_lb+3)")
+            line("xor  c")
+            line("ld  b,a")
+            line("push  bc")
+            line("bit  7,c")
+            line("ld  hl,p8_la")
+            line("call  nz,p8rt_neg32")
+            line("ld  a,(p8_lb+3)")
+            line("rla")
+            line("ld  hl,p8_lb")
+            line("call  c,p8rt_neg32")
+            line("call  p8rt_div32")
+            line("pop  bc")
+            line("bit  7,b")
+            line("ld  hl,p8_la")
+            line("call  nz,p8rt_neg32")
+            line("bit  7,c")
+            line("ld  hl,p8_lc")
+            line("call  nz,p8rt_neg32")
+            line("ret")
+            raw("; the long at HL = -it")
+            raw("p8rt_neg32:")
+            line("xor  a")
+            line("sub  (hl)")
+            line("ld  (hl),a")
+            repeat 3 {
+                line("inc  hl")
+                line("ld  a,0")
+                line("sbc  a,(hl)")
+                line("ld  (hl),a")
+            }
             line("ret")
             nl()
         }
@@ -1478,6 +2008,13 @@ genz80 {
                     put_number_text(v.init)
                 nl()
             }
+            else if v.kind == ir.V_VAR and v.init != 0 and struct_of(v.typestr) != 0 {
+                ; an array of structs: its instances' values, one after the other
+                name(v.name)
+                put(":")
+                nl()
+                struct_array_values(v, struct_of(v.typestr).size)
+            }
             else if v.kind == ir.V_VAR and v.init != 0 {
                 ubyte esize = element_size(v.typestr)
                 if esize == 0
@@ -1485,16 +2022,24 @@ genz80 {
                 else
                     values(v, esize)
             }
+            else if v.kind == ir.V_INSTANCE and v.init != 0 {
+                name(v.name)
+                put(":")
+                nl()
+                instance_values(v, v.init)
+            }
             v = v.next
         }
         raw("; ---- variables without values, and the registers of the code")
         raw("p8_bss_start:")
         v = prog.vars
         while v != 0 {
-            if (v.kind == ir.V_VAR and v.init == 0) or v.kind == ir.V_SLAB {
+            if (v.kind == ir.V_VAR and v.init == 0) or v.kind == ir.V_SLAB or (v.kind == ir.V_INSTANCE and v.init == 0) {
                 long bytes = v.size
                 if v.kind == ir.V_VAR {
-                    ubyte vsize = element_size(v.typestr)
+                    long vsize = element_size(v.typestr)
+                    if struct_of(v.typestr) != 0
+                        vsize = struct_of(v.typestr).size
                     if vsize == 0 {
                         error("a variable of this type cannot be used on the Z80 yet", v.name)
                         vsize = 1
@@ -1516,7 +2061,103 @@ genz80 {
         buf.add_bytes(o, cells.data, cells.len)
         if need_vregs
             raw("p8_vregs:  defs  32")
+        if need_long {
+            raw("p8_la:  defs  4")
+            raw("p8_lc:  defs  4")
+            raw("p8_lb:  defs  4")
+        }
         raw("p8_bss_end:")
+    }
+
+    ; the struct that a type is an array of ("main.Two[4]"), or 0
+    sub struct_of(^^ubyte t) -> ^^ir.Var {
+        long n = 0
+        while t[n] != 0 and t[n] != '['
+            n++
+        if t[n] == 0
+            return 0
+        ^^ir.Var sv = prog.vars
+        while sv != 0 {
+            if sv.kind == ir.V_STRUCT and buf.cstr_len(sv.name) == n and buf.bytes_equal(sv.name, t, n)
+                return sv
+            sv = sv.next
+        }
+        return 0
+    }
+
+    ; "@instance,@instance": each instance's values (zeros for one without)
+    sub struct_array_values(^^ir.Var v, long struct_size) {
+        ^^ubyte t = v.init
+        long p = 0
+        while t[p] != 0 {
+            long stop = p
+            while t[stop] != 0 and t[stop] != ','
+                stop++
+            ^^ir.Var inst = 0
+            if t[p] == '@' {
+                ^^ubyte wanted = strtab.intern(t + p + 1, (stop - p - 1) as uword)
+                inst = prog.vars
+                while inst != 0 {
+                    if inst.kind == ir.V_INSTANCE and strings.compare(inst.name, wanted) == 0
+                        break
+                    inst = inst.next
+                }
+            }
+            if inst != 0 and inst.init != 0
+                instance_values(v, inst.init)
+            else {
+                put("    defs  ")
+                putn(struct_size)
+                nl()
+            }
+            p = stop
+            if t[p] == ','
+                p++
+        }
+    }
+
+    ; the values of a struct instance: "type:value,type:value,..."
+    sub instance_values(^^ir.Var v, ^^ubyte init) {
+        long p = 0
+        while init[p] != 0 {
+            long colon = p
+            while init[colon] != 0 and init[colon] != ':'
+                colon++
+            if init[colon] == 0
+                break
+            ; (the field's type: what stands before the colon)
+            if init[p] == '^' or (init[p] == 'u' and init[p + 1] == 'w') or init[p] == 'w' or init[p] == 'p'
+                put("    defw  ")
+            else if init[p] == 'l'
+                put("    defq  ")
+            else if init[p] == 'f' or init[p] == 'q' or (init[p] == 'u' and init[p + 1] == 'q') {
+                error("a struct field of this type cannot be used on the Z80 yet", v.name)
+                return
+            }
+            else
+                put("    defb  ")
+            p = colon + 1
+            if init[p] == '@' or init[p] == '&' {
+                p++
+                buf.add_byte(o, '_')
+                while init[p] != 0 and init[p] != ',' {
+                    if init[p] == '.'
+                        buf.add_byte(o, '_')
+                    else
+                        buf.add_byte(o, init[p])
+                    p++
+                }
+            }
+            else {
+                while init[p] != 0 and init[p] != ',' {
+                    buf.add_byte(o, init[p])
+                    p++
+                }
+            }
+            nl()
+            if init[p] == ','
+                p++
+        }
     }
 
     ; the value of a number as the IR writes it ($hex or decimal)

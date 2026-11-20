@@ -736,16 +736,30 @@ register numbers are used again from one subroutine to the next); an
 instruction takes its
 operands from there into A, or HL and DE, works, and puts the result back.
 A call stores its arguments in the subroutine's parameter variables and
-takes a result from A or HL.  The IR's carry after a compare is the 6502's
+takes a result from A or HL (a long: DE and HL, HL the low half).  The IR's carry after a compare is the 6502's
 (clear for "less"), the Z80's is the other way round, so a branch on the
 carry looks at what set it.  System calls 2 and 3 (a character, a string)
 go to CP/M's BDOS.  An instruction that is not written yet is an error that
-names it: most of the longs, signed division, floats, the other system
-calls.
+names it: floats, the hardware register slots, the other system calls.
+
+Longs are worked byte by byte through A (addition, subtraction, logic,
+shifts, compares: a long compare leaves carry and zero as a short one does).
+Multiplication and division of longs are routines (`p8rt_mul32`,
+`p8rt_div32`, `p8rt_divs32`) with their operands in three cells; signed
+division of bytes and words is `p8rt_divs16` around the unsigned one.  All
+of them are written into the program only when it uses them.  A branch on
+zero or on the sign tests the register again unless a compare came before:
+the Z80's 16-bit additions and its loads leave no such flags.
+
+A subroutine's variables and registers are in fixed places, as on the 6502.
+On the host they are on the stack, so a subroutine that calls itself keeps
+them there and loses them here (`tests/programs/ownlocals.p8` is left out
+of the comparison for that).
 
 `make z80cmp` builds the test programs for the host and for CP/M and
 compares what they print; a program the generator cannot build yet is
-counted.  At the start: 19 the same, none different, 49 not built.  The
+counted.  At the start: 19 the same, none different, 49 not built; with longs, signed
+division and structs: 43 the same, 25 not built.  The
 library's virtual registers r0-r15, which it puts at addresses from $ff0000
 for the back end to place, are 32 bytes of the program's own.
 

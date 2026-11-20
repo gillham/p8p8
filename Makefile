@@ -480,7 +480,7 @@ overlaycheck:	$(P8P8)
 # CP/M on the Z80 (the cpm target), run in tnylpo, their output compared.
 # What it cannot build yet is counted, not a failure.
 z80cmp:	$(P8P8)
-	@tests/z80cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8)
+	@tests/z80cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
 
 emucmp64:	$(P8P8)
 	@EMUCMP_TARGET=c64 tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS64)

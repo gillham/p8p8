@@ -6,9 +6,12 @@
   program with z88dk's z80asm, and `-run` starts it in tnylpo.  (A Z80
   machine is a target of its own, with `cpu = z80` in its target file;
   prog8c-llvm's spelling, `-target llvm16 -triple z80-cpm`, means the same.)
-  Bytes and words, calls, loops and text output work; longs, floats and most
-  of the library do not yet.  `make z80cmp` compares with the host: of the
-  test programs 19 print the same and 49 are not built yet.
+  Bytes, words and longs, signed division, calls, loops, structs and text
+  output work; floats and most system calls do not yet.  A subroutine's
+  variables are in fixed places, as on the 6502 (on the host they are on the
+  stack, which a subroutine that calls itself can tell).  `make z80cmp`
+  compares with the host: of the test programs 43 print the same and 25 are
+  not built yet.
 
 - `-meminfo` (and `-verbose`) prints after a 6502 program is built where
   the main program is, how many bytes it takes and how many are free below
