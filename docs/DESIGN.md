@@ -776,10 +776,12 @@ run in trs80gp by `tests/trs80run.sh`, which prints the emulator's printer
 file.  65 the same, none different.
 
 For the front end and the IR a Z80 machine follows llvm16's rules
-(`importer.family`): 16-bit addresses, no floats, register numbers used
-again in every subroutine, no 6502 conventions.  Its library is still the
-llvm16 one too (`library = ../llvm16` and `library_platform = cpm` in the
-target file, the second naming the subdirectory that is searched first): Prog8 code, and `%ir` blocks whose system calls are
+(`importer.family`): 16-bit addresses, register numbers used again in
+every subroutine, no 6502 conventions.  Its library is `lib/targets/z80`,
+which began as llvm16's modules and whose most used routines are Z80
+assembly now (the digits of numbers in `conv`: one routine of about 60
+bytes for every size, where the Prog8 ones came to 300, 645 and 711; the
+library's README there says how assembly in a module is written): Prog8 code, and `%ir` blocks whose system calls are
 what the machine has to do.  The generator turns those into instructions
 with `irparse.expand` and lowers them like the rest.
 

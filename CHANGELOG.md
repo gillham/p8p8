@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The Z80 machines have a library of their own (`lib/targets/z80`), no
+  longer llvm16's, and its most used routines are Z80 assembly now: the
+  digits of numbers, reading numbers, and the length, copying and comparing
+  of strings.  Programs are a fifth to a quarter smaller for it (a test of
+  the string routines 14,006 bytes before and 10,263 after; one of long
+  arithmetic 5,769 and 4,564).
+
 - `-target trs80m4`: the TRS-80 Model 4 in its own mode (TRSDOS 6, LS-DOS
   6), with an 80 by 24 screen through the DOS's supervisor calls.  All the
   test programs print there what they print on the host (`make trs80cmp4`).
