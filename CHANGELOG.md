@@ -7,12 +7,16 @@
   machine is a target of its own, with `cpu = z80` in its target file;
   prog8c-llvm's spelling, `-target llvm16 -triple z80-cpm`, means the same.)
   Bytes, words and longs, signed division, calls, loops, structs, text
-  output, keys, and filling and copying memory work; floats, files and the
-  clock do not yet.  A subroutine's
+  output, keys, filling and copying memory, and floats work; files and the
+  clock do not yet.  A program with floats is linked by z88dk's `zcc` with
+  its 32-bit maths library (`Z88DK` names z88dk's directory); one without
+  needs only its assembler.  A subroutine's
   variables are in fixed places, as on the 6502 (on the host they are on the
   stack, which a subroutine that calls itself can tell).  `make z80cmp`
-  compares with the host: of the test programs 58 print the same and the 9
-  that are not built yet all use floats.
+  compares with the host: all the test programs build, and 65 print the same
+  (the others do not run on the host).  `make z80ref` compares with
+  prog8c-llvm's build for CP/M, which is the reference for floats: 69 the
+  same, none different.
 
 - `-meminfo` (and `-verbose`) prints after a 6502 program is built where
   the main program is, how many bytes it takes and how many are free below

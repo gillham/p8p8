@@ -844,6 +844,7 @@ main {
             ; a Z80 machine: the language is what it is for llvm16 (16 bit addresses, no
             ; 6502 conventions), and the program is made by p8p8's Z80 code generator
             is_z80 = target.z80()
+            importer.z80 = is_z80
             if is_z80 {
                 importer.family = "llvm16"
                 importer.triple_library = target.text("library_platform")
@@ -2306,11 +2307,37 @@ main {
             ^^ubyte zext = target.text("output_extension")
             if zext == 0
                 zext = ".bin"
-            buf.add_str(cmd, "\"${Z88DK:+$Z88DK/bin/}z88dk-z80asm\" -b -o=")
-            add_output(name, zext)
-            buf.add_byte(cmd, ' ')
-            add_output(name, ".asm")
-            run_cmd("assembling the program")
+            if genz80.uses_floats {
+                ; A program with floats is linked by z88dk's zcc for the machine
+                ; (zcc_platform), with its 32-bit maths library and the target's float
+                ; source, a C file beside the target file.
+                ^^ubyte zplat = target.text("zcc_platform")
+                ^^ubyte zsrc = target.text("float_source")
+                if zplat == 0 or zsrc == 0 or target.dir == 0 {
+                    out.err()
+                    out.puts("error: floats: the target file has no zcc_platform and float_source for this machine\n")
+                    out.exit(1)
+                }
+                buf.add_str(cmd, "PATH=\"${Z88DK:+$Z88DK/bin:}$PATH\" ZCCCFG=\"${ZCCCFG:-${Z88DK:+$Z88DK/lib/config}}\" zcc ")
+                buf.add_str(cmd, zplat)
+                buf.add_str(cmd, " --math32 -o ")
+                add_output(name, zext)
+                buf.add_byte(cmd, ' ')
+                add_output(name, ".asm")
+                buf.add_str(cmd, " \"")
+                buf.add_str(cmd, target.dir)
+                buf.add_byte(cmd, '/')
+                buf.add_str(cmd, zsrc)
+                buf.add_str(cmd, "\"")
+                run_cmd("linking the program with z88dk")
+            }
+            else {
+                buf.add_str(cmd, "\"${Z88DK:+$Z88DK/bin/}z88dk-z80asm\" -b -o=")
+                add_output(name, zext)
+                buf.add_byte(cmd, ' ')
+                add_output(name, ".asm")
+                run_cmd("assembling the program")
+            }
             built_ext = zext
             if opt_run {
                 ^^ubyte zrun = target.text("run_command")

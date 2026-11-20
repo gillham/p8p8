@@ -49,6 +49,11 @@ genz80 {
     bool need_print = false
     bool need_jphl = false
     bool need_vregs = false
+    bool uses_floats = false        ; the program has floats: it is linked by zcc with the maths library
+    ^^buf.Buf body = 0              ; everything after the first lines
+    ^^ubyte[48] externs             ; the library's names that the code calls
+    ubyte extern_count = 0
+    float scratch_float
     bool carry_cell = false         ; this subroutine keeps the IR's carry in a place of its own (see carry_scan)
     bool carry_loaded = false       ; the instruction's carry was just taken from there
     bool entry_pending = false      ; the subroutine's first label is still to come
@@ -66,6 +71,11 @@ genz80 {
     const ubyte RT_CLAMPS16 = 10
     const ubyte RT_SQRT = 11
     const ubyte RT_WAITKEY = 12
+    const ubyte RT_FCMP = 13
+    const ubyte RT_LESS32 = 14
+    const ubyte RT_CLAMP32 = 15
+    const ubyte RT_INLONGS = 16
+    const ubyte RT_FSQRT = 17
 
     sub error(str message, ^^ubyte detail) {
         out.err()
@@ -149,7 +159,7 @@ genz80 {
         when t {
             ir.T_BYTE -> return 1
             ir.T_WORD, ir.T_POINTER -> return 2
-            ir.T_LONG -> return 4
+            ir.T_LONG, ir.T_FLOAT -> return 4       ; (a float is a 32-bit IEEE one)
         }
         return 0
     }
@@ -394,36 +404,14 @@ genz80 {
         long k
         for k in 0 to 69999
             reg_used[k] = 0
-        put("; Program: ")
-        put(prog.name)
-        nl()
-        line("; written by p8p8's Z80 code generator, for z88dk-z80asm")
-        ; (the load address is the target's: $0100 for CP/M)
-        put("    org  ")
-        putn(target.number("load_address", $0100))
-        nl()
-        ; (the machine's first instructions: where the stack is, as the target file says)
-        target_lines("startup_code")
-        ; the variables without values are zero
-        line("ld  hl,p8_bss_start")
-        line("ld  bc,p8_bss_end-p8_bss_start")
-        put("p8_clear:")
-        nl()
-        line("ld  a,b")
-        line("or  c")
-        line("jr  z,p8_cleared")
-        line("ld  (hl),0")
-        line("inc  hl")
-        line("dec  bc")
-        line("jr  p8_clear")
-        put("p8_cleared:")
-        nl()
-        line("call  p8_init_globals")
-        line("call  _main_start")
-        ; (how the program ends: the target's; sys.exit comes here too)
-        raw("p8_exit:")
-        target_lines("exit_code")
-        nl()
+        ; (the body first, into a buffer of its own: what the head is depends on whether
+        ; the program uses floats, which the body tells)
+        if body == 0
+            body = buf.new(65536)
+        buf.clear(body)
+        o = body
+        uses_floats = false
+        extern_count = 0
         put("p8_init_globals:")
         nl()
         previous = 0
@@ -450,6 +438,61 @@ genz80 {
         }
         runtime()
         variables()
+        o = output
+        head()
+        buf.add_bytes(o, body.data, body.len)
+    }
+
+    ; The first lines.  A program without floats is assembled as it is: it begins at the
+    ; target's load address with the target's first instructions.  One with floats is
+    ; linked by z88dk's zcc with its maths library: then it is a module with a _main that
+    ; zcc's own first instructions call, and it names what it takes from the library.
+    sub head() {
+        put("; Program: ")
+        put(prog.name)
+        nl()
+        line("; written by p8p8's Z80 code generator, for z88dk-z80asm")
+        if uses_floats {
+            line("SECTION  code_user")
+            line("PUBLIC  _main")
+            ubyte e
+            if extern_count != 0 {
+                for e in 0 to extern_count - 1 {
+                    put("    GLOBAL  ")
+                    put(externs[e])
+                    nl()
+                }
+            }
+            raw("_main:")
+        }
+        else {
+            ; (the load address is the target's: $0100 for CP/M)
+            put("    org  ")
+            putn(target.number("load_address", $0100))
+            nl()
+            ; (the machine's first instructions: where the stack is, as the target file says)
+            target_lines("startup_code")
+        }
+        ; the variables without values are zero
+        line("ld  hl,p8_bss_start")
+        line("ld  bc,p8_bss_end-p8_bss_start")
+        put("p8_clear:")
+        nl()
+        line("ld  a,b")
+        line("or  c")
+        line("jr  z,p8_cleared")
+        line("ld  (hl),0")
+        line("inc  hl")
+        line("dec  bc")
+        line("jr  p8_clear")
+        put("p8_cleared:")
+        nl()
+        line("call  p8_init_globals")
+        line("call  _main_start")
+        ; (how the program ends: the target's; sys.exit comes here too)
+        raw("p8_exit:")
+        target_lines("exit_code")
+        nl()
     }
 
     ; the lines of a key of the target file, as instructions
@@ -1275,6 +1318,11 @@ genz80 {
     sub instruction(^^ir.Instr i) {
         ubyte size = size_of(i.type)
         ubyte k
+        if i.type == ir.T_FLOAT or (i.op >= ir.OP_FFROMUB and i.op <= ir.OP_FCOMP) or (i.op >= ir.OP_FPOW and i.op <= ir.OP_FCEIL) {
+            uses_floats = true
+            if float_instruction(i)
+                return
+        }
         when i.op {
             ir.OP_NOP, ir.OP_BREAKPOINT, ir.OP_ALIGN -> {
             }
@@ -1817,6 +1865,265 @@ genz80 {
         }
     }
 
+    ; ---- floats ----
+    ;
+    ; A float is a 32-bit IEEE one in four bytes, and its arithmetic is z88dk's math32
+    ; library's: the left operand on the stack, the right one in DE and HL (HL the low
+    ; half), the result in DE and HL.  Loads, stores and moves are those of any four
+    ; bytes, which the instructions for longs do.
+
+    ; a call of a routine of the library, which the head of the program must name
+    sub library(str routine) {
+        start("call")
+        put(routine)
+        nl()
+        extern_name(routine)
+    }
+
+    sub extern_name(str routine) {
+        ubyte e
+        if extern_count != 0 {
+            for e in 0 to extern_count - 1 {
+                if strings.compare(externs[e], routine) == 0
+                    return
+            }
+        }
+        if extern_count < len(externs) {
+            externs[extern_count] = routine
+            extern_count++
+        }
+    }
+
+    ; the bits of a number as a 32-bit float, rounded to the nearest
+    sub float_bits(float value) -> long {
+        scratch_float = value
+        uquad bits = peekq(&scratch_float) as uquad
+        long sign = ((bits >> 63) & 1) as long
+        long exponent = ((bits >> 52) & $7ff) as long
+        long high = ((bits >> 29) & $7fffff) as long        ; the top 23 bits of the fraction
+        long rest = (bits & $1fffffff) as long
+        long result = 0
+        if exponent == $7ff {
+            result = $7f800000
+            if high != 0 or rest != 0
+                result = $7fc00000
+        }
+        else if exponent != 0 {
+            high |= $800000
+            if rest > $10000000 or (rest == $10000000 and (high & 1) != 0)
+                high++
+            exponent = exponent - 1023 + 127
+            if high == $1000000 {
+                high = $800000
+                exponent++
+            }
+            if exponent >= 255
+                result = $7f800000
+            else if exponent > 0
+                result = (exponent << 23) | (high & $7fffff)
+        }
+        if sign != 0
+            result |= $80000000
+        return result
+    }
+
+    ; DE and HL = a float constant
+    sub float_imm(float value) {
+        long bits = float_bits(value)
+        pair_imm("hl", bits)
+        pair_imm("de", bits >> 16)
+    }
+
+    sub float_from_reg(uword r) {
+        pair_from_reg("hl", r, 0)
+        pair_from_reg("de", r, 2)
+    }
+
+    sub reg_from_float(uword r) {
+        reg_from_pair(r, 0, "hl")
+        reg_from_pair(r, 2, "de")
+    }
+
+    ; first = first op second (see first_a for the groups); with_one: the second is 1.0
+    sub float_arith(^^ir.Instr i, ubyte group, ubyte kind, bool with_one) {
+        first_pair("hl", i, group, 0)
+        first_pair("de", i, group, 2)
+        line("push  de")
+        line("push  hl")
+        if with_one
+            float_imm(1.0)
+        else if group == 1 or group == 4
+            float_imm(i.fvalue)
+        else {
+            second_pair("hl", i, group, 0)
+            second_pair("de", i, group, 2)
+        }
+        when kind {
+            0 -> library("m32_fsadd_callee")
+            1 -> library("m32_fssub_callee")
+            5 -> library("m32_fsmul_callee")
+            else -> library("m32_fsdiv_callee")
+        }
+        pair_first(i, group, 0, "hl")
+        pair_first(i, group, 2, "de")
+    }
+
+    ; r1 = a function of r2
+    sub float_function(^^ir.Instr i, str routine) {
+        float_from_reg(i.r2)
+        library(routine)
+        reg_from_float(i.r1)
+    }
+
+    ; An instruction with floats; false when it is one that the instructions for four
+    ; bytes do as well.
+    sub float_instruction(^^ir.Instr i) -> bool {
+        ubyte k
+        when i.op {
+            ir.OP_LOAD -> {
+                float_imm(i.fvalue)
+                reg_from_float(i.r1)
+            }
+            ir.OP_STOREIM -> {
+                float_imm(i.fvalue)
+                mem_from_pair(i, 0, "hl")
+                mem_from_pair(i, 2, "de")
+            }
+            ir.OP_RETURNI -> {
+                float_imm(i.fvalue)
+                line("ret")
+            }
+            ir.OP_ADD, ir.OP_SUB, ir.OP_MUL, ir.OP_MULS, ir.OP_DIV, ir.OP_DIVS -> float_arith(i, 1, kind_of(i.op), false)
+            ir.OP_ADDR, ir.OP_SUBR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_DIVSR -> float_arith(i, 2, kind_of(i.op), false)
+            ir.OP_ADDM, ir.OP_SUBM, ir.OP_MULM, ir.OP_MULSM, ir.OP_DIVM, ir.OP_DIVSM -> float_arith(i, 3, kind_of(i.op), false)
+            ir.OP_ADDIM, ir.OP_SUBIM -> float_arith(i, 4, kind_of(i.op), false)
+            ir.OP_INC -> float_arith(i, 2, 0, true)
+            ir.OP_DEC -> float_arith(i, 2, 1, true)
+            ir.OP_INCM -> float_arith(i, 3, 0, true)
+            ir.OP_DECM -> float_arith(i, 3, 1, true)
+            ir.OP_NEG, ir.OP_NEGM -> {
+                ; the sign is the top bit
+                ubyte where = 1
+                if i.op == ir.OP_NEGM
+                    where = 3
+                first_a(i, where, 3)
+                line("xor  $80")
+                a_first(i, where, 3)
+            }
+            ir.OP_FABS -> {
+                for k in 0 to 3 {
+                    a_from_reg(i.r2, k)
+                    if k == 3
+                        line("and  $7f")
+                    reg_from_a(i.r1, k)
+                }
+            }
+            ir.OP_SQRT -> {
+                float_from_reg(i.r2)
+                line("call  p8rt_fsqrt")
+                need_rt[RT_FSQRT] = true
+                reg_from_float(i.r1)
+            }
+            ir.OP_FSIN -> float_function(i, "sin_fastcall")
+            ir.OP_FCOS -> float_function(i, "cos_fastcall")
+            ir.OP_FTAN -> float_function(i, "tan_fastcall")
+            ir.OP_FATAN -> float_function(i, "atan_fastcall")
+            ir.OP_FLN -> float_function(i, "log_fastcall")
+            ir.OP_FLOG -> float_function(i, "log2_fastcall")
+            ir.OP_FFLOOR -> float_function(i, "floor_fastcall")
+            ir.OP_FCEIL -> float_function(i, "ceil_fastcall")
+            ir.OP_FROUND -> {
+                ; to the nearest whole number, a half to the even one: a C function of the
+                ; float source that is linked along
+                float_from_reg(i.r2)
+                line("push  de")
+                line("push  hl")
+                library("_prog8_z80_roundeven")
+                line("pop  bc")
+                line("pop  bc")
+                reg_from_float(i.r1)
+            }
+            ir.OP_FPOW -> {
+                ; r1 = r1 to the power of r2
+                float_from_reg(i.r1)
+                line("push  de")
+                line("push  hl")
+                float_from_reg(i.r2)
+                line("push  de")
+                line("push  hl")
+                library("pow_callee")
+                reg_from_float(i.r1)
+            }
+            ir.OP_FFROMUB, ir.OP_FFROMSB -> {
+                a_from_reg(i.r2, 0)
+                line("ld  l,a")
+                if i.op == ir.OP_FFROMUB
+                    library("m32_float8u")
+                else
+                    library("m32_float8")
+                reg_from_float(i.r1)
+            }
+            ir.OP_FFROMUW, ir.OP_FFROMSW -> {
+                pair_from_reg("hl", i.r2, 0)
+                if i.op == ir.OP_FFROMUW
+                    library("m32_float16u")
+                else
+                    library("m32_float16")
+                reg_from_float(i.r1)
+            }
+            ir.OP_FFROMSL -> {
+                float_from_reg(i.r2)
+                library("m32_float32")
+                reg_from_float(i.r1)
+            }
+            ir.OP_FTOUB, ir.OP_FTOSB, ir.OP_FTOUW, ir.OP_FTOSW, ir.OP_FTOSL -> {
+                ; towards zero, as a long; what the register holds of it
+                float_from_reg(i.r2)
+                library("m32_f2slong")
+                ubyte wide = size_of(ir.regtypes[i.r1])
+                line("ld  a,l")
+                reg_from_a(i.r1, 0)
+                if wide >= 2 {
+                    line("ld  a,h")
+                    reg_from_a(i.r1, 1)
+                }
+                if wide == 4
+                    reg_from_pair(i.r1, 2, "de")
+            }
+            ir.OP_FCOMP -> {
+                ; r1 (a byte) = -1, 0 or 1: r2 against r3
+                float_from_reg(i.r2)
+                line("push  de")
+                line("push  hl")
+                float_from_reg(i.r3)
+                line("call  p8rt_fcmp")
+                need_rt[RT_FCMP] = true
+                reg_from_a(i.r1, 0)
+            }
+            ir.OP_SGN -> {
+                ; r1 (a byte) = the sign of the float r2; a float whose exponent is 0 is zero
+                long done = new_label()
+                a_from_reg(i.r2, 2)
+                line("and  $80")
+                line("ld  b,a")
+                a_from_reg(i.r2, 3)
+                line("ld  c,a")
+                line("and  $7f")
+                line("or  b")
+                jump_if_local("z", done)
+                line("ld  a,c")
+                line("rlca")
+                line("ld  a,1")
+                jump_if_local("nc", done)
+                line("ld  a,255")
+                local(done)
+                reg_from_a(i.r1, 0)
+            }
+            else -> return false
+        }
+        return true
+    }
+
     ; One bit, of a register (place 1) or of memory (place 3): the bytes from the end that
     ; the bit leaves.  The rox ones take the carry in; rol and ror put the bit that left
     ; in at the other end.
@@ -1977,6 +2284,29 @@ genz80 {
             pair_imm(pair, a.value as long)
     }
 
+    ; a long argument of a system call into one of the cells of the long routines
+    sub arg_cell(^^ir.Arg a, str cell) {
+        ubyte half
+        need_long = true
+        if a == 0 {
+            error("a system call without the arguments it needs", 0)
+            return
+        }
+        for half in 0 to 1 {
+            if a.reg != 0
+                pair_from_reg("hl", a.reg, half * 2)
+            else
+                pair_imm("hl", (a.value >> (half * 16)) as long)
+            start("ld")
+            put("(")
+            put(cell)
+            if half == 1
+                put("+2")
+            put("),hl")
+            nl()
+        }
+    }
+
     sub call_rt(ubyte which, str routine) {
         need_rt[which] = true
         start("call")
@@ -2041,6 +2371,35 @@ genz80 {
                 line("call  5")
             }
             218 -> call_rt(RT_WAITKEY, "p8rt_waitkey")
+            210 -> {
+                ; the digits of a float, as d.ddde+xx: the buffer, the float (a C function
+                ; of the float source that is linked along)
+                uses_floats = true
+                arg_pair(a0, "hl")
+                line("push  hl")
+                if a1 == 0 or a1.reg == 0 {
+                    error("system call 210 needs its float in a register", 0)
+                    return
+                }
+                float_from_reg(a1.reg)
+                line("push  de")
+                line("push  hl")
+                library("_prog8_z80_ftoa")
+                line("pop  bc")
+                line("pop  bc")
+                line("pop  bc")
+            }
+            211 -> {
+                ; the float that a text says
+                uses_floats = true
+                arg_pair(a0, "hl")
+                line("push  hl")
+                line("ld  hl,0")
+                line("push  hl")
+                library("_prog8_z80_strtod")
+                line("pop  bc")
+                line("pop  bc")
+            }
             $100d -> {
                 ; compare two strings: -1, 0 or 1
                 arg_pair(a0, "hl")
@@ -2091,6 +2450,23 @@ genz80 {
                 else
                     line("call  p8rt_clamp16")
             }
+            $1016 -> {
+                ; clamp a long: the value, the least, the most
+                arg_cell(a0, "p8_la")
+                arg_cell(a1, "p8_lb")
+                arg_cell(a2, "p8_lc")
+                need_rt[RT_LESS32] = true
+                call_rt(RT_CLAMP32, "p8rt_clamp32")
+                line("ld  hl,(p8_la)")
+                line("ld  de,(p8_la+2)")
+            }
+            $101b, $1011 -> {
+                ; is a long, or a float (by its bits), in an array: the value, the array, its length
+                arg_cell(a0, "p8_la")
+                arg_pair(a1, "hl")
+                arg_pair(a2, "bc")
+                call_rt(RT_INLONGS, "p8rt_inlongs")
+            }
             else -> {
                 buf.clear(nb)
                 buf.add_long(nb, i.value as long)
@@ -2101,7 +2477,7 @@ genz80 {
         }
         if res != 0 and res.reg != 0 {
             ubyte rsize = size_of(res.type)
-            if rsize == 1 or rsize == 2
+            if rsize != 0
                 keep(res.reg, rsize)
             else
                 error("the result of this system call cannot be taken on the Z80 yet", 0)
@@ -2309,6 +2685,135 @@ genz80 {
             line("ld  l,c")
             line("ret")
             nl()
+        }
+        if need_rt[RT_CLAMP32] {
+            raw("; p8_la = p8_la kept between p8_lb and p8_lc (signed longs)")
+            raw("p8rt_clamp32:")
+            line("ld  de,p8_la")
+            line("ld  hl,p8_lb")
+            line("call  p8rt_less32")
+            line("jr  nc,p8rt_clamp32_top")
+            line("ld  hl,p8_lb")
+            line("jr  p8rt_clamp32_take")
+            raw("p8rt_clamp32_top:")
+            line("ld  de,p8_lc")
+            line("ld  hl,p8_la")
+            line("call  p8rt_less32")
+            line("ret  nc")
+            line("ld  hl,p8_lc")
+            raw("p8rt_clamp32_take:")
+            line("ld  de,p8_la")
+            line("ld  bc,4")
+            line("ldir")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_LESS32] {
+            raw("; carry when the long at DE is less than the long at HL (signed)")
+            raw("p8rt_less32:")
+            line("ld  b,3")
+            line("or  a")
+            raw("p8rt_less32_byte:")
+            line("ld  a,(de)")
+            line("sbc  a,(hl)")
+            line("inc  de")
+            line("inc  hl")
+            line("djnz  p8rt_less32_byte")
+            line("ld  a,(de)")
+            line("sbc  a,(hl)")
+            line("jp  po,p8rt_less32_sign")
+            line("xor  $80")
+            raw("p8rt_less32_sign:")
+            line("rla")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_INLONGS] {
+            raw("; is the long in p8_la among the BC longs at HL: A = 1 or 0")
+            raw("p8rt_inlongs:")
+            line("ld  a,b")
+            line("or  c")
+            line("ret  z")
+            line("push  bc")
+            line("ld  de,p8_la")
+            line("ld  bc,$0400")
+            raw("p8rt_inlongs_byte:")
+            line("ld  a,(de)")
+            line("xor  (hl)")
+            line("or  c")
+            line("ld  c,a")
+            line("inc  de")
+            line("inc  hl")
+            line("djnz  p8rt_inlongs_byte")
+            line("ld  a,c")
+            line("pop  bc")
+            line("or  a")
+            line("jr  z,p8rt_inlongs_found")
+            line("dec  bc")
+            line("jr  p8rt_inlongs")
+            raw("p8rt_inlongs_found:")
+            line("ld  a,1")
+            line("ret")
+            nl()
+        }
+        if need_rt[RT_FSQRT] {
+            raw("; DE and HL = the square root of the float there.  The library's root is an")
+            raw("; estimate that can be off in the last place (3.2500002 for 10.5625); one step")
+            raw("; of Heron's method, (r + x/r) / 2, puts that right.")
+            raw("p8rt_fsqrt:")
+            line("ld  a,d")
+            line("and  $7f")
+            line("ld  b,a")
+            line("ld  a,e")
+            line("and  $80")
+            line("or  b")
+            line("ret  z")                      ; (zero)
+            line("cp  $ff")
+            line("ret  z")                      ; (infinity or not a number)
+            line("push  de")
+            line("push  hl")
+            line("call  sqrt_fastcall")
+            line("ld  (p8_fs),hl")
+            line("ld  (p8_fs+2),de")
+            line("call  m32_fsdiv_callee")
+            line("push  de")
+            line("push  hl")
+            line("ld  hl,(p8_fs)")
+            line("ld  de,(p8_fs+2)")
+            line("call  m32_fsadd_callee")
+            line("ld  a,d")                     ; (half of it: the exponent less one, unless it is 0)
+            line("and  $7f")
+            line("ld  b,a")
+            line("ld  a,e")
+            line("and  $80")
+            line("or  b")
+            line("ret  z")
+            line("ld  a,e")
+            line("sub  $80")
+            line("ld  e,a")
+            line("ret  nc")
+            line("dec  d")
+            line("ret")
+            raw("p8_fs:  defs  4")
+            nl()
+            extern_name("sqrt_fastcall")
+            extern_name("m32_fsdiv_callee")
+            extern_name("m32_fsadd_callee")
+        }
+        if need_rt[RT_FCMP] {
+            raw("; compares the float on the stack with the one in DE and HL: A = 0 the same,")
+            raw("; 255 the first is less, 1 it is greater (the library's routine wants to be")
+            raw("; called from a routine like this one)")
+            raw("p8rt_fcmp:")
+            line("call  m32_compare_callee")
+            line("ld  a,0")
+            line("ret  z")
+            line("ld  a,255")
+            line("ret  c")
+            line("ld  a,1")
+            line("ret")
+            nl()
+            extern_name("m32_compare_callee")
         }
         if need_rt[RT_SQRT] {
             raw("; HL = the square root of the long in p8_la, rounded down: two bits of the number")
@@ -2584,6 +3089,10 @@ genz80 {
     ; ---- variables ----
 
     sub element_size(^^ubyte typestr) -> ubyte {
+        if text_has(typestr, "float") {
+            uses_floats = true
+            return 4
+        }
         if text_has(typestr, "word") or text_has(typestr, "pointer") or typestr[0] == '^'
             return 2
         if text_has(typestr, "long")
@@ -2771,7 +3280,16 @@ genz80 {
                 put("    defw  ")
             else if init[p] == 'l'
                 put("    defq  ")
-            else if init[p] == 'f' or init[p] == 'q' or (init[p] == 'u' and init[p + 1] == 'q') {
+            else if init[p] == 'f' {
+                uses_floats = true
+                put("    defq  ")
+                p = float_item(init, colon + 1)
+                nl()
+                if init[p] == ','
+                    p++
+                continue
+            }
+            else if init[p] == 'q' or (init[p] == 'u' and init[p + 1] == 'q') {
                 error("a struct field of this type cannot be used on the Z80 yet", v.name)
                 return
             }
@@ -2835,6 +3353,26 @@ genz80 {
         }
     }
 
+    ; one float of a list of values, as the number of its bits; where the list goes on
+    sub float_item(^^ubyte text, long p) -> long {
+        buf.clear(nb)
+        while text[p] != 0 and text[p] != ',' {
+            buf.add_byte(nb, text[p])
+            p++
+        }
+        buf.add_byte(nb, 0)
+        ; (the assembler takes a number above $7fffffff as it is)
+        long bits = float_bits(irparse.parse_float(nb.data))
+        put("$")
+        ubyte shift = 28
+        repeat 8 {
+            buf.add_byte(o, buf.hex_digit(((bits >> shift) & 15) as ubyte))
+            if shift >= 4
+                shift -= 4
+        }
+        return p
+    }
+
     ; the values of a variable: numbers, and "@name" for the address of something
     sub values(^^ir.Var v, ubyte esize) {
         if v.align > 1 {
@@ -2868,6 +3406,8 @@ genz80 {
                     p++
                 }
             }
+            else if text_has(v.typestr, "float")
+                p = float_item(v.init, p)
             else {
                 while v.init[p] != 0 and v.init[p] != ',' {
                     buf.add_byte(o, v.init[p])

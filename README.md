@@ -29,8 +29,9 @@ The command is `p8c`.
   (a bare 68020 in QEMU), the Amiga 1200 and the Amiga 500: it writes vasm
   assembly.
 - For the Z80 there is the beginning of a code generator: `-target cpm`
-  builds a CP/M program (z88dk's z80asm).  Small programs run; much is
-  missing.
+  builds a CP/M program with z88dk (its assembler; for a program with
+  floats its `zcc` and maths library).  The test programs run; files and
+  the clock are missing, and the code is not optimised yet.
 - For the host it writes LLVM IR and builds a native executable with clang.
   That is how p8p8 compiles itself.
 

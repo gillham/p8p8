@@ -128,7 +128,8 @@ checker {
     ^^ubyte target_name = 0
 
     sub set_target(^^ubyte name) {
-        no_floats = strings.compare(name, "llvm16") == 0
+        ; (llvm16 has no floats here; a Z80 machine, which follows llvm16's rules, has them)
+        no_floats = strings.compare(name, "llvm16") == 0 and not importer.z80
         llvm_target = buf.bytes_equal(name, "llvm", 4)
         target_name = name
         no_quads = types.POINTER_SIZE == 2 and not llvm_target

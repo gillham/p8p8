@@ -746,8 +746,26 @@ takes a result from A or HL (a long: DE and HL, HL the low half).  The IR's carr
 (clear for "less"), the Z80's is the other way round, so a branch on the
 carry looks at what set it.  System calls 2 and 3 (a character, a string)
 go to CP/M's BDOS.  An instruction that is not written yet is an error that
-names it: floats, and the system calls for files, the clock and the
-command line.
+names it: the system calls for files, the clock and the command line.
+
+A float is a 32-bit IEEE one in four bytes; loads, stores and moves are
+those of a long.  The arithmetic is z88dk's math32 library's (the left
+operand on the stack, the right one in DE and HL, the result there), and so
+are the conversions and the functions.  Three things come from a C source
+that is linked along (`z80-float.c` in the target's directory, from
+prog8c-llvm's z80 profiles): the shortest digits of a float, reading one,
+and rounding to even.  The library's square root can be off in the last
+place (3.2500002 for 10.5625), so one step of Heron's method follows it.
+A float constant's bits are worked out by the compiler (`float_bits`).
+
+A program with floats is therefore not assembled as it is but linked by
+z88dk's `zcc` for the machine (`zcc_platform` in the target file, with
+`--math32`): it is a module with a `_main` that zcc's own first
+instructions call, and it names what it takes from the library.  The body
+is written first and the head after it, because only the body tells which
+of the two the program is.  A program without floats is as before: one
+assembly file with its own first instructions, made into the program by
+z80asm alone.
 
 The system calls that are there: the end of the program, a character and a
 string out, a character and a key in (BDOS functions 1 and 6), copying and
@@ -789,7 +807,11 @@ of the comparison for that).
 compares what they print; a program the generator cannot build yet is
 counted.  At the start: 19 the same, none different, 49 not built; with longs, signed
 division and structs: 43 the same, 25 not built; with the slots: 47 and 20; with the
-system calls: 58, and the 9 not built all use floats.  The
+system calls: 58, and the 9 not built all use floats; with floats all build
+and 65 are the same.  `make z80ref` builds each program for CP/M with
+prog8c-llvm too (llvm-z80 and z88dk) and compares the two in tnylpo: 69 the
+same, none different, with two left out (the recursion above, and an
+address that prog8c-llvm gets wrong for CP/M).  The
 library's virtual registers r0-r15, which it puts at addresses from $ff0000
 for the back end to place, are 32 bytes of the program's own.
 
