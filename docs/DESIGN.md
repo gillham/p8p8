@@ -42,7 +42,7 @@ source ─ lexer ─ parser ─ importer ─ symbols ─ resolver ─ typer ─ 
 | typer | `typer.p8`, `types.p8` | types, constant folding, string literal encoding |
 | checker | `checker.p8` | the errors the reference compiler reports |
 | IR | `irgen.p8`, `ir.p8`, `irprune.p8` | the reference compiler's IR, instruction for instruction |
-| back ends | `llvmgen.p8`, `gen6502.p8`, `peep6502.p8` | below |
+| back ends | `llvmgen.p8`, `gen6502.p8`, `peep6502.p8`, `gen68k.p8`, `genz80.p8`, `peepz80.p8` | below |
 | driver | `main.p8`, `target.p8` | options, target files, running clang or 64tass |
 
 There is one syntax tree, typed in place.  The reference compiler has two
@@ -830,6 +830,45 @@ serves.  A subroutine where it does not (`carry_scan`; the library's string
 hash rotates a byte around a loop) keeps the flag in a byte of its own,
 clear at its start as on the host, stored by every instruction that sets it
 and fetched by a reader that does not have it at hand.
+
+### The pass over the assembly (`peepz80.p8`)
+
+The generator writes each instruction by itself, so nearly every value
+makes a trip through its IR register's place in memory.  After a
+subroutine is written, `peepz80` reads its lines and takes most of those
+trips out.  It follows only the places of IR registers (`p8r_S_N`): they
+belong to one subroutine, are never reached through a pointer and are no
+machine's memory-mapped anything, so what a register holds of one stays
+true until a line the pass can see changes it.  A label, a call, and any
+instruction it does not know forget everything; `%asm` of the program's own
+is between two marker lines and is left alone.
+
+- What A, HL and DE hold: a load of what is there already is dropped, or
+  becomes a move between registers (`ld a,l`, `ex de,hl`).
+- A value on its way through a place (`ld hl,S / ld (C),hl ... ld hl,(C)`):
+  the later load takes S itself, when S is a constant or an ordinary
+  variable that nothing between stores to.  Memory-mapped variables, whose
+  names the generator hands over, are never treated so.
+- A byte made a word through its place and then taken into DE or HL goes
+  there while A still has it.
+- A store that another store to the same place follows before any read is
+  dropped (a byte store does not replace a word store: that was a fault of
+  the first version, which the test programs caught), and so is every
+  store to a place that no line reads any more, a load that another load
+  of the same register follows at once, and whatever comes after a jump or
+  return without a condition, up to the next label.
+
+The rounds repeat until one changes nothing, since a dropped store frees a
+register and a kept value saves a load.  `-noopt` turns the pass off.
+
+In the generator itself: words are moved as words (arguments of calls,
+copies, constants into memory), and a byte's arithmetic and compare with a
+constant have the constant as their operand.
+
+Measured on CP/M programs, bytes without and with all of this: the string
+routines' test 10,263 and 5,961; long arithmetic 4,564 and 3,682;
+fromtests 4,469 and 3,363; fromdocs_builtins 3,362 and 2,809; hello 138
+and 118.
 
 The IR's hardware register slots are places in memory here (`p8_slot_N`).
 A subroutine with several results stores them there before it returns, and

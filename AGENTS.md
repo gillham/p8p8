@@ -60,6 +60,8 @@ Things that have bitten here:
 | `src/lexer.p8`, `parser.p8`, `symtab.p8`, `resolver.p8`, `typer.p8`, `checker.p8` | the front end |
 | `src/irgen.p8`, `irprune.p8`, `ir.p8` | the IR, in upstream's `.p8ir` format |
 | `src/gen6502.p8`, `peep6502.p8` | the 6502/65C02 code generator and its peephole passes |
+| `src/gen68k.p8` | the 68000 code generator |
+| `src/genz80.p8`, `peepz80.p8` | the Z80 code generator and the pass over its assembly |
 | `src/gen68k.p8` | the 68000 code generator (qemu68k and the Amigas; new) |
 | `src/llvmgen.p8` | LLVM IR for the host |
 | `src/target.p8`, `triple.p8`, `importer.p8`, `main.p8` | target files, triple profiles of llvm32, module lookup, the driver |

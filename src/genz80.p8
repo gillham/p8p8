@@ -25,6 +25,7 @@
 %import mem
 %import out
 %import target
+%import peepz80
 
 genz80 {
     %option ignore_unused
@@ -54,6 +55,7 @@ genz80 {
     ^^ubyte[48] externs             ; the library's names that the code calls
     ubyte extern_count = 0
     float scratch_float
+    bool optimize = true            ; the pass over each subroutine's assembly (peepz80); -noopt turns it off
     bool carry_cell = false         ; this subroutine keeps the IR's carry in a place of its own (see carry_scan)
     bool carry_loaded = false       ; the instruction's carry was just taken from there
     bool entry_pending = false      ; the subroutine's first label is still to come
@@ -402,6 +404,23 @@ genz80 {
         if cells == 0
             cells = buf.new(65536)
         buf.clear(cells)
+        ; (the memory-mapped variables, for the pass over the assembly: their values may
+        ; change by themselves)
+        if peepz80.volatile == 0
+            peepz80.volatile = buf.new(1024)
+        buf.clear(peepz80.volatile)
+        buf.add_byte(peepz80.volatile, '\n')
+        ^^ir.Var mv = p.vars
+        while mv != 0 {
+            if mv.kind == ir.V_MEMVAR {
+                ^^buf.Buf keep_o = o
+                o = peepz80.volatile
+                name(mv.name)
+                nl()
+                o = keep_o
+            }
+            mv = mv.next
+        }
         part = 0
         reg_used = mem.alloc(70000)
         long k
@@ -558,6 +577,7 @@ genz80 {
         put("; ---- ")
         put(s.name)
         nl()
+        long from = o.len
         part++
         carry_cell = carry_scan(s)
         ^^ir.Chunk c = s.chunks
@@ -579,6 +599,8 @@ genz80 {
             label(s.name)
         line("ret")
         nl()
+        if optimize
+            peepz80.run(o, from)
         register_cells()
         if carry_cell {
             buf.add_str(cells, "p8c_")
@@ -717,8 +739,10 @@ genz80 {
                 ; Z80 assembly of the program's own (%asm), as it stands.  It names the
                 ; program's variables as this generator writes them: an underscore, and
                 ; underscores for the dots (txt.plot.col is _txt_plot_col).
+                raw(";%asm")
                 buf.add_bytes(o, c.text, c.textlen)
                 nl()
+                raw(";%end")
                 ; (what it leaves in the carry is not known)
                 previous = 0
             }
@@ -777,6 +801,22 @@ genz80 {
             reg_from_pair(r, 0, "hl")
             if size == 4
                 reg_from_pair(r, 2, "de")
+        }
+    }
+
+    ; register to = register from, a word at a time where there is one
+    sub copy_reg(uword target_reg, uword source_reg, ubyte size) {
+        if size == 1 {
+            a_from_reg(source_reg, 0)
+            reg_from_a(target_reg, 0)
+        }
+        else {
+            pair_from_reg("hl", source_reg, 0)
+            reg_from_pair(target_reg, 0, "hl")
+            if size == 4 {
+                pair_from_reg("hl", source_reg, 2)
+                reg_from_pair(target_reg, 2, "hl")
+            }
         }
     }
 
@@ -1026,7 +1066,23 @@ genz80 {
         ubyte size = size_of(i.type)
         ubyte kind = kind_of(i.op)
         ubyte k
-        if size == 1 {
+        if size == 1 and kind <= 4 and (group == 1 or group == 4) {
+            ; (a byte and a constant: the constant is the instruction's operand)
+            first_a(i, group, 0)
+            when kind {
+                0 -> start("add")
+                1 -> start("sub")
+                2 -> start("and")
+                3 -> start("or")
+                else -> start("xor")
+            }
+            if kind == 0
+                put("a,")
+            putn((i.value as long) & 255)
+            nl()
+            a_first(i, group, 0)
+        }
+        else if size == 1 {
             second_b(i, group, 0)
             first_a(i, group, 0)
             combine(kind, 1)
@@ -1288,6 +1344,19 @@ genz80 {
     ; first operand of a compare into A or HL, the second into B or DE, signed ones with
     ; their top bit turned over (then the unsigned compare says the signed order)
     sub compare_operands(^^ir.Instr i, ubyte size, bool with_register, bool signed) {
+        if size == 1 and not with_register {
+            ; (a byte against a constant: the constant is the operand of the compare)
+            fetch(i.r1, 1)
+            if signed
+                line("xor  $80")
+            start("cp")
+            if signed
+                putn(((i.value as long) ^ $80) & 255)
+            else
+                putn((i.value as long) & 255)
+            nl()
+            return
+        }
         if with_register
             second_reg(i.r2, size)
         else
@@ -1411,10 +1480,8 @@ genz80 {
             ir.OP_LOADR -> {
                 if size == 0
                     unsupported(i)
-                else for k in 0 to size - 1 {
-                    a_from_reg(i.r2, k)
-                    reg_from_a(i.r1, k)
-                }
+                else
+                    copy_reg(i.r1, i.r2, size)
             }
             ir.OP_LOADX -> {
                 if size == 0
@@ -1473,18 +1540,33 @@ genz80 {
             ir.OP_STOREZM -> {
                 if size == 0
                     unsupported(i)
-                else {
+                else if size == 1 {
                     line("xor  a")
-                    for k in 0 to size - 1
-                        mem_from_a(i, k)
+                    mem_from_a(i, 0)
+                }
+                else {
+                    ; (a word at a time)
+                    line("ld  hl,0")
+                    mem_from_pair(i, 0, "hl")
+                    if size == 4
+                        mem_from_pair(i, 2, "hl")
                 }
             }
             ir.OP_STOREIM -> {
                 if size == 0
                     unsupported(i)
-                else for k in 0 to size - 1 {
-                    a_imm((i.value >> (k * 8)) as long)
-                    mem_from_a(i, k)
+                else if size == 1 {
+                    a_imm(i.value as long)
+                    mem_from_a(i, 0)
+                }
+                else {
+                    pair_imm("hl", i.value as long)
+                    mem_from_pair(i, 0, "hl")
+                    if size == 4 {
+                        if ((i.value >> 16) & $ffff) != (i.value & $ffff)
+                            pair_imm("hl", (i.value >> 16) as long)
+                        mem_from_pair(i, 2, "hl")
+                    }
                 }
             }
             ir.OP_STOREX -> {
@@ -2236,12 +2318,22 @@ genz80 {
                 error("the arguments of this call cannot be passed on the Z80 yet", i.sym)
                 return
             }
-            ubyte k
-            for k in 0 to size - 1 {
-                if a.reg != 0
-                    a_from_reg(a.reg, k)
-                else
-                    a_imm((a.value >> (k * 8)) as long)
+            ubyte k = 0
+            while k < size {
+                ; (a word at a time where there is one, else a byte)
+                bool wide = size - k >= 2
+                if wide {
+                    if a.reg != 0
+                        pair_from_reg("hl", a.reg, k)
+                    else
+                        pair_imm("hl", (a.value >> (k * 8)) as long)
+                }
+                else {
+                    if a.reg != 0
+                        a_from_reg(a.reg, k)
+                    else
+                        a_imm((a.value >> (k * 8)) as long)
+                }
                 start("ld")
                 put("(")
                 ; (the parameter: a variable of the subroutine, named there without its scope)
@@ -2256,7 +2348,14 @@ genz80 {
                     put("+")
                     putn(k)
                 }
-                put("),a")
+                if wide {
+                    put("),hl")
+                    k += 2
+                }
+                else {
+                    put("),a")
+                    k++
+                }
                 nl()
             }
             a = a.next

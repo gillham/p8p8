@@ -338,8 +338,10 @@ main {
                     usage()
                 i++
             }
-            else if strings.compare(arg, "-noopt") == 0
+            else if strings.compare(arg, "-noopt") == 0 {
                 peep6502.enabled = false
+                genz80.optimize = false
+            }
             else if strings.compare(arg, "-keepunused") == 0
                 opt_keepunused = true
             else if strings.compare(arg, "-out") == 0 and value != 0 {
