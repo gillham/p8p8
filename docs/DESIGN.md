@@ -808,6 +808,19 @@ keeps a record of 128 bytes for the file that is read and one for the file
 that is written.  `make z80sys` runs the command line and the files in
 tnylpo against what they must print.
 
+On the TRS-80 the file routines are one module for all its DOSes
+(`lib/targets/z80/shared_trsdos_diskio.p8`), byte by byte through the DOS,
+which keeps a file's exact length; the target's own `diskio` has only the
+calls: addresses in the DOS and the ROM for the Model I and III, supervisor
+calls for the Model 4.  A rename is a copy and a delete, since no call does
+it on all of them, and the directory is the DOS's own DIR command.  The
+command line is where HL points when the DOS starts the program: the first
+instructions keep it (`startup_code`; in a program that zcc links,
+`zcc_init` takes it from zcc's own first instruction), and the target's
+`command_line` routine copies it, if it is one.  trs80gp starts a program
+without a command line, so `make trs80sys` tests the arguments by setting
+that HL itself; what a DOS really passes has not been run.
+
 A float is a 32-bit IEEE one in four bytes; loads, stores and moves are
 those of a long.  The arithmetic is z88dk's math32 library's (the left
 operand on the stack, the right one in DE and HL, the result there), and so

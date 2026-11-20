@@ -7,8 +7,10 @@
   `sys.outp` for the Z80's I/O ports, and on CP/M the command line
   (`sys.argc`, `sys.argv`) and files: a `diskio` module through the BDOS
   with reading and writing by pieces and by lines, load and save, delete,
-  rename, exists and the directory.  The TRS-80 targets have no files and
-  no command line yet.
+  rename, exists and the directory.  The TRS-80 targets have the same:
+  files through the DOS's own calls (TRSDOS 2.3 and 1.3, LDOS 5, TRSDOS 6),
+  with names as other machines write them (`data.txt` is `DATA/TXT`), and
+  the command line that the DOS hands a program.
 
 - The Z80 code is much shorter: a pass over each subroutine's assembly
   takes out loads, stores and moves that are not needed, and the generator

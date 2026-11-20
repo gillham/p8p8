@@ -532,6 +532,10 @@ genz80 {
         if target.text("exit_hook") != 0
             target_lines("exit_hook")
         target_lines("exit_code")
+        ; (where the machine's first instructions keep what they are given of the command
+        ; line: a place that the clearing of the variables leaves alone)
+        if target.text("command_line") != 0
+            raw("p8_entry_hl:  defw  0")
         nl()
     }
 
@@ -3735,8 +3739,10 @@ genz80 {
             nl()
             raw("p8_stack_top:")
         }
-        if need_rt[RT_ARGS]
+        if need_rt[RT_ARGS] {
             raw("p8_argument:  defs  128")
+            raw("p8_line:  defs  82")           ; (for a target whose command line must be copied)
+        }
         if need_vregs
             raw("p8_vregs:  defs  32")
         ubyte sn
