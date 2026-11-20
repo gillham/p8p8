@@ -4,11 +4,20 @@
 # what they print is compared.  The generator is new: a program that it cannot build yet
 # is counted, with the first thing it says, and is not a failure.
 #
+# With Z80CMP_MACHINE=trs80 the second is built for the TRS-80 Model I instead (the
+# trs80 target as tests/z80/trs80gp.properties has it) and run in trs80gp by
+# tests/trs80run.sh, which opens a window for each program.
+#
 # Usage: tests/z80cmp.sh <p8c> <program.p8>...
-#        (needs clang, z88dk-z80asm (Z88DK names z88dk's directory) and tnylpo)
+#        (needs clang, z88dk-z80asm (Z88DK names z88dk's directory) and tnylpo,
+#         or trs80gp (TRS80GP names it) for the TRS-80)
 p8c=$1
 shift
 lib=${P8P8_LIB:-lib}
+here=$(cd "$(dirname "$0")" && pwd)
+machine=${Z80CMP_MACHINE:-cpm}
+where="CP/M in tnylpo"
+[ "$machine" = trs80 ] && where="TRS-80 Model I in trs80gp"
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_z80cmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/host" "$work/z80"
@@ -20,8 +29,14 @@ for f in "$@"; do
         skipped=$((skipped + 1))
         continue
     fi
-    if ! "$p8c" -lib "$lib" -target cpm -out "$work/z80" "$f" > "$work/z80.err" 2>&1 \
-            || [ ! -f "$work/z80/$name.com" ]; then
+    if [ "$machine" = trs80 ]; then
+        "$p8c" -lib "$lib" -srcdirs "$lib/targets/trs80" -target "$here/z80/trs80gp.properties" -out "$work/z80" "$f" > "$work/z80.err" 2>&1
+        built="$work/z80/$name.cmd"
+    else
+        "$p8c" -lib "$lib" -target cpm -out "$work/z80" "$f" > "$work/z80.err" 2>&1
+        built="$work/z80/$name.com"
+    fi
+    if [ $? -ne 0 ] || [ ! -f "$built" ]; then
         unbuilt=$((unbuilt + 1))
         echo "not built yet: $f: $(grep -v warning "$work/z80.err" | head -1 | cut -c1-110)"
         continue
@@ -32,7 +47,11 @@ for f in "$@"; do
         continue
     fi
     # (a CP/M file name is eight characters and three)
-    (cd "$work/z80" && cp "$name.com" t.com && timeout 20 tnylpo t.com < /dev/null > "$name.out" 2>&1)
+    if [ "$machine" = trs80 ]; then
+        "$here/trs80run.sh" "$built" > "$work/z80/$name.out" 2>&1
+    else
+        (cd "$work/z80" && cp "$name.com" t.com && timeout 20 tnylpo t.com < /dev/null > "$name.out" 2>&1)
+    fi
     # (CP/M ends its lines with CR LF)
     tr -d '\r' < "$work/z80/$name.out" > "$work/z80/$name.txt"
     if [ "$name" = floatchains ]; then
@@ -51,5 +70,5 @@ for f in "$@"; do
         diff "$work/host/$name.out" "$work/z80/$name.txt" | head -4
     fi
 done
-echo "Z80 comparison (CP/M in tnylpo, against the host): $same the same, $differ different, $unbuilt not built yet, $skipped not for the host"
+echo "Z80 comparison ($where, against the host): $same the same, $differ different, $unbuilt not built yet, $skipped not for the host"
 [ "$differ" -eq 0 ]

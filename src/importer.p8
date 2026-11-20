@@ -40,6 +40,7 @@ importer {
     ^^ubyte triple = 0              ; -triple: a platform profile of an llvm target, or 0 for its default
     ^^ubyte common_library = 0      ; modules that come before those of libdir itself (a library in parts), or 0
     ^^ubyte target_library = 0      ; the target's library directory when its configuration names one (else libdir/target)
+    ^^ubyte own_library = 0         ; the target's own directory when its configuration names another library: searched before that one
     ^^ubyte triple_library = 0      ; that profile's library subdirectory of the target's, searched first
     ^^buf.Buf path = 0
     ^^ubyte kw_import = 0
@@ -239,6 +240,8 @@ importer {
         if by != 0
             trace_by = by.name
         layers = 0
+        if own_library != 0
+            add_layer(own_library, 0, 0, "the target's own, before the library it names")
         if triple_library != 0 and target_library != 0
             add_layer(target_library, triple_library, 0, "the target's own, for the platform")
         if triple_library != 0

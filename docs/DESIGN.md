@@ -724,10 +724,23 @@ prog8c-llvm spells it, names the same target unless `-llvm` asks for the
 LLVM IR: llvm16 itself stays the target that LLVM IR is written for.
 
 What is the machine's and not the CPU's is in the target file: the load
-address, the program's extension, the first instructions (where the stack
-is), how the program ends, and what `-run` runs.  The console and key
-system calls are still CP/M's BDOS in the generator itself; they move when
-a second machine needs them.
+address, the program's extension and format, the first instructions (where
+the stack is), how the program ends, the console (a character out, a key
+without waiting, a character in: three routines of a few lines) and what
+`-run` runs.  The generator has nothing of CP/M in it.  `trs80` is the
+second machine: the TRS-80 Model I and III, whose console and keys are ROM
+calls, and whose program is a command file that the driver makes of the
+assembler's plain image (`cmd_file`: load records, then the start
+address).  A Z80 target's own directory is searched for modules before the
+library it names (`importer.own_library`), so `trs80` has a `textio` of
+its own (the 64 by 16 screen at $3c00, the ROM's cursor address) and
+`cpm` one whose keys go through the target's routines.
+
+`make trs80cmp` is `make z80cmp` for the TRS-80: the programs are built
+with `tests/z80/trs80gp.properties`, a variant of the target whose console
+also writes to the printer and whose end tells the emulator to stop, and
+run in trs80gp by `tests/trs80run.sh`, which prints the emulator's printer
+file.  65 the same, none different.
 
 For the front end and the IR a Z80 machine follows llvm16's rules
 (`importer.family`): 16-bit addresses, no floats, register numbers used

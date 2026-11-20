@@ -846,6 +846,7 @@ main {
             }
             importer.target = tname
             importer.target_library = 0
+            importer.own_library = 0
             ; A machine with a configuration is compiled like prog8c does it: to a program,
             ; unless an option asks for something else; and by p8p8's own code generator,
             ; unless -codegen upstream asks for prog8c-llvm's back end.
@@ -912,6 +913,9 @@ main {
                     tlib = strtab.intern(rb.data, rb.len as uword)
                 }
                 importer.target_library = tlib
+                ; (a Z80 machine's own modules come before those of the library it shares)
+                if is_z80 and target.dir != 0
+                    importer.own_library = target.dir
             }
             else if layered and target.loaded and target.dir != 0
                 importer.target_library = target.dir    ; the machine's own modules come first
@@ -1563,6 +1567,50 @@ main {
                 text[length + n] = list.data[n]
             void io_platform.write_file(path.data, text, length + list.len)
         }
+    }
+
+    ; A TRS-80 command file from the plain image name.bin: load records (1, the length of
+    ; what follows less 2 with 0 for 256, the address, up to 256 bytes less the address),
+    ; then the record that starts the program (2, 2, its address).
+    sub cmd_file(^^ubyte name, ^^ubyte extension, long address) {
+        ^^buf.Buf pathb = buf.new(256)
+        if outdir != 0 {
+            buf.add_str(pathb, outdir)
+            buf.add_byte(pathb, '/')
+        }
+        buf.add_str(pathb, name)
+        buf.add_str(pathb, ".bin")
+        buf.add_byte(pathb, 0)
+        ^^ubyte image
+        long size
+        image, size = file_bytes(pathb.data)
+        if image == 0 {
+            out.err()
+            out.puts("can't read ")
+            out.puts(pathb.data)
+            out.nl()
+            out.exit(1)
+        }
+        ^^buf.Buf cb = buf.new(size + size / 60 + 16)
+        long start = address
+        long at = 0
+        while at < size {
+            long n = size - at
+            if n > 254
+                n = 254
+            buf.add_byte(cb, 1)
+            buf.add_byte(cb, ((n + 2) & 255) as ubyte)
+            buf.add_byte(cb, (address & 255) as ubyte)
+            buf.add_byte(cb, ((address >> 8) & 255) as ubyte)
+            buf.add_bytes(cb, image + at, n)
+            at += n
+            address += n
+        }
+        buf.add_byte(cb, 2)
+        buf.add_byte(cb, 2)
+        buf.add_byte(cb, (start & 255) as ubyte)
+        buf.add_byte(cb, ((start >> 8) & 255) as ubyte)
+        write_output(name, extension, cb)
     }
 
     sub add_output(^^ubyte name, ^^ubyte extension) {
@@ -2321,6 +2369,14 @@ main {
             ^^ubyte zext = target.text("output_extension")
             if zext == 0
                 zext = ".bin"
+            ; (output_format = cmd: a TRS-80 command file, the program in load records;
+            ; the assembler writes name.bin and cmd_file makes name.cmd of it, zcc's
+            ; -create-app does the same)
+            ^^ubyte zfmt = target.text("output_format")
+            bool as_cmd = zfmt != 0 and strings.compare(zfmt, "cmd") == 0
+            ^^ubyte zmade = zext
+            if as_cmd
+                zmade = ".bin"
             if genz80.uses_floats {
                 ; A program with floats is linked by z88dk's zcc for the machine
                 ; (zcc_platform), with its 32-bit maths library and the target's float
@@ -2335,7 +2391,7 @@ main {
                 buf.add_str(cmd, "PATH=\"${Z88DK:+$Z88DK/bin:}$PATH\" ZCCCFG=\"${ZCCCFG:-${Z88DK:+$Z88DK/lib/config}}\" zcc ")
                 buf.add_str(cmd, zplat)
                 buf.add_str(cmd, " --math32 -o ")
-                add_output(name, zext)
+                add_output(name, zmade)
                 buf.add_byte(cmd, ' ')
                 add_output(name, ".asm")
                 buf.add_str(cmd, " \"")
@@ -2347,10 +2403,24 @@ main {
             }
             else {
                 buf.add_str(cmd, "\"${Z88DK:+$Z88DK/bin/}z88dk-z80asm\" -b -o=")
-                add_output(name, zext)
+                add_output(name, zmade)
                 buf.add_byte(cmd, ' ')
                 add_output(name, ".asm")
                 run_cmd("assembling the program")
+                if as_cmd
+                    cmd_file(name, zext, target.number("load_address", $5200))
+            }
+            if as_cmd {
+                ; (the plain image is of no further use)
+                buf.clear(cmd)
+                if outdir != 0 {
+                    buf.add_str(cmd, outdir)
+                    buf.add_byte(cmd, '/')
+                }
+                buf.add_str(cmd, name)
+                buf.add_str(cmd, ".bin")
+                buf.add_byte(cmd, 0)
+                io_platform.delete_file(cmd.data)
             }
             built_ext = zext
             if opt_run {

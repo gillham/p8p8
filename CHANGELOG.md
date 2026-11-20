@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- A second Z80 machine: `-target trs80`, the TRS-80 Model I and III with a
+  DOS.  The program is a command file (`.cmd`), which p8c writes itself;
+  the screen, the console and the keys are the ROM's.  All the test
+  programs print on a Model I in trs80gp what they print on the host
+  (`make trs80cmp`: 65 the same, none different).  What is the machine's is
+  in its target file: the console and key routines moved there from the
+  code generator, for CP/M as well.
+
 - A program with overlays whose variables are put into the overlay window
   (`-varshigh` on the C64, for one) is refused; it was built and went wrong
   when an overlay was brought in.

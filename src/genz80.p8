@@ -76,6 +76,9 @@ genz80 {
     const ubyte RT_CLAMP32 = 15
     const ubyte RT_INLONGS = 16
     const ubyte RT_FSQRT = 17
+    const ubyte RT_CHROUT = 18
+    const ubyte RT_GETKEY = 19
+    const ubyte RT_CHRIN = 20
 
     sub error(str message, ^^ubyte detail) {
         out.err()
@@ -470,8 +473,9 @@ genz80 {
             put("    org  ")
             putn(target.number("load_address", $0100))
             nl()
-            ; (the machine's first instructions: where the stack is, as the target file says)
-            target_lines("startup_code")
+            ; (the machine's first instructions, when it needs any: where the stack is)
+            if target.text("startup_code") != 0
+                target_lines("startup_code")
         }
         ; the variables without values are zero
         line("ld  hl,p8_bss_start")
@@ -504,7 +508,12 @@ genz80 {
         }
         long k = 0
         while text[k] != 0 {
-            put("    ")
+            ; (a label, a line that ends with a colon, stands at the margin)
+            long stop = k
+            while text[stop] != 0 and text[stop] != '\n'
+                stop++
+            if stop == k or text[stop - 1] != ':'
+                put("    ")
             while text[k] != 0 and text[k] != '\n' {
                 buf.add_byte(o, text[k])
                 k++
@@ -2325,11 +2334,9 @@ genz80 {
         when i.value as long {
             1 -> line("jp  p8_exit")        ; the end of the program, as the target ends one
             2 -> {
-                ; a character to the console (BDOS function 2)
+                ; a character to the console: the machine's routine (console_out)
                 arg_a(a0)
-                line("ld  e,a")
-                line("ld  c,2")
-                line("call  5")
+                call_rt(RT_CHROUT, "p8rt_chrout")
             }
             3 -> {
                 ; a string that ends with 0
@@ -2360,15 +2367,12 @@ genz80 {
                 call_rt(RT_FILLW, "p8rt_fillw")
             }
             69 -> {
-                ; a character from the console, waited for and shown (BDOS function 1)
-                line("ld  c,1")
-                line("call  5")
+                ; a character from the console, waited for and shown (char_in)
+                call_rt(RT_CHRIN, "p8rt_chrin")
             }
             217 -> {
-                ; a key, or 0 when none is waiting (BDOS function 6)
-                line("ld  e,255")
-                line("ld  c,6")
-                line("call  5")
+                ; a key, or 0 when none is waiting (key_poll)
+                call_rt(RT_GETKEY, "p8rt_getkey")
             }
             218 -> call_rt(RT_WAITKEY, "p8rt_waitkey")
             210 -> {
@@ -2539,9 +2543,8 @@ genz80 {
         if need_rt[RT_WAITKEY] {
             raw("; waits for a key and gives it in A, without showing it")
             raw("p8rt_waitkey:")
-            line("ld  e,255")
-            line("ld  c,6")
-            line("call  5")
+            line("call  p8rt_getkey")
+            need_rt[RT_GETKEY] = true
             line("or  a")
             line("jr  z,p8rt_waitkey")
             line("ret")
@@ -2875,9 +2878,8 @@ genz80 {
             line("or  a")
             line("ret  z")
             line("push  hl")
-            line("ld  e,a")
-            line("ld  c,2")
-            line("call  5")
+            line("call  p8rt_chrout")
+            need_rt[RT_CHROUT] = true
             line("pop  hl")
             line("inc  hl")
             line("jr  p8rt_print")
@@ -2932,6 +2934,26 @@ genz80 {
             line("ld  h,b")
             line("ld  l,c")
             line("ret")
+            nl()
+        }
+        ; The console is the machine's: these three routines are lines of the target
+        ; file.  Each ends by returning; the character or key is in A.
+        if need_rt[RT_CHROUT] {
+            raw("; a character (in A) to the console")
+            raw("p8rt_chrout:")
+            target_lines("console_out")
+            nl()
+        }
+        if need_rt[RT_GETKEY] {
+            raw("; A = a key, or 0 when none is waiting")
+            raw("p8rt_getkey:")
+            target_lines("key_poll")
+            nl()
+        }
+        if need_rt[RT_CHRIN] {
+            raw("; A = a character from the console, waited for and shown")
+            raw("p8rt_chrin:")
+            target_lines("char_in")
             nl()
         }
     }
