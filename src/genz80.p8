@@ -397,12 +397,13 @@ genz80 {
         put("; Program: ")
         put(prog.name)
         nl()
-        line("; written by p8p8's Z80 code generator, for z88dk-z80asm; a CP/M program")
+        line("; written by p8p8's Z80 code generator, for z88dk-z80asm")
         ; (the load address is the target's: $0100 for CP/M)
         put("    org  ")
         putn(target.number("load_address", $0100))
         nl()
-        line("ld  sp,($0006)          ; the stack below the BDOS")
+        ; (the machine's first instructions: where the stack is, as the target file says)
+        target_lines("startup_code")
         ; the variables without values are zero
         line("ld  hl,p8_bss_start")
         line("ld  bc,p8_bss_end-p8_bss_start")
@@ -419,7 +420,9 @@ genz80 {
         nl()
         line("call  p8_init_globals")
         line("call  _main_start")
-        line("jp  0                   ; back to CP/M")
+        ; (how the program ends: the target's; sys.exit comes here too)
+        raw("p8_exit:")
+        target_lines("exit_code")
         nl()
         put("p8_init_globals:")
         nl()
@@ -447,6 +450,26 @@ genz80 {
         }
         runtime()
         variables()
+    }
+
+    ; the lines of a key of the target file, as instructions
+    sub target_lines(str key) {
+        ^^ubyte text = target.text(key)
+        if text == 0 {
+            error("the target file lacks a key that a Z80 machine needs", key)
+            return
+        }
+        long k = 0
+        while text[k] != 0 {
+            put("    ")
+            while text[k] != 0 and text[k] != '\n' {
+                buf.add_byte(o, text[k])
+                k++
+            }
+            nl()
+            if text[k] == '\n'
+                k++
+        }
     }
 
     sub subroutine(^^ir.Sub s) {
@@ -1970,7 +1993,7 @@ genz80 {
         ^^ir.Arg a2 = arg_n(i, 2)
         ^^ir.Arg res = i.results
         when i.value as long {
-            1 -> line("jp  0")              ; the end of the program: back to CP/M
+            1 -> line("jp  p8_exit")        ; the end of the program, as the target ends one
             2 -> {
                 ; a character to the console (BDOS function 2)
                 arg_a(a0)

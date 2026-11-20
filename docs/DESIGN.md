@@ -723,6 +723,12 @@ writes assembly for z88dk's z80asm and has it made into a CP/M program;
 prog8c-llvm spells it, names the same target unless `-llvm` asks for the
 LLVM IR: llvm16 itself stays the target that LLVM IR is written for.
 
+What is the machine's and not the CPU's is in the target file: the load
+address, the program's extension, the first instructions (where the stack
+is), how the program ends, and what `-run` runs.  The console and key
+system calls are still CP/M's BDOS in the generator itself; they move when
+a second machine needs them.
+
 For the front end and the IR a Z80 machine follows llvm16's rules
 (`importer.family`): 16-bit addresses, no floats, register numbers used
 again in every subroutine, no 6502 conventions.  Its library is still the

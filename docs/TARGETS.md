@@ -131,6 +131,10 @@ beginning.  The keys it reads:
 | Key | Meaning |
 |-----|---------|
 | `load_address` | where the program begins (`$0100` for CP/M) |
+| `output_extension` | of the program file (`.com`) |
+| `startup_code` | the first instructions: where the stack is (`\n` between lines) |
+| `exit_code` | how the program ends; `sys.exit` comes here too |
+| `run_command` | what `-run` runs, with `{file}` for the program (p8p8) |
 | `library` | the directory with the target's modules, as for any target |
 | `library_platform` | a subdirectory of `library` that is searched before it (p8p8) |
 

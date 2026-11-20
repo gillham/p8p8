@@ -2301,16 +2301,36 @@ main {
         if is_z80 {
             ; the assembly that p8p8 wrote: z88dk's z80asm makes the CP/M program of it
             ; (Z88DK names z88dk's directory when its bin is not in the PATH)
+            ; The program's extension and what -run runs are the target's
+            ; (output_extension, run_command with {file} for the program).
+            ^^ubyte zext = target.text("output_extension")
+            if zext == 0
+                zext = ".bin"
             buf.add_str(cmd, "\"${Z88DK:+$Z88DK/bin/}z88dk-z80asm\" -b -o=")
-            add_output(name, ".com")
+            add_output(name, zext)
             buf.add_byte(cmd, ' ')
             add_output(name, ".asm")
             run_cmd("assembling the program")
-            built_ext = ".com"
+            built_ext = zext
             if opt_run {
+                ^^ubyte zrun = target.text("run_command")
+                if zrun == 0 {
+                    out.err()
+                    out.puts("error: -run: the target file has no run_command for this machine\n")
+                    out.exit(1)
+                }
                 buf.clear(cmd)
-                buf.add_str(cmd, "tnylpo ")
-                add_output(name, ".com")
+                long zk = 0
+                while zrun[zk] != 0 {
+                    if buf.bytes_equal(zrun + zk, "{file}", 6) {
+                        add_output(name, zext)
+                        zk += 6
+                    }
+                    else {
+                        buf.add_byte(cmd, zrun[zk])
+                        zk++
+                    }
+                }
                 run_cmd("running the program")
             }
             return
