@@ -714,6 +714,29 @@ with an REU, in xmega65 (as 45GS02 and as 6502 code), and three programs in x16e
 65C02 code and as 65816 code: there the program is in native mode when it
 goes through JSRFAR, and the 16-bit runs are in the overlays as anywhere.
 
+## The Z80
+
+A beginning (`src/genz80.p8`).  `-target llvm16 -triple z80-cpm` writes
+assembly for z88dk's z80asm and has it made into a CP/M program; `-run`
+starts it in tnylpo.  The library is the llvm16 one (`lib/targets/llvm16`,
+with its `cpm` family): Prog8 code, and `%ir` blocks whose system calls are
+what the machine has to do.  The generator turns those into instructions
+with `irparse.expand` and lowers them like the rest.
+
+Every IR register has a place in memory (`p8r_N`); an instruction takes its
+operands from there into A, or HL and DE, works, and puts the result back.
+A call stores its arguments in the subroutine's parameter variables and
+takes a result from A or HL.  The IR's carry after a compare is the 6502's
+(clear for "less"), the Z80's is the other way round, so a branch on the
+carry looks at what set it.  System calls 2 and 3 (a character, a string)
+go to CP/M's BDOS.  An instruction that is not written yet is an error that
+names it: most of the longs, signed division, floats, the other system
+calls.
+
+`make z80cmp` builds the test programs for the host and for CP/M and
+compares what they print; a program the generator cannot build yet is
+counted.  At the start: 16 the same, 5 different, 49 not built.
+
 ## Machines and the library
 
 Nothing about a particular machine is in the compiler.  A 6502 machine is a

@@ -1364,7 +1364,7 @@ checker {
 
     ; is the program for a 6502 machine?  (Not the virtual machine, not a hosted or 68000 target.)
     sub for_6502() -> bool {
-        return types.POINTER_SIZE == 2 and target_name != 0 and strings.compare(target_name, "virtual") != 0
+        return types.POINTER_SIZE == 2 and not llvm_target and target_name != 0 and strings.compare(target_name, "virtual") != 0
     }
 
     ; Does an asmsub's assembly end by leaving it?  Upstream's rule: the last line of its

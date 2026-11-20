@@ -19,6 +19,7 @@
 %import llvmgen
 %import gen6502
 %import gen68k
+%import genz80
 %import irprune
 %import target
 %import peep6502
@@ -59,6 +60,7 @@ main {
     ^^ubyte opt_target = 0          ; -target: a name, or a .properties file
     bool opt_own = false            ; p8p8's 6502 code generator, not prog8c-llvm's back end
     bool is_m68k = false            ; the target is a 68000 machine
+    bool is_z80 = false             ; llvm16 with a z80 triple: p8p8's own Z80 code generator
     ubyte opt_codegen = 0           ; -codegen: 0 not given, 1 own, 2 upstream
     ubyte opt_encoding = encoding.E_INVALID     ; -encoding: the default encoding, in place of the target's
     bool opt_asmlist = false        ; -asmlist: the assembler writes a listing
@@ -919,6 +921,16 @@ main {
         else if importer.triple != 0 {
             if strings.compare(importer.triple, "mos-c64") == 0 and strings.compare(importer.target, "llvm16") == 0
                 importer.triple_library = "c64"
+            else if strings.compare(importer.triple, "z80-cpm") == 0 and strings.compare(importer.target, "llvm16") == 0 {
+                ; CP/M on the Z80: p8p8's own code generator writes the program (a first
+                ; version), unless the LLVM IR is asked for
+                importer.triple_library = "cpm"
+                is_z80 = true
+                if not explicit_mode {
+                    opt_llvm = false
+                    opt_build = true
+                }
+            }
             else if hosted and (strings.compare(importer.triple, "arm64-apple-macosx") == 0
                     or strings.compare(importer.triple, "x86_64-apple-macosx") == 0
                     or strings.compare(importer.triple, "x86_64-unknown-linux-gnu") == 0
@@ -1116,7 +1128,15 @@ main {
         ^^buf.Buf b = buf.new(65536)
         if opt_build {
             ; what the build step starts from
-            if is_llvm
+            if is_z80 {
+                buf.clear(b)
+                crumb.at("generating Z80 code")
+                genz80.generate(p, b)
+                if genz80.errors > 0
+                    out.exit(1)
+                write_output(oname, ".asm", b)
+            }
+            else if is_llvm
                 opt_llvm = true
             else if not opt_own
                 opt_ir = true           ; (prog8c-llvm's back end starts from the IR file)
@@ -2267,6 +2287,23 @@ main {
         bool mos_c64 = mos and importer.triple_library != 0
         bool windows = is_llvm and not llvm32 and not mos and importer.triple != 0 and strings.compare(importer.triple, "x86_64-pc-windows-msvc") == 0
         ^^ubyte extension = ""
+        if is_z80 {
+            ; the assembly that p8p8 wrote: z88dk's z80asm makes the CP/M program of it
+            ; (Z88DK names z88dk's directory when its bin is not in the PATH)
+            buf.add_str(cmd, "\"${Z88DK:+$Z88DK/bin/}z88dk-z80asm\" -b -o=")
+            add_output(name, ".com")
+            buf.add_byte(cmd, ' ')
+            add_output(name, ".asm")
+            run_cmd("assembling the program")
+            built_ext = ".com"
+            if opt_run {
+                buf.clear(cmd)
+                buf.add_str(cmd, "tnylpo ")
+                add_output(name, ".com")
+                run_cmd("running the program")
+            }
+            return
+        }
         if is_m68k and opt_own {
             ; the assembly that p8p8 wrote: vasm makes an object file, vlink the program,
             ; laid out by the target's link.ld in the library

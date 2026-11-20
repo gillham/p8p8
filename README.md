@@ -28,6 +28,9 @@ The command is `p8c`.
 - For the 68000 there is a first code generator, for the `qemu68k` target
   (a bare 68020 in QEMU), the Amiga 1200 and the Amiga 500: it writes vasm
   assembly.
+- For the Z80 there is the beginning of a code generator: `-target llvm16
+  -triple z80-cpm` builds a CP/M program (z88dk's z80asm).  Small programs
+  run; much is missing.
 - For the host it writes LLVM IR and builds a native executable with clang.
   That is how p8p8 compiles itself.
 

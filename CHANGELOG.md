@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- A beginning of a Z80 code generator: `-target llvm16 -triple z80-cpm`
+  builds a CP/M program with z88dk's z80asm, and `-run` starts it in tnylpo.
+  Bytes and words, calls, loops and text output work; longs, floats and most
+  of the library do not yet.  `make z80cmp` compares with the host: of the
+  test programs 16 print the same, 5 do not, 49 are not built yet.
+
 - `-meminfo` (and `-verbose`) prints after a 6502 program is built where
   the main program is, how many bytes it takes and how many are free below
   the machine's top of memory, and the same for each overlay with the

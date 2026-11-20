@@ -476,6 +476,12 @@ farcheck:	$(P8P8)
 overlaycheck:	$(P8P8)
 	@tests/overlaycheck.sh $(P8P8) | diff -u tests/expected/overlaycheck.txt - && echo "overlay check: as expected"
 
+# make z80cmp: the Z80 code generator (new): the test programs built for the host and for
+# CP/M on the Z80 (llvm16 with the z80-cpm triple), run in tnylpo, their output compared.
+# What it cannot build yet is counted, not a failure.
+z80cmp:	$(P8P8)
+	@tests/z80cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8)
+
 emucmp64:	$(P8P8)
 	@EMUCMP_TARGET=c64 tests/emucmp.sh $(P8P8) .prog8-reference $(EMUTESTS64)
 
