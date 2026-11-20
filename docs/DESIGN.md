@@ -716,10 +716,18 @@ goes through JSRFAR, and the 16-bit runs are in the overlays as anywhere.
 
 ## The Z80
 
-A beginning (`src/genz80.p8`).  `-target llvm16 -triple z80-cpm` writes
-assembly for z88dk's z80asm and has it made into a CP/M program; `-run`
-starts it in tnylpo.  The library is the llvm16 one (`lib/targets/llvm16`,
-with its `cpm` family): Prog8 code, and `%ir` blocks whose system calls are
+A beginning (`src/genz80.p8`).  A Z80 machine is a target with `cpu = z80`
+in its target file; `cpm` is the first (`lib/targets/cpm`).  `-target cpm`
+writes assembly for z88dk's z80asm and has it made into a CP/M program;
+`-run` starts it in tnylpo.  `-target llvm16 -triple z80-cpm`, as
+prog8c-llvm spells it, names the same target unless `-llvm` asks for the
+LLVM IR: llvm16 itself stays the target that LLVM IR is written for.
+
+For the front end and the IR a Z80 machine follows llvm16's rules
+(`importer.family`): 16-bit addresses, no floats, register numbers used
+again in every subroutine, no 6502 conventions.  Its library is still the
+llvm16 one too (`library = ../llvm16` and `library_platform = cpm` in the
+target file, the second naming the subdirectory that is searched first): Prog8 code, and `%ir` blocks whose system calls are
 what the machine has to do.  The generator turns those into instructions
 with `irparse.expand` and lowers them like the rest.
 

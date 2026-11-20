@@ -121,6 +121,19 @@ serves both.
 | `reset_address` | what is pushed as the return address of the program when the zero page is not kept (default `sys.reset_system`) |
 | `jsrfar_routine` | the routine for a call into another bank (default `<name>.x16jsrfar`) |
 
+### A Z80 machine
+
+`cpu = z80` makes the target a Z80 machine: p8p8's Z80 code generator
+writes the program (assembly for z88dk's z80asm), and none of the 6502 keys
+above apply.  `cpm` is the first such target, and the generator is a
+beginning.  The keys it reads:
+
+| Key | Meaning |
+|-----|---------|
+| `load_address` | where the program begins (`$0100` for CP/M) |
+| `library` | the directory with the target's modules, as for any target |
+| `library_platform` | a subdirectory of `library` that is searched before it (p8p8) |
+
 ## What the zero page lists do
 
 Scalar variables go to the free zero page locations: those with `@zp` or

@@ -1,6 +1,6 @@
 #!/bin/sh
 # The Z80 code generator, on CP/M: each program is built for the host (llvm64) and for
-# llvm16 with the z80-cpm triple, the first run as it is and the second in tnylpo, and
+# the cpm target, the first run as it is and the second in tnylpo, and
 # what they print is compared.  The generator is new: a program that it cannot build yet
 # is counted, with the first thing it says, and is not a failure.
 #
@@ -20,7 +20,7 @@ for f in "$@"; do
         skipped=$((skipped + 1))
         continue
     fi
-    if ! "$p8c" -lib "$lib" -target llvm16 -triple z80-cpm -out "$work/z80" "$f" > "$work/z80.err" 2>&1 \
+    if ! "$p8c" -lib "$lib" -target cpm -out "$work/z80" "$f" > "$work/z80.err" 2>&1 \
             || [ ! -f "$work/z80/$name.com" ]; then
         unbuilt=$((unbuilt + 1))
         echo "not built yet: $f: $(grep -v warning "$work/z80.err" | head -1 | cut -c1-110)"

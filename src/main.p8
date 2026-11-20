@@ -60,7 +60,7 @@ main {
     ^^ubyte opt_target = 0          ; -target: a name, or a .properties file
     bool opt_own = false            ; p8p8's 6502 code generator, not prog8c-llvm's back end
     bool is_m68k = false            ; the target is a 68000 machine
-    bool is_z80 = false             ; llvm16 with a z80 triple: p8p8's own Z80 code generator
+    bool is_z80 = false             ; a Z80 machine (cpu = z80 in its target file): p8p8's own Z80 code generator
     ubyte opt_codegen = 0           ; -codegen: 0 not given, 1 own, 2 upstream
     ubyte opt_encoding = encoding.E_INVALID     ; -encoding: the default encoding, in place of the target's
     bool opt_asmlist = false        ; -asmlist: the assembler writes a listing
@@ -817,6 +817,14 @@ main {
             opt_llvm = true         ; (the machine p8c runs on is an llvm target)
         if opt_target == 0 and sizeof(pointer) == 4
             importer.target = "llvm32"
+        importer.family = importer.target
+        ; (prog8c-llvm's spelling of CP/M on the Z80 names the cpm target here, unless the
+        ; LLVM IR is asked for)
+        if opt_target != 0 and not opt_llvm and importer.triple != 0 and strings.compare(opt_target, "llvm16") == 0
+                and strings.compare(importer.triple, "z80-cpm") == 0 {
+            opt_target = "cpm"
+            importer.triple = 0
+        }
         if opt_target != 0 {
             ^^ubyte tname = target.resolve(opt_target, lib_root)
             if tname == 0 {
@@ -833,6 +841,15 @@ main {
             ; unless an option asks for something else; and by p8p8's own code generator,
             ; unless -codegen upstream asks for prog8c-llvm's back end.
             is_m68k = strings.compare(tname, "qemu68k") == 0 or buf.bytes_equal(tname, "amiga", 5)
+            ; a Z80 machine: the language is what it is for llvm16 (16 bit addresses, no
+            ; 6502 conventions), and the program is made by p8p8's Z80 code generator
+            is_z80 = target.z80()
+            if is_z80 {
+                importer.family = "llvm16"
+                importer.triple_library = target.text("library_platform")
+            }
+            else
+                importer.family = tname
             if not explicit_mode {
                 ; no option says what to do: what prog8c does for the target.  A program for
                 ; a machine, the LLVM IR for an llvm target, the IR for the virtual machine.
@@ -844,6 +861,8 @@ main {
                     opt_ir = true
             }
             opt_own = opt_codegen == 1 or (opt_codegen == 0 and target.loaded and opt_build)
+            if is_z80
+                opt_own = false         ; (opt_own is the 6502 and 68000 generators)
             ; a 68000 machine: p8p8's own code generator when a program is asked for
             ; (there is no other way to build one from here yet)
             if is_m68k
@@ -921,16 +940,8 @@ main {
         else if importer.triple != 0 {
             if strings.compare(importer.triple, "mos-c64") == 0 and strings.compare(importer.target, "llvm16") == 0
                 importer.triple_library = "c64"
-            else if strings.compare(importer.triple, "z80-cpm") == 0 and strings.compare(importer.target, "llvm16") == 0 {
-                ; CP/M on the Z80: p8p8's own code generator writes the program (a first
-                ; version), unless the LLVM IR is asked for
-                importer.triple_library = "cpm"
-                is_z80 = true
-                if not explicit_mode {
-                    opt_llvm = false
-                    opt_build = true
-                }
-            }
+            else if strings.compare(importer.triple, "z80-cpm") == 0 and strings.compare(importer.target, "llvm16") == 0
+                importer.triple_library = "cpm"     ; (with -llvm: the LLVM IR of the CP/M library)
             else if hosted and (strings.compare(importer.triple, "arm64-apple-macosx") == 0
                     or strings.compare(importer.triple, "x86_64-apple-macosx") == 0
                     or strings.compare(importer.triple, "x86_64-unknown-linux-gnu") == 0
@@ -953,8 +964,8 @@ main {
         }
         if irtext != 0 {
             ; the IR is there already: no front end
-            types.set_target(importer.target)
-            encoding.set_target(importer.target)
+            types.set_target(importer.family)
+            encoding.set_target(importer.family)
             if parser.scratch == 0
                 parser.scratch = buf.new(64)        ; (the driver's own scratch buffer is the parser's)
             crumb.at("reading the IR file")
@@ -1009,7 +1020,7 @@ main {
         resolver.resolve_program()
         if diag.errors > 0
             out.exit(1)
-        types.set_target(importer.target)
+        types.set_target(importer.family)
         types.far_bits = 0
         if target.loaded and target.number("far_address_bits", 0) != 0 {
             ; (only for the CPU that has the instructions: the one of -cpu, or the target's)
@@ -1020,7 +1031,7 @@ main {
                     or strings.compare(cpuname, "65c816") == 0 or strings.compare(cpuname, "w65c816") == 0)
                 types.far_bits = target.number("far_address_bits", 0) as ubyte
         }
-        encoding.set_target(importer.target)
+        encoding.set_target(importer.family)
         if opt_encoding != encoding.E_INVALID
             encoding.target_default = opt_encoding
         crumb.at("typing the program")
@@ -1120,7 +1131,7 @@ main {
     sub code_from_ir(^^ir.Program p, ^^ubyte oname) {
         if out_name != 0
             oname = out_name
-        bool is_llvm = buf.bytes_equal(importer.target, "llvm", 4)
+        bool is_llvm = buf.bytes_equal(importer.family, "llvm", 4)
         irprune.asmsubs_kept = not opt_own or is_llvm
         crumb.at("removing unused code")
         if not opt_keepunused

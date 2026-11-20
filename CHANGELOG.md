@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-- A beginning of a Z80 code generator: `-target llvm16 -triple z80-cpm`
-  builds a CP/M program with z88dk's z80asm, and `-run` starts it in tnylpo.
+- A beginning of a Z80 code generator: `-target cpm` builds a CP/M
+  program with z88dk's z80asm, and `-run` starts it in tnylpo.  (A Z80
+  machine is a target of its own, with `cpu = z80` in its target file;
+  prog8c-llvm's spelling, `-target llvm16 -triple z80-cpm`, means the same.)
   Bytes and words, calls, loops and text output work; longs, floats and most
   of the library do not yet.  `make z80cmp` compares with the host: of the
   test programs 19 print the same and 49 are not built yet.

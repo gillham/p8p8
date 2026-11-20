@@ -98,7 +98,7 @@ checker {
     sub run() {
         if main_name == 0
             init()
-        set_target(importer.target)
+        set_target(importer.family)
         ^^ast.Node wide = typer.wide_integer()
         if no_quads and wide != 0 {
             ; (a number of more than 32 bits, even where it was folded away)

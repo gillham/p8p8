@@ -208,6 +208,12 @@ target {
         return true
     }
 
+    ; is the loaded target a Z80 machine?
+    sub z80() -> bool {
+        ^^ubyte c = get("cpu")
+        return c != 0 and strings.compare(c, "z80") == 0
+    }
+
     ; the value of a key, or 0 when the file does not have it
     sub get(str key) -> ^^ubyte {
         if not loaded

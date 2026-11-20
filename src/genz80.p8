@@ -24,6 +24,7 @@
 %import strings
 %import mem
 %import out
+%import target
 
 genz80 {
     %option ignore_unused
@@ -347,7 +348,10 @@ genz80 {
         put(prog.name)
         nl()
         line("; written by p8p8's Z80 code generator, for z88dk-z80asm; a CP/M program")
-        line("org  $0100")
+        ; (the load address is the target's: $0100 for CP/M)
+        put("    org  ")
+        putn(target.number("load_address", $0100))
+        nl()
         line("ld  sp,($0006)          ; the stack below the BDOS")
         ; the variables without values are zero
         line("ld  hl,p8_bss_start")

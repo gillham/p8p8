@@ -80,7 +80,7 @@ irgen {
         }
         prog = ir.new_program(name, importer.target)
         ; the virtual machine and LLVM take any name; everything else is assembled
-        prefixing = strings.compare(importer.target, "virtual") != 0 and not buf.bytes_equal(importer.target, "llvm", 4)
+        prefixing = strings.compare(importer.target, "virtual") != 0 and not buf.bytes_equal(importer.family, "llvm", 4)
         if prefixing
             mark_unprefixed_blocks()
         split_words = prefixing and types.POINTER_SIZE == 2
@@ -91,7 +91,7 @@ irgen {
         else
             address_irt = ir.T_LONG
         ; variables, constants and structs of every scope
-        ir.reuse_numbers = buf.bytes_equal(importer.target, "llvm", 4)
+        ir.reuse_numbers = buf.bytes_equal(importer.family, "llvm", 4)
         zeropage_registers()
         declare_scope(symtab.global)
         defer_setup()
