@@ -2571,8 +2571,13 @@ checker {
             if not typer.literal_fits(r.b.value, lvt)
                 error(r, "range end value is incompatible with loop variable type")
         }
-        else if r.b.type != 0 and not types.assignable(r.b.type, lvt)
-            error(r, "range end value is incompatible with loop variable type")
+        else if r.b.type != 0 and r.b.type != lvt {
+            ; Upstream wants the very type here, not one that fits: it only
+            ; widens the end to the type of a start that is not a number, so
+            ; that start must have the loop variable's type already.
+            if r.a.kind == ast.N_INT or r.a.type != lvt or not types.assignable(r.b.type, lvt)
+                error(r, "range end value is incompatible with loop variable type")
+        }
     }
 
     ; ---- expressions ----

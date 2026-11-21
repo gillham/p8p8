@@ -1,0 +1,7 @@
+tests/bad_ranges.p8:43:18: error: range end value is incompatible with loop variable type
+tests/bad_ranges.p8:46:18: error: range end value is incompatible with loop variable type
+tests/bad_ranges.p8:49:18: error: range end value is incompatible with loop variable type
+tests/bad_ranges.p8:52:18: error: range end value is incompatible with loop variable type
+tests/bad_ranges.p8:55:18: error: range end value is incompatible with loop variable type
+tests/bad_ranges.p8:58:18: error: range end value is incompatible with loop variable type
+tests/bad_ranges.p8:61:24: error: range end value is incompatible with loop variable type

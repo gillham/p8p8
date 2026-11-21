@@ -327,7 +327,7 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -target cx16 -check tests/bad_overlay.p8 2>&1 | diff -u tests/expected/bad_overlay.txt -
 	@echo "test bad_far (far memory on the MEGA65: what is refused)"
 	@$(P8P8) -lib lib -target mega65 -check tests/bad_far.p8 2>&1 | diff -u tests/expected/bad_far.txt -
-	@for t in bad_upstream bad_upstream2 bad_upstream_syntax; do \
+	@for t in bad_upstream bad_upstream2 bad_upstream_syntax bad_ranges; do \
 	    echo "test $$t (upstream's checks, for the X16; must be rejected)"; \
 	    $(P8P8) -lib lib -target cx16 -check tests/$$t.p8 > $(OUT)/$$t.out 2>&1; \
 	    [ $$? -eq 1 ] || { echo "expected exit status 1"; exit 1; }; \

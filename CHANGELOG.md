@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The end of a `for` loop's range is checked as upstream checks it: a value
+  that is not a number must have the loop variable's own type
+  (`for long k in 0 to wordvalue` is "range end value is incompatible with
+  loop variable type"), unless the start is a variable or expression of
+  that type, which widens the end.  Programs that upstream rejects were
+  accepted before.  Write `0 to wordvalue as long`: the cast now belongs
+  to the end value, as in upstream's grammar, where p8c took it for a cast
+  of the whole range and refused it.
 - On the Z80 machines a subroutine may call itself, directly or by way of
   others: a call that can come back into the calling subroutine keeps that
   subroutine's variables on the stack over it.  (They are fixed memory

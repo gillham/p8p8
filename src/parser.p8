@@ -1257,7 +1257,15 @@ parser {
                 r.a = left
                 r.b = parse_binary(level + 1)
                 ; (upstream's grammar takes all that follows as the end value: "1 to 10 and x"
-                ; is a range that ends at "10 and x")
+                ; is a range that ends at "10 and x", and "0 to n as long" ends at "n as long")
+                while kind() == token.T_KW_AS {
+                    ^^token.Token caststart = cur()
+                    advance()
+                    ^^ast.Node rc = node_at(ast.N_CAST, caststart)
+                    rc.a = r.b
+                    rc.b = parse_type()
+                    r.b = rc
+                }
                 if kind() == token.T_KW_AND or kind() == token.T_KW_OR or kind() == token.T_KW_XOR
                     error("range expression to value must be integer")
                 if accept(token.T_KW_STEP)
