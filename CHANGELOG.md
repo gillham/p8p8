@@ -1,60 +1,40 @@
 # Changes
 
-## Unreleased
+## 0.3.0
 
-- Follows Prog8 master at 32f82e9e1 and the LLVM branch at 62101daa8 (the
-  library and the reference material; the Amiga has a new `hwinfo` module).
-- Struct variables, as upstream has them now: `Point p`,
-  `Point p = [1, 2]`, `Point p = Point:[x=1, y=2]`, with `p.x`, a copy of
-  the whole struct (`q = p`), `&p` and `&&p` (in the data of arrays and
-  other instances too), a struct type declared inside a subroutine, and one
-  at a fixed address (`&Point regs = $d000`).  They are fixed storage, also
-  inside a subroutine, where field values are data that is there when the
-  program is loaded.  On every code generator.  What upstream refuses is
-  refused in its words (a struct compared, given a number, a wrong value
-  for a field).
-- On the 6502 a struct instance without values is in the BSS section
-  (`prog8_struct_instances_bss`), as upstream has it: cleared at startup,
-  not part of the program file, and in RAM when the program is in a ROM.
-  It was zeros in the program file.
-- Three programs that were compiled into something else than was written
-  are errors, as on the LLVM branch: the remainder of a float (`f % 2.0`
-  divided; use `floats.mod()`), `repeat` with a constant count below zero
-  (it ran 256 minus that many times), and an array filled from a range
-  whose ends are not constants (it was filled with zeros).
-- `value in a to b` is checked as upstream checks it: an end of the range
-  that is not a number must fit the type of the value ("incompatible range
-  value type").
-- A call of a label with arguments is "cannot use arguments when calling a
-  label", as upstream has it.
-- `tools/checkprobe.py` counts upstream's errors of every form (its
-  constant folding's "Error:", "Syntax error:", an internal error); it
-  took those programs for accepted.
-- The end of a `for` loop's range is checked as upstream checks it: a value
-  that is not a number must have the loop variable's own type
-  (`for long k in 0 to wordvalue` is "range end value is incompatible with
-  loop variable type"), unless the start is a variable or expression of
-  that type, which widens the end.  Programs that upstream rejects were
-  accepted before.  Write `0 to wordvalue as long`: the cast now belongs
-  to the end value, as in upstream's grammar, where p8c took it for a cast
-  of the whole range and refused it.
-- On the Z80 machines a subroutine may call itself, directly or by way of
-  others: a call that can come back into the calling subroutine keeps that
-  subroutine's variables on the stack over it.  (They are fixed memory
-  otherwise, as on the 6502, and nothing changes for a subroutine that does
-  not do this.)
-- A Z80 program can call routines of z88dk's C library: an `extsub` without
-  an address is one, by its own name (`extsub malloc(uword size) -> uword`).
-  Such a program is linked by `zcc`, and `-Xlink` passes it more options.
-- The `trs80` target writes text straight into the screen's memory: letters
-  are shown as they are, and there is no cursor on the screen.  Letters
-  typed come small unshifted on both models.  Both TRS-80 targets have a
-  `trs80` module (`model`, `dos`, `has_lowercase`, `caps_lock`, `capitals`),
-  as prog8c-llvm's TRS-80 profiles do.
-- In Z80 assembly of a program's own, a name has two underscores for each
-  dot (`txt.plot.col` is `_txt__plot__col`): with one, `main.page_lines`
-  and `main.page.lines` were the same name.
+A Z80 code generator, for CP/M and the TRS-80 Models I, III and 4;
+overlays, for programs larger than a machine's memory; and struct
+variables, which Prog8 has now.  The language follows Prog8 master at
+32f82e9e1 and the LLVM branch at 62101daa8.
+[docs/DIFFERENCES.md](docs/DIFFERENCES.md) lists where p8p8 still does not
+behave as `prog8c` does, and what it has of its own.
 
+### A Z80 code generator: CP/M and the TRS-80
+
+- `-target cpm` builds a CP/M program with z88dk's z80asm, and `-run`
+  starts it in tnylpo.  (A Z80 machine is a target of its own, with
+  `cpu = z80` in its target file; prog8c-llvm's spelling,
+  `-target llvm16 -triple z80-cpm`, means the same.)  Bytes, words and
+  longs, calls, loops, structs, text, keys, memory and floats work.  A
+  program with floats is linked by z88dk's `zcc` with its 32-bit maths
+  library (`Z88DK` names z88dk's directory); one without needs only its
+  assembler.  `make z80cmp` compares with the host (68 test programs print
+  the same, none different; the others do not run on the host), and
+  `make z80ref` with prog8c-llvm's build for CP/M, which is the reference
+  for floats (73 the same, none different).
+- `-target trs80`: the TRS-80 Model I and III with a DOS.  The program is
+  a command file (`.cmd`), which p8c writes itself.  Text goes straight
+  into the screen's memory, letters are shown as they are, and letters
+  typed come small unshifted on both models.  The test programs print on a
+  Model I in trs80gp what they print on the host (`make trs80cmp`), and on
+  a Model III with TRSDOS 1.3 and with LDOS (`make trs80cmp3`).
+- `-target trs80m4`: the TRS-80 Model 4 in its own mode (TRSDOS 6, LS-DOS
+  6), with an 80 by 24 screen through the DOS's supervisor calls
+  (`make trs80cmp4`).
+- Both TRS-80 targets have a `trs80` module (`model`, `dos`,
+  `has_lowercase`, `caps_lock`, `capitals`), as prog8c-llvm's TRS-80
+  profiles do.  What is a machine's own is in its target file: the console
+  and key routines, for CP/M as well.
 - More of the system on the Z80 machines: `sys.wait` and `sys.waitvsync`
   (by counting; `sys.ticks` is 0 where there is no clock), `sys.inp` and
   `sys.outp` for the Z80's I/O ports, and on CP/M the command line
@@ -64,78 +44,34 @@
   files through the DOS's own calls (TRSDOS 2.3 and 1.3, LDOS 5, TRSDOS 6),
   with names as other machines write them (`data.txt` is `DATA/TXT`), and
   the command line that the DOS hands a program.
-
-- The Z80 code is much shorter: a pass over each subroutine's assembly
-  takes out loads, stores and moves that are not needed, and the generator
-  moves words as words and uses constants directly.  Variables without values are no longer zero bytes in the
-  program's file.  The string routines' test is 4,694 bytes (10,263
-  before), long arithmetic 3,200 (4,564), hello 80 (138).  `-noopt` gives
-  the code as it was.  It is faster too: multiplications by constants are
-  additions, and the long multiplication and division do no more steps
-  than the numbers need.  Long multiplication and division work in
-  registers (16-bit products; a 16-bit divisor in two 16-step divisions),
-  and a long sum is two word additions.  `make z80bench`, whose loops no
-  compiler can work out beforehand now: 2.6 seconds in 1,838 bytes, where
-  prog8c-llvm's build takes 2.8 seconds in 16,479.
-  A large program no longer has memory for temporary values that the
-  pass made unnecessary, a call has up to three arguments in A, HL and DE, and what
-  the registers hold is known past the end of an `if`.  An editor for the
-  TRS-80 Model 4 was 37,317 bytes and is 29,347 (prog8c-llvm's: 29,921);
-  its 128K version 48,895 and 38,161 (39,889), which is what lets it run.
-
-- The Z80 machines have a library of their own (`lib/targets/z80`), no
-  longer llvm16's, and its most used routines are Z80 assembly now: the
-  digits of numbers, reading numbers, and the length, copying and comparing
-  of strings.  Programs are a fifth to a quarter smaller for it (a test of
-  the string routines 14,006 bytes before and 10,263 after; one of long
-  arithmetic 5,769 and 4,564).
-
-- `-target trs80m4`: the TRS-80 Model 4 in its own mode (TRSDOS 6, LS-DOS
-  6), with an 80 by 24 screen through the DOS's supervisor calls.  All the
-  test programs print there what they print on the host (`make trs80cmp4`).
+- The Z80 machines have a library of their own (`lib/targets/z80`), and
+  its most used routines are Z80 assembly: the digits of numbers, reading
+  numbers, and the length, copying and comparing of strings.
+- A subroutine's variables are in fixed places, as on the 6502, and a
+  subroutine may still call itself, directly or by way of others: a call
+  that can come back into the calling subroutine keeps that subroutine's
+  variables on the stack over it.  Nothing changes for a subroutine that
+  does not do this.
+- A Z80 program can call routines of z88dk's C library: an `extsub` without
+  an address is one, by its own name (`extsub malloc(uword size) -> uword`).
+  Such a program is linked by `zcc`, and `-Xlink` passes it more options.
 - `%asm` on a Z80 machine: Z80 assembly as it stands, for z88dk's z80asm.
-  It names the program's variables as the generator writes them
-  (`txt.plot.col` is `_txt__plot__col`).  Subroutines written wholly in
-  assembly (`asmsub`) are not there yet.
-- A target file can be made from another: `base = file`.
+  A name of the program has two underscores for each dot (`txt.plot.col`
+  is `_txt__plot__col`).  Subroutines written wholly in assembly
+  (`asmsub`) are not there yet.
+- A pass over each subroutine's assembly takes out loads, stores and moves
+  that are not needed; the generator moves words as words, uses constants
+  directly, and passes up to three arguments of a call in A, HL and DE.
+  Variables without values are not bytes in the program's file.
+  Multiplications by constants are additions, long multiplication and
+  division work in registers, and a long sum is two word additions.
+  `-noopt` gives the plain code.  `make z80bench`, whose loops no compiler
+  can work out beforehand: 2.6 seconds in 1,838 bytes, where prog8c-llvm's
+  build takes 2.8 seconds in 16,479.  An editor for the TRS-80 Model 4 is
+  29,347 bytes (prog8c-llvm's: 29,921), and its 128K version 38,161
+  (39,889).
 
-- A second Z80 machine: `-target trs80`, the TRS-80 Model I and III with a
-  DOS.  The program is a command file (`.cmd`), which p8c writes itself;
-  the screen, the console and the keys are the ROM's.  All the test
-  programs print on a Model I in trs80gp what they print on the host
-  (`make trs80cmp`: 65 the same, none different), and on a Model III with
-  TRSDOS 1.3 and with LDOS (`make trs80cmp3`).  What is the machine's is
-  in its target file: the console and key routines moved there from the
-  code generator, for CP/M as well.
-
-- A program with overlays whose variables are put into the overlay window
-  (`-varshigh` on the C64, for one) is refused; it was built and went wrong
-  when an overlay was brought in.
-
-- `-asm` (an option of p8p8's own) writes the assembly of p8p8's code
-  generator and stops: for whoever assembles and links it their own way.
-  No assembler has to be installed for it.
-
-- A beginning of a Z80 code generator: `-target cpm` builds a CP/M
-  program with z88dk's z80asm, and `-run` starts it in tnylpo.  (A Z80
-  machine is a target of its own, with `cpu = z80` in its target file;
-  prog8c-llvm's spelling, `-target llvm16 -triple z80-cpm`, means the same.)
-  Bytes, words and longs, signed division, calls, loops, structs, text
-  output, keys, filling and copying memory, and floats work; files and the
-  clock do not yet.  A program with floats is linked by z88dk's `zcc` with
-  its 32-bit maths library (`Z88DK` names z88dk's directory); one without
-  needs only its assembler.  A subroutine's
-  variables are in fixed places, as on the 6502 (on the host they are on the
-  stack, which a subroutine that calls itself can tell).  `make z80cmp`
-  compares with the host: all the test programs build, and 65 print the same
-  (the others do not run on the host).  `make z80ref` compares with
-  prog8c-llvm's build for CP/M, which is the reference for floats: 69 the
-  same, none different.
-
-- `-meminfo` (and `-verbose`) prints after a 6502 program is built where
-  the main program is, how many bytes it takes and how many are free below
-  the machine's top of memory, and the same for each overlay with the
-  sizes of the loader and of the program's file.
+### Overlays (an extension)
 
 - Overlays, an extension, on the Commander X16: a block with `%overlay n`
   has its code in RAM bank n.  The compiler writes the calls into an
@@ -197,6 +133,61 @@
 - `%overlay n` in a subroutine puts that one subroutine into the overlay:
   the way to move code out of `main`.
 - [docs/OVERLAYS.md](docs/OVERLAYS.md): a guide to overlays.
+- A program with overlays whose variables are put into the overlay window
+  (`-varshigh` on the C64, for one) is refused; it was built and went wrong
+  when an overlay was brought in.
+
+### Closer to the reference compiler
+
+- Follows Prog8 master at 32f82e9e1 and the LLVM branch at 62101daa8 (the
+  library and the reference material; the Amiga has a new `hwinfo` module).
+- Struct variables, as upstream has them now: `Point p`,
+  `Point p = [1, 2]`, `Point p = Point:[x=1, y=2]`, with `p.x`, a copy of
+  the whole struct (`q = p`), `&p` and `&&p` (in the data of arrays and
+  other instances too), a struct type declared inside a subroutine, and one
+  at a fixed address (`&Point regs = $d000`).  They are fixed storage, also
+  inside a subroutine, where field values are data that is there when the
+  program is loaded.  On every code generator.  What upstream refuses is
+  refused in its words (a struct compared, given a number, a wrong value
+  for a field).
+- The end of a `for` loop's range is checked as upstream checks it: a value
+  that is not a number must have the loop variable's own type
+  (`for long k in 0 to wordvalue` is "range end value is incompatible with
+  loop variable type"), unless the start is a variable or expression of
+  that type, which widens the end.  Programs that upstream rejects were
+  accepted before.  Write `0 to wordvalue as long`: the cast now belongs
+  to the end value, as in upstream's grammar, where p8c took it for a cast
+  of the whole range and refused it.
+- `value in a to b` is checked as upstream checks it: an end of the range
+  that is not a number must fit the type of the value ("incompatible range
+  value type").
+- A call of a label with arguments is "cannot use arguments when calling a
+  label", as upstream has it.
+- Three programs that were compiled into something else than was written
+  are errors, as on the LLVM branch: the remainder of a float (`f % 2.0`
+  divided; use `floats.mod()`), `repeat` with a constant count below zero
+  (it ran 256 minus that many times), and an array filled from a range
+  whose ends are not constants (it was filled with zeros).
+- On the 6502 a struct instance without values is in the BSS section
+  (`prog8_struct_instances_bss`), as upstream has it: cleared at startup,
+  not part of the program file, and in RAM when the program is in a ROM.
+  It was zeros in the program file.
+
+### The compiler itself
+
+- `-asm` (an option of p8p8's own) writes the assembly of p8p8's code
+  generator and stops: for whoever assembles and links it their own way.
+  No assembler has to be installed for it.
+- `-meminfo` (and `-verbose`) prints after a 6502 program is built where
+  the main program is, how many bytes it takes and how many are free below
+  the machine's top of memory, and the same for each overlay with the
+  sizes of the loader and of the program's file.
+- A target file can be made from another: `base = file`.
+- `tools/checkprobe.py` counts upstream's errors of every form (its
+  constant folding's "Error:", "Syntax error:", an internal error); it
+  took those programs for accepted.
+
+### Faster and smaller programs for the 65816 and the 45GS02
 
 - 65816: far memory at a known address is read and written with the CPU's
   24-bit addresses (`lda $040000`, `sta $040010,x`), not through a pointer,
@@ -206,6 +197,9 @@
   of far data is 1,789 bytes where it was 2,989.
 - 45GS02: a long in far memory is fetched and put back with one 32-bit
   instruction each (the test of far data: 3,199 bytes, from 3,345).
+
+### Fixed
+
 - The launchers of the VIC-20 with 8 KB or more (`vic20plus8`,
   `vic20plus24`) reset the machine at the end of a program that used zero
   page BASIC needs, as the unexpanded VIC-20's and the other machines' do;

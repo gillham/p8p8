@@ -28,11 +28,13 @@ The command is `p8c`.
 - For the 68000 there is a first code generator, for the `qemu68k` target
   (a bare 68020 in QEMU), the Amiga 1200 and the Amiga 500: it writes vasm
   assembly.
-- For the Z80 there is the beginning of a code generator: `-target cpm`,
-  `-target trs80` (the TRS-80 Model I and III) and `-target trs80m4` (the
-  Model 4) build a CP/M program and TRS-80 command files with z88dk (its assembler; for a program with
-  floats its `zcc` and maths library).  The test programs run; files and
-  the clock are missing, and the code is not optimised yet.
+- For the Z80 there is a code generator too: `-target cpm`, `-target trs80`
+  (the TRS-80 Model I and III) and `-target trs80m4` (the Model 4) build a
+  CP/M program and TRS-80 command files with z88dk (its assembler; for a
+  program with floats or calls of its C library, its `zcc`).  Files, the
+  command line and the I/O ports are there; a clock and `asmsub` are not.
+  The test programs print what they print on the host, in tnylpo and
+  trs80gp, and an editor of 30 KB runs on the Model 4.
 - For the host it writes LLVM IR and builds a native executable with clang.
   That is how p8p8 compiles itself.
 
@@ -324,6 +326,10 @@ suites need 64tass, x16emu and VICE as well.
 | `make emucmp65` | programs for the MEGA65 print the same as 6502 code and as 45GS02 code, in xmega65 |
 | `make farcheck` | memory beyond 64 KB on the X16's 65816, the SuperCPU and the MEGA65: the addressing modes by hand, the compiler's code and the library's |
 | `make overlaycheck` | programs with overlays (`%overlay n`), with their loader, in x16emu |
+| `make z80cmp`, `make z80ref` | programs built for CP/M print in tnylpo what they print on the host, and what `prog8c-llvm`'s CP/M build prints |
+| `make trs80cmp`, `make trs80cmp3`, `make trs80cmp4` | the same programs on a TRS-80 Model I, III and 4 in trs80gp (`TRS80GP` names the emulator), against the host |
+| `make z80sys`, `make trs80sys`, `make trs80dos`, `make trs80screen` | on the Z80 machines: the command line and files, the DOS still working after a program has ended, and the screen routines |
+| `make z80bench` | the time and size of a benchmark for CP/M, against `prog8c-llvm`'s build |
 | `make irroundtrip` | a program built from the IR file that `p8c -ir` wrote is the same bytes as from its source |
 | `tools/benchmega65.sh` | loops of long, word and byte arithmetic on the MEGA65 as 6502 code and as 45GS02 code |
 | `make qemucmpir` | the same programs built from p8p8's IR by `prog8c-llvm`'s 68000 back end (`-codegen upstream`) |
