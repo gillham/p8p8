@@ -790,7 +790,12 @@ register numbers are used again from one subroutine to the next); an
 instruction takes its
 operands from there into A, or HL and DE, works, and puts the result back.
 A call stores its arguments in the subroutine's parameter variables and
-takes a result from A or HL (a long: DE and HL, HL the low half).  The IR's carry after a compare is the 6502's
+takes a result from A or HL (a long: DE and HL, HL the low half).  The last
+argument, when it is a byte or a word, stays in A or HL: such a subroutine
+has a second way in, `p8e_name`, one store above its name, so that store is
+there once and not at every call (`register_param`).  The name itself stays
+the way in for whatever has stored all the arguments: a jump, a call
+through a pointer, assembly.  (Not with `-noopt`.)  The IR's carry after a compare is the 6502's
 (clear for "less"), the Z80's is the other way round, so a branch on the
 carry looks at what set it.  System calls 2 and 3 (a character, a string)
 go to CP/M's BDOS.  An instruction that is not written yet is an error that
@@ -912,7 +917,17 @@ and makes a jump to a label within 30 lines the short one: no instruction
 the generator writes is longer than four bytes, so that is in reach
 whatever the lines are.
 
-More in the generator: a multiplication by a constant is doubling and
+A label of the compiler's own that only jumps above it name is not the end
+of what is known: the registers hold there what they held at every one of
+those jumps and, when the code above runs into it, there too (`joined`).
+That is the end of an `if` with an `else`, and of a condition made into a
+value, whose two stores and one load of a place become nothing.  And
+`ld a,0` is `xor a` where no line reads the flags before they are set again
+(`zero_loads`).
+
+More in the generator: an element of a word array has its index doubled in
+HL (`add hl,hl`), a word goes through a pointer by way of HL or DE and not
+a byte at a time, and a byte against 0 is `or a`.  A multiplication by a constant is doubling and
 adding from the constant's top bit down; a word is shifted in HL; word
 logic with a constant touches only the bytes the constant changes; a word
 against 0 is `ld a,h / or l`; the flags of a word's increment are made

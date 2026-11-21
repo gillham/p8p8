@@ -48,6 +48,18 @@ peepz80 {
     const ubyte F_WIDE_DE = 12      ; ld e,a / xor a / ld d,a   (in place of "xor a")
     const ubyte F_WIDE_HL = 13      ; ld l,a / xor a / ld h,a
     const ubyte F_SHORT = 14        ; jr in place of jp
+    const ubyte F_XOR = 15          ; xor a in place of "ld a,0"
+
+    ; What the registers hold at the jumps to a label that is still to come, by the
+    ; label's name: where the jumps agree (and what runs into the label from above
+    ; agrees too), the label has it.
+    const ubyte JOINS = 48
+    ^^long j_name_at = 0
+    ^^uword j_name_len = 0
+    ^^long j_at = 0                 ; three for each: HL, DE, A
+    ^^uword j_len = 0
+    ubyte joins = 0
+    bool joins_full = false
 
     ; what a register holds: the text of a place (in src), or nothing (length 0)
     long hl_at
@@ -92,6 +104,7 @@ peepz80 {
             superseded()
             dead_loads()
             dead_stores()
+            zero_loads()
             short_jumps()
             bool worked = write(b)
             rounds++
@@ -135,6 +148,7 @@ peepz80 {
                 F_A_IS -> loaded(b, k, "    ld  a,")
                 F_WIDE_DE -> buf.add_str(b, "    ld  e,a\n    xor  a\n    ld  d,a\n")
                 F_WIDE_HL -> buf.add_str(b, "    ld  l,a\n    xor  a\n    ld  h,a\n")
+                F_XOR -> buf.add_str(b, "    xor  a\n")
                 F_SHORT -> {
                     buf.add_str(b, "    jr")
                     buf.add_bytes(b, src.data + starts[k] + 6, lengths[k] - 6)
@@ -378,6 +392,14 @@ peepz80 {
 
     sub follow() {
         forget()
+        if j_name_at == 0 {
+            j_name_at = mem.alloc(JOINS * sizeof(long))
+            j_name_len = mem.alloc(JOINS * sizeof(uword))
+            j_at = mem.alloc(JOINS * 3 * sizeof(long))
+            j_len = mem.alloc(JOINS * 3 * sizeof(uword))
+        }
+        joins = 0
+        joins_full = false
         bool own_asm = false
         bool unreached = false      ; after a jump or return without a condition, until a label
         long k
@@ -395,7 +417,8 @@ peepz80 {
             if lengths[k] == 0 or t[0] == ';'
                 continue
             if not instruction(k) {
-                forget()            ; a label, or something else
+                if not joined(k, unreached)
+                    forget()        ; a label that anything may come to, or something else
                 unreached = false
                 continue
             }
@@ -424,6 +447,12 @@ peepz80 {
             else if is(m_at, m_len, "jp") or is(m_at, m_len, "jr") or is(m_at, m_len, "ret") {
                 ; (with a condition the next line is reached with everything as it is;
                 ; without one it is not reached from here at all)
+                if not is(m_at, m_len, "ret") {
+                    if o2_len != 0
+                        jump_to(o2_at, o2_len)
+                    else
+                        jump_to(o1_at, o1_len)
+                }
                 if o2_len == 0 and not (is(m_at, m_len, "ret") and o1_len != 0) {
                     forget()
                     unreached = true
@@ -453,6 +482,173 @@ peepz80 {
                 changed(o1_at, o1_len)
             else
                 forget()            ; a call, a block move, anything else
+        }
+    }
+
+    ; ---- labels where the ways in agree ----
+
+    sub join_of(long at, uword n) -> ubyte {
+        ubyte j = 0
+        while j < joins {
+            if same(at, n, j_name_at[j], j_name_len[j])
+                return j
+            j++
+        }
+        return 255
+    }
+
+    ; a jump to the label that the operand names, with the registers as they are
+    sub jump_to(long at, uword n) {
+        if n == 0 or src.data[at] == '('
+            return
+        ubyte j = join_of(at, n)
+        if j == 255 {
+            if joins == JOINS {
+                joins_full = true
+                return
+            }
+            j = joins
+            joins++
+            j_name_at[j] = at
+            j_name_len[j] = n
+            j_at[j * 3] = hl_at
+            j_len[j * 3] = hl_len
+            j_at[j * 3 + 1] = de_at
+            j_len[j * 3 + 1] = de_len
+            j_at[j * 3 + 2] = a_at
+            j_len[j * 3 + 2] = a_len
+            return
+        }
+        if not same(hl_at, hl_len, j_at[j * 3], j_len[j * 3])
+            j_len[j * 3] = 0
+        if not same(de_at, de_len, j_at[j * 3 + 1], j_len[j * 3 + 1])
+            j_len[j * 3 + 1] = 0
+        if not same(a_at, a_len, j_at[j * 3 + 2], j_len[j * 3 + 2])
+            j_len[j * 3 + 2] = 0
+    }
+
+    sub name_char(ubyte c) -> bool {
+        return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_'
+    }
+
+    ; does line k name the label (as a whole name)?
+    sub names_label(long k, long at, uword n) -> bool {
+        if lengths[k] < n
+            return false
+        long p = starts[k]
+        long last = starts[k] + lengths[k] - n
+        while p <= last {
+            uword q = 0
+            while q < n and src.data[p + q] == src.data[at + q]
+                q++
+            if q == n and (p == starts[k] or not name_char(src.data[p - 1]))
+                    and (p == last or not name_char(src.data[p + n]))
+                return true
+            p++
+        }
+        return false
+    }
+
+    ; Line k is not an instruction.  When it is a label of the compiler's own that only
+    ; jumps above it name, the registers hold what they held at all of those jumps and
+    ; (unless nothing runs into the label) just above it: true then, with the registers
+    ; set so.  False: nothing is known.
+    sub joined(long k, bool unreached) -> bool {
+        if joins_full
+            return false
+        long at = starts[k]
+        uword n = lengths[k]
+        if n < 6 or src.data[at + n - 1] != ':'
+            return false
+        n--
+        ; (only the labels that the compiler made: no other subroutine jumps to them)
+        bool own = false
+        if n > 14 and src.data[at] == '_' and src.data[at + 1] == 'p' and src.data[at + 2] == '8' and src.data[at + 3] == '_'
+                and src.data[at + 4] == 'l' and src.data[at + 5] == 'a' and src.data[at + 6] == 'b' and src.data[at + 7] == 'e'
+                and src.data[at + 8] == 'l' and src.data[at + 9] == '_' and src.data[at + 10] == 'g' and src.data[at + 11] == 'e'
+                and src.data[at + 12] == 'n' and src.data[at + 13] == '_'
+            own = true
+        if src.data[at] == 'p' and src.data[at + 1] == '8' and src.data[at + 2] == 'z' and src.data[at + 3] == '_'
+            own = true
+        if not own
+            return false
+        ; who names it: above only jumps, below nobody
+        bool in_asm = false
+        long j
+        for j in 0 to count - 1 {
+            if j == k
+                continue
+            ^^ubyte t = src.data + starts[j]
+            if lengths[j] >= 5 and t[0] == ';' and t[1] == '%' {
+                in_asm = t[2] == 'a'
+                continue
+            }
+            if lengths[j] == 0 or (t[0] == ';' and not in_asm)
+                continue
+            if not names_label(j, at, n)
+                continue
+            if j > k or in_asm or not instruction(j)
+                return false
+            if not is(m_at, m_len, "jp") and not is(m_at, m_len, "jr")
+                return false
+        }
+        ubyte found = join_of(at, n)
+        if found == 255
+            return not unreached    ; (no jump comes here: as from above, when that runs in)
+        if unreached {
+            hl_at = j_at[found * 3]
+            hl_len = j_len[found * 3]
+            de_at = j_at[found * 3 + 1]
+            de_len = j_len[found * 3 + 1]
+            a_at = j_at[found * 3 + 2]
+            a_len = j_len[found * 3 + 2]
+            return true
+        }
+        if not same(hl_at, hl_len, j_at[found * 3], j_len[found * 3])
+            hl_len = 0
+        if not same(de_at, de_len, j_at[found * 3 + 1], j_len[found * 3 + 1])
+            de_len = 0
+        if not same(a_at, a_len, j_at[found * 3 + 2], j_len[found * 3 + 2])
+            a_len = 0
+        return true
+    }
+
+    ; "ld a,0" where the flags are not read before they are set again: "xor a", a byte
+    ; shorter.
+    sub zero_loads() {
+        long k
+        for k in 0 to count - 1 {
+            if not kept(k) or not is(m_at, m_len, "ld") or not is(o1_at, o1_len, "a") or not is(o2_at, o2_len, "0")
+                continue
+            long j = k
+            ubyte steps = 0
+            while steps < 16 {
+                steps++
+                j = next_live(j)
+                if j >= count or src.data[starts[j]] == ';'
+                    break
+                if fates[j] != F_KEEP {
+                    if fates[j] == F_SHORT
+                        break
+                    continue        ; (a load in another form)
+                }
+                if not instruction(j)
+                    continue        ; (a label: on into what follows it)
+                if is(m_at, m_len, "ld") or is(m_at, m_len, "ex") or is(m_at, m_len, "inc") or is(m_at, m_len, "dec")
+                    continue
+                if is(m_at, m_len, "push") or is(m_at, m_len, "pop") {
+                    if is(o1_at, o1_len, "af")
+                        break
+                    continue
+                }
+                if is(m_at, m_len, "cp") or is(m_at, m_len, "or") or is(m_at, m_len, "and") or is(m_at, m_len, "xor")
+                        or is(m_at, m_len, "sub") or is(m_at, m_len, "neg") or is(m_at, m_len, "call")
+                        or (is(m_at, m_len, "add") and is(o1_at, o1_len, "a"))
+                        or (is(m_at, m_len, "ret") and o1_len == 0) {
+                    fates[k] = F_XOR
+                }
+                break
+            }
         }
     }
 
@@ -488,9 +684,10 @@ peepz80 {
                 else if same(o2_at, o2_len, hl_at, hl_len) {
                     if hl_loaded_next(k) {
                         ; (HL is loaded anew at once: the two change places)
+                        ; (What HL gets is not counted on: the load that follows
+                        ; must stay, since the exchange itself may go, see into_de.)
                         fates[k] = F_EX
-                        hl_at = de_at
-                        hl_len = de_len
+                        hl_len = 0
                     }
                     else
                         fates[k] = F_DE_HL

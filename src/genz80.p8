@@ -345,6 +345,27 @@ genz80 {
     ; HL = the address of the instruction's memory operand, with its index when it has
     ; one (r2 times the element's size)
     sub hl_address(^^ir.Instr i, bool indexed) {
+        if indexed and i.r2 != 0 and i.scale > 1 {
+            ; (the index times its size in HL, where doubling is one byte)
+            if size_of(ir.regtypes[i.r2]) == 1 {
+                a_from_reg(i.r2, 0)
+                line("ld  l,a")
+                line("ld  h,0")
+            }
+            else
+                pair_from_reg("hl", i.r2, 0)
+            ubyte doubled = i.scale
+            while doubled > 1 {
+                line("add  hl,hl")
+                doubled >>= 1
+            }
+            start("ld")
+            put("de,")
+            mem_name(i, 0)
+            nl()
+            line("add  hl,de")
+            return
+        }
         start("ld")
         put("hl,")
         mem_name(i, 0)
@@ -381,6 +402,14 @@ genz80 {
     ; the bytes at (HL) into register r, or the other way round
     sub reg_from_hl(uword r, ubyte size) {
         ubyte k
+        if size == 2 {
+            line("ld  a,(hl)")
+            line("inc  hl")
+            line("ld  h,(hl)")
+            line("ld  l,a")
+            reg_from_pair(r, 0, "hl")
+            return
+        }
         for k in 0 to size - 1 {
             line("ld  a,(hl)")
             reg_from_a(r, k)
@@ -391,6 +420,13 @@ genz80 {
 
     sub hl_from_reg(uword r, ubyte size) {
         ubyte k
+        if size == 2 {
+            pair_from_reg("de", r, 0)
+            line("ld  (hl),e")
+            line("inc  hl")
+            line("ld  (hl),d")
+            return
+        }
         for k in 0 to size - 1 {
             a_from_reg(r, k)
             line("ld  (hl),a")
@@ -614,6 +650,21 @@ genz80 {
         this_index = index_of(s.name)
         own_registers(s)
         carry_cell = carry_scan(s)
+        ^^ir.Param in_reg = register_param(s)
+        if in_reg != 0 {
+            ; (the way in for a call that has the last argument in A or HL)
+            put("p8e")
+            name(s.name)
+            put(":\n")
+            start("ld")
+            put("(")
+            name(in_reg.name)
+            if element_size(in_reg.typestr) == 2
+                put("),hl")
+            else
+                put("),a")
+            nl()
+        }
         ^^ir.Chunk c = s.chunks
         bool first = true
         while c != 0 {
@@ -1587,6 +1638,10 @@ genz80 {
             fetch(i.r1, 1)
             if signed
                 line("xor  $80")
+            if not signed and (i.value as long) & 255 == 0 {
+                line("or  a")       ; (the same flags as "cp 0", a byte shorter)
+                return
+            }
             start("cp")
             if signed
                 putn(((i.value as long) ^ $80) & 255)
@@ -2663,6 +2718,36 @@ genz80 {
         }
     }
 
+    ; The last parameter of a subroutine, when it is a byte or a word: a call has that
+    ; argument in A or HL and comes in at "p8e_name", where it is stored.  (The name
+    ; itself stays the way in for everything that has stored the arguments: a call
+    ; through a pointer, a jump, assembly.)
+    sub register_param(^^ir.Sub s) -> ^^ir.Param {
+        if not optimize or s == 0 or s.is_external or s.params == 0
+            return 0
+        ^^ir.Param p = s.params
+        while p.next != 0
+            p = p.next
+        if p.name == 0 or p.typestr == 0 or text_has(p.typestr, "[") or text_has(p.typestr, "float") or struct_of(p.typestr) != 0
+            return 0
+        ubyte psize = element_size(p.typestr)
+        if psize != 1 and psize != 2
+            return 0
+        return p
+    }
+
+    ; is the argument the one for that parameter?
+    sub is_register_arg(^^ir.Arg a, ^^ir.Param p) -> bool {
+        if p == 0 or a.next != 0 or a.name == 0 or size_of(a.type) != element_size(p.typestr)
+            return false
+        ; (the argument's name may be without its scope)
+        long pn = strings.length(p.name)
+        long an = strings.length(a.name)
+        if an > pn or strings.compare(p.name + (pn - an), a.name) != 0
+            return false
+        return an == pn or p.name[pn - an - 1] == '.'
+    }
+
     sub call_instruction(^^ir.Instr i) {
         ^^ir.Sub callee = sub_named(i.sym)
         if callee != 0 and callee.is_external {
@@ -2676,6 +2761,8 @@ genz80 {
         long kept_from = 0
         if comes_back
             kept_from = save_own(i)
+        ^^ir.Param in_reg = register_param(callee)
+        bool by_register = false
         ^^ir.Arg a = i.args
         while a != 0 {
             ubyte size = size_of(a.type)
@@ -2684,6 +2771,22 @@ genz80 {
                 return
             }
             ubyte k = 0
+            if is_register_arg(a, in_reg) {
+                by_register = true
+                if size == 2 {
+                    if a.reg != 0
+                        pair_from_reg("hl", a.reg, 0)
+                    else
+                        pair_imm("hl", a.value as long)
+                }
+                else {
+                    if a.reg != 0
+                        a_from_reg(a.reg, 0)
+                    else
+                        a_imm(a.value as long)
+                }
+                k = size
+            }
             while k < size {
                 ; (a word at a time where there is one, else a byte)
                 bool wide = size - k >= 2
@@ -2726,6 +2829,8 @@ genz80 {
             a = a.next
         }
         start("call")
+        if by_register
+            put("p8e")
         name(i.sym)
         nl()
         ^^ir.Arg r = i.results
