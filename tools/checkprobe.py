@@ -20,12 +20,12 @@ for name,target,body in cases:
     src=body if body.lstrip().startswith('%') or 'main {' in body else '%import textio\nmain {\n'+body+'\n}\n'
     f=f'{S}/{name}.p8'; open(f,'w').write(src)
     u=(subprocess.run(['prog8c-llvm','-target',target,'-check',f],capture_output=True,text=True));u=u if isinstance(u,str) else strip(u.stdout+u.stderr)
-    um=[re.sub(r'.*\.p8:(\d+):\d+: ','\\1: ',l) for l in u.split('\n') if 'ERROR' in l]
+    um=[re.sub(r'.*\.p8:(\d+):\d+: ','\\1: ',l) for l in u.split('\n') if re.search(r'ERROR|: Error: |Syntax error: |^internal error',l)]
     if not um:
         # -check stops early: a full compile finds more (unless the optimizer removed the code first)
         u=subprocess.run(['prog8c-llvm','-target',target,'-quiet','-out',S,f],capture_output=True,text=True)
         u=strip(u.stdout+u.stderr)
-    um=[re.sub(r'.*\.p8:(\d+):\d+: ','\\1: ',l) for l in u.split('\n') if 'ERROR' in l]
+    um=[re.sub(r'.*\.p8:(\d+):\d+: ','\\1: ',l) for l in u.split('\n') if re.search(r'ERROR|: Error: |Syntax error: |^internal error',l)]
     p=subprocess.run(['build/llvm64/p8c','-target',target,'-lib',L,'-ir','-out',S,f],capture_output=True,text=True)
     pm=[re.sub(r'.*\.p8:(\d+):\d+: error: ','\\1: ',l) for l in (p.stdout+p.stderr).split('\n') if 'error' in l]
     same = bool(um)==bool(pm)

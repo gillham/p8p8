@@ -22,6 +22,11 @@
   divided; use `floats.mod()`), `repeat` with a constant count below zero
   (it ran 256 minus that many times), and an array filled from a range
   whose ends are not constants (it was filled with zeros).
+- A call of a label with arguments is "cannot use arguments when calling a
+  label", as upstream has it.
+- `tools/checkprobe.py` counts upstream's errors of every form (its
+  constant folding's "Error:", "Syntax error:", an internal error); it
+  took those programs for accepted.
 - The end of a `for` loop's range is checked as upstream checks it: a value
   that is not a number must have the loop variable's own type
   (`for long k in 0 to wordvalue` is "range end value is incompatible with

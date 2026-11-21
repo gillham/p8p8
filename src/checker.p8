@@ -2795,6 +2795,11 @@ checker {
                 }
                 check_name(e.a, e.a.name)
                 expressions(e.b)
+                if e.b != 0 and e.a.kind == ast.N_IDENT and e.a.extra != 0 {
+                    ^^symtab.Sym called_label = e.a.extra
+                    if called_label.kind == symtab.K_LABEL
+                        error(e.b, "cannot use arguments when calling a label")
+                }
                 ^^ast.Node marg = e.b
                 long margn = 1
                 while marg != 0 {

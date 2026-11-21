@@ -102,9 +102,15 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
 
 - **Errors.**  p8p8 reports the errors of upstream's that have been ported,
   with upstream's wording.  `tools/checkprobe.py` compares the two compilers
-  on 195 small invalid programs: they agree on 182.  In 11 of the others
-  p8p8 rejects a program that upstream's `-check` lets through (upstream
-  rejects most of them too once the values are used).  Known programs that
+  on 195 small invalid programs: they agree on 180 (against the LLVM
+  branch at 62101daa8).  In 9 of the others p8p8 rejects a program that
+  upstream lets through, because its optimizer removed the code first
+  (it rejects them too once the values are used).  In 6 upstream stops and
+  p8p8 does not: two of those are internal errors of upstream (an `inline`
+  subroutine that calls itself, `repeat` with a string as its count), two
+  are errors of its constant folding that it does not give for the same
+  operation on variables (`~` of a boolean constant, `&` of a float
+  constant), and two are in the list below.  Known programs that
   upstream rejects and p8p8 accepts:
   - an `if` expression whose two values have types that cannot be assigned;
   - `unroll` with a count that is not constant;
