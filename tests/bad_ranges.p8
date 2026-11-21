@@ -61,5 +61,13 @@ main {
         for uword t in 0 to ub {                ; error
             cx16.r0L++
         }
+
+        ; "in" a range: an end that is not a number must fit the type of the value
+        if n in ub to uw                        ; fine
+            cx16.r0L++
+        if ub in 0 to uw                        ; error
+            cx16.r0L++
+        if 4 in sb to 10                        ; error
+            cx16.r0L++
     }
 }

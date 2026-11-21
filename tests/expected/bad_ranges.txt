@@ -5,3 +5,5 @@ tests/bad_ranges.p8:52:18: error: range end value is incompatible with loop vari
 tests/bad_ranges.p8:55:18: error: range end value is incompatible with loop variable type
 tests/bad_ranges.p8:58:18: error: range end value is incompatible with loop variable type
 tests/bad_ranges.p8:61:24: error: range end value is incompatible with loop variable type
+tests/bad_ranges.p8:68:23: error: incompatible range value type
+tests/bad_ranges.p8:70:17: error: incompatible range value type

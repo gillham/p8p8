@@ -22,6 +22,9 @@
   divided; use `floats.mod()`), `repeat` with a constant count below zero
   (it ran 256 minus that many times), and an array filled from a range
   whose ends are not constants (it was filled with zeros).
+- `value in a to b` is checked as upstream checks it: an end of the range
+  that is not a number must fit the type of the value ("incompatible range
+  value type").
 - A call of a label with arguments is "cannot use arguments when calling a
   label", as upstream has it.
 - `tools/checkprobe.py` counts upstream's errors of every form (its

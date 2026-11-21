@@ -3077,6 +3077,13 @@ checker {
         if (op == token.T_KW_IN or op == parser.OP_NOT_IN) and e.b.kind != ast.N_ARRAYLIT and e.b.kind != ast.N_RANGE and e.b.kind != ast.N_STR
                 and rt != 0 and not types.is_array(rt) and rt != types.T_STR
             error(e.b, "iterable must be an array, a string, or a range expression")
+        if (op == token.T_KW_IN or op == parser.OP_NOT_IN) and e.b.kind == ast.N_RANGE and lt != 0 and types.is_integer(lt) {
+            ; an end of the range that is not a number must fit the type of what is looked for
+            if e.b.a.kind != ast.N_INT and e.b.a.type != 0 and types.is_integer(e.b.a.type) and not types.assignable(e.b.a.type, lt)
+                error(e.b.a, "incompatible range value type")
+            else if e.b.b.kind != ast.N_INT and e.b.b.type != 0 and types.is_integer(e.b.b.type) and not types.assignable(e.b.b.type, lt)
+                error(e.b.b, "incompatible range value type")
+        }
         if (op == token.T_KW_IN or op == parser.OP_NOT_IN) and far_variable(e.b)
             error(e.b, "an array in far memory cannot be searched with 'in' yet (its address does not fit a pointer)")
         if op == token.T_PLUS or op == token.T_MINUS {
