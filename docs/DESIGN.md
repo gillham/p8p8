@@ -790,10 +790,13 @@ register numbers are used again from one subroutine to the next); an
 instruction takes its
 operands from there into A, or HL and DE, works, and puts the result back.
 A call stores its arguments in the subroutine's parameter variables and
-takes a result from A or HL (a long: DE and HL, HL the low half).  The last
-argument, when it is a byte or a word, stays in A or HL: such a subroutine
-has a second way in, `p8e_name`, one store above its name, so that store is
-there once and not at every call (`register_param`).  The name itself stays
+takes a result from A or HL (a long: DE and HL, HL the low half).  Up to
+three arguments stay in registers: from the last parameter back, the first
+byte in A, the first word in HL, the next word in DE.  Such a subroutine
+has a second way in, `p8e_name`, with the stores above its name, so they
+are there once and not at every call (`param_register`).  A byte result is
+also put in L only in a program that has a call through a pointer
+somewhere, whose caller takes HL.  The name itself stays
 the way in for whatever has stored all the arguments: a jump, a call
 through a pointer, assembly.  (Not with `-noopt`.)  The IR's carry after a compare is the 6502's
 (clear for "less"), the Z80's is the other way round, so a branch on the
@@ -922,8 +925,10 @@ of what is known: the registers hold there what they held at every one of
 those jumps and, when the code above runs into it, there too (`joined`).
 That is the end of an `if` with an `else`, and of a condition made into a
 value, whose two stores and one load of a place become nothing.  And
-`ld a,0` is `xor a` where no line reads the flags before they are set again
-(`zero_loads`).
+`ld a,0` is `xor a` where no line reads the flags before they are set again,
+and a test whose flags nobody reads is dropped (`zero_loads`, `dead_after`).
+A load of A, HL or DE that only loads of other things follow before it is
+loaded again is dropped too (`dead_loads_far`).
 
 More in the generator: an element of a word array has its index doubled in
 HL (`add hl,hl`), a word goes through a pointer by way of HL or DE and not

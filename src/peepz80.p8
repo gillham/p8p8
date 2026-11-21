@@ -103,12 +103,13 @@ peepz80 {
             forwarded()
             superseded()
             dead_loads()
+            dead_loads_far()
             dead_stores()
             zero_loads()
             short_jumps()
             bool worked = write(b)
             rounds++
-            if not worked or rounds == 6
+            if not worked or rounds == 10
                 break
         }
     }
@@ -613,41 +614,138 @@ peepz80 {
         return true
     }
 
+    ; After line k: is A (when need_a) and are the flags (when need_flags) set anew
+    ; before anything reads them?  Only what is certain counts.
+    sub dead_after(long k, bool need_a, bool need_flags) -> bool {
+        long j = k
+        ubyte steps = 0
+        while steps < 16 {
+            steps++
+            j = next_live(j)
+            if j >= count or src.data[starts[j]] == ';'
+                return false
+            if fates[j] == F_XOR
+                return true         ; (both anew)
+            if fates[j] != F_KEEP
+                return false
+            if not instruction(j)
+                continue            ; (a label: on into what follows it)
+            if is(m_at, m_len, "ld") {
+                if is(o2_at, o2_len, "a") {
+                    if need_a
+                        return false
+                }
+                else if is(o1_at, o1_len, "a") {
+                    need_a = false
+                    if not need_flags
+                        return true
+                }
+                continue
+            }
+            if is(m_at, m_len, "ex")
+                continue
+            if is(m_at, m_len, "inc") or is(m_at, m_len, "dec") {
+                if is(o1_at, o1_len, "a") and need_a
+                    return false
+                continue
+            }
+            if is(m_at, m_len, "push") or is(m_at, m_len, "pop") {
+                if is(o1_at, o1_len, "af")
+                    return false
+                continue
+            }
+            if is(m_at, m_len, "xor") and is(o1_at, o1_len, "a")
+                return true
+            if is(m_at, m_len, "cp") or is(m_at, m_len, "or") or is(m_at, m_len, "and") or is(m_at, m_len, "xor")
+                    or is(m_at, m_len, "sub") or is(m_at, m_len, "neg") or (is(m_at, m_len, "add") and is(o1_at, o1_len, "a")) {
+                ; (they read A, and make the flags)
+                return not need_a
+            }
+            if is(m_at, m_len, "call") and o2_len == 0 {
+                ; (a subroutine by its name takes nothing in registers and leaves
+                ; nothing in A that is counted on; the others may take A)
+                if src.data[o1_at] == '_'
+                    return true
+                return false
+            }
+            if is(m_at, m_len, "ret") and o1_len == 0
+                return not need_a
+            return false
+        }
+        return false
+    }
+
     ; "ld a,0" where the flags are not read before they are set again: "xor a", a byte
-    ; shorter.
+    ; shorter.  And a test whose flags nobody reads ("or a", "cp N", and "ld a,h / or l"
+    ; when A is not read either) is nothing.
     sub zero_loads() {
         long k
         for k in 0 to count - 1 {
-            if not kept(k) or not is(m_at, m_len, "ld") or not is(o1_at, o1_len, "a") or not is(o2_at, o2_len, "0")
+            if not kept(k)
+                continue
+            if is(m_at, m_len, "ld") and is(o1_at, o1_len, "a") and is(o2_at, o2_len, "0") {
+                if dead_after(k, false, true)
+                    fates[k] = F_XOR
+            }
+            else if (is(m_at, m_len, "or") and is(o1_at, o1_len, "a")) or (is(m_at, m_len, "cp") and o1_len != 0 and src.data[o1_at] != '(') {
+                if dead_after(k, false, true)
+                    fates[k] = F_DROP
+            }
+            else if is(m_at, m_len, "ld") and is(o1_at, o1_len, "a") and is(o2_at, o2_len, "h") {
+                long k1 = next_live(k)
+                if kept(k1) and is(m_at, m_len, "or") and is(o1_at, o1_len, "l") and dead_after(k1, true, true) {
+                    fates[k] = F_DROP
+                    fates[k1] = F_DROP
+                }
+            }
+        }
+    }
+
+    ; ---- loads that nothing reads ----
+
+    ; may line k (an instruction, its parts found) read the register?  1 HL, 2 DE, 3 A
+    sub reads(ubyte which) -> bool {
+        ; (only loads are looked into: everything else may)
+        if not is(m_at, m_len, "ld")
+            return true
+        when which {
+            1 -> return is(o2_at, o2_len, "hl") or is(o2_at, o2_len, "(hl)") or is(o2_at, o2_len, "h") or is(o2_at, o2_len, "l")
+                    or is(o1_at, o1_len, "(hl)") or is(o1_at, o1_len, "h") or is(o1_at, o1_len, "l") or is(o1_at, o1_len, "sp")
+            2 -> return is(o2_at, o2_len, "de") or is(o2_at, o2_len, "(de)") or is(o2_at, o2_len, "d") or is(o2_at, o2_len, "e")
+                    or is(o1_at, o1_len, "(de)") or is(o1_at, o1_len, "d") or is(o1_at, o1_len, "e")
+            else -> return is(o2_at, o2_len, "a")
+        }
+    }
+
+    ; A load of HL, DE or A, then only loads that do not read it, then another load of
+    ; it: the first is for nothing.
+    sub dead_loads_far() {
+        long k
+        for k in 0 to count - 2 {
+            if not kept(k) or not is(m_at, m_len, "ld") or is_volatile(o2_at, o2_len)
+                continue
+            ubyte which = 0
+            if is(o1_at, o1_len, "hl")
+                which = 1
+            else if is(o1_at, o1_len, "de")
+                which = 2
+            else if is(o1_at, o1_len, "a")
+                which = 3
+            if which == 0
                 continue
             long j = k
             ubyte steps = 0
-            while steps < 16 {
+            while steps < 12 {
                 steps++
                 j = next_live(j)
-                if j >= count or src.data[starts[j]] == ';'
+                if j >= count or fates[j] != F_KEEP or not instruction(j)
                     break
-                if fates[j] != F_KEEP {
-                    if fates[j] == F_SHORT
-                        break
-                    continue        ; (a load in another form)
+                if reads(which)
+                    break
+                if (which == 1 and is(o1_at, o1_len, "hl")) or (which == 2 and is(o1_at, o1_len, "de")) or (which == 3 and is(o1_at, o1_len, "a")) {
+                    fates[k] = F_DROP
+                    break
                 }
-                if not instruction(j)
-                    continue        ; (a label: on into what follows it)
-                if is(m_at, m_len, "ld") or is(m_at, m_len, "ex") or is(m_at, m_len, "inc") or is(m_at, m_len, "dec")
-                    continue
-                if is(m_at, m_len, "push") or is(m_at, m_len, "pop") {
-                    if is(o1_at, o1_len, "af")
-                        break
-                    continue
-                }
-                if is(m_at, m_len, "cp") or is(m_at, m_len, "or") or is(m_at, m_len, "and") or is(m_at, m_len, "xor")
-                        or is(m_at, m_len, "sub") or is(m_at, m_len, "neg") or is(m_at, m_len, "call")
-                        or (is(m_at, m_len, "add") and is(o1_at, o1_len, "a"))
-                        or (is(m_at, m_len, "ret") and o1_len == 0) {
-                    fates[k] = F_XOR
-                }
-                break
             }
         }
     }

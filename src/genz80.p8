@@ -49,6 +49,7 @@ genz80 {
     bool[256] slot_used             ; the hardware register slots that the code names
     bool need_print = false
     bool need_jphl = false
+    bool pointer_calls = true       ; the program has a call through a pointer somewhere (call_graph finds out)
     bool need_vregs = false
     bool uses_floats = false        ; the program has floats: it is linked by zcc with the maths library
     ; Recursion.  A subroutine's variables and the places of its IR registers are fixed
@@ -650,20 +651,27 @@ genz80 {
         this_index = index_of(s.name)
         own_registers(s)
         carry_cell = carry_scan(s)
-        ^^ir.Param in_reg = register_param(s)
-        if in_reg != 0 {
-            ; (the way in for a call that has the last argument in A or HL)
+        if register_params(s) != 0 {
+            ; (the way in for a call that has arguments in A, HL and DE)
             put("p8e")
             name(s.name)
             put(":\n")
-            start("ld")
-            put("(")
-            name(in_reg.name)
-            if element_size(in_reg.typestr) == 2
-                put("),hl")
-            else
-                put("),a")
-            nl()
+            ^^ir.Param rp = s.params
+            while rp != 0 {
+                ubyte where = param_register(s, rp)
+                if where != 0 {
+                    start("ld")
+                    put("(")
+                    name(rp.name)
+                    when where {
+                        1 -> put("),a")
+                        2 -> put("),hl")
+                        else -> put("),de")
+                    }
+                    nl()
+                }
+                rp = rp.next
+            }
         }
         ^^ir.Chunk c = s.chunks
         bool first = true
@@ -1936,7 +1944,7 @@ genz80 {
             ir.OP_RETURNR -> {
                 if size != 0 {
                     fetch(i.r1, size)
-                    if size == 1
+                    if size == 1 and pointer_calls
                         line("ld  l,a")         ; (for a caller through a pointer, which takes HL)
                     line("ret")
                 }
@@ -1946,7 +1954,8 @@ genz80 {
             ir.OP_RETURNI -> {
                 if size == 1 {
                     a_imm(i.value as long)
-                    line("ld  l,a")
+                    if pointer_calls
+                        line("ld  l,a")
                 }
                 else if size == 2
                     pair_imm("hl", i.value as long)
@@ -2718,34 +2727,94 @@ genz80 {
         }
     }
 
-    ; The last parameter of a subroutine, when it is a byte or a word: a call has that
-    ; argument in A or HL and comes in at "p8e_name", where it is stored.  (The name
-    ; itself stays the way in for everything that has stored the arguments: a call
-    ; through a pointer, a jump, assembly.)
-    sub register_param(^^ir.Sub s) -> ^^ir.Param {
-        if not optimize or s == 0 or s.is_external or s.params == 0
+    ; Parameters in registers.  From the last parameter back: the first byte found is
+    ; passed in A, the first word in HL, the next word in DE.  A call that has all of
+    ; them comes in at "p8e_name", where they are stored.  (The name itself stays the way
+    ; in for everything that has stored the arguments: a call through a pointer, a jump,
+    ; assembly.)
+    ; Where the parameter is passed: 0 in its variable, 1 A, 2 HL, 3 DE.
+    sub param_register(^^ir.Sub s, ^^ir.Param want) -> ubyte {
+        if not optimize or s == 0 or s.is_external
             return 0
+        ; (from the end: so count them, then take the last, the one before it ...)
+        ubyte total = 0
         ^^ir.Param p = s.params
-        while p.next != 0
+        while p != 0 {
+            total++
             p = p.next
-        if p.name == 0 or p.typestr == 0 or text_has(p.typestr, "[") or text_has(p.typestr, "float") or struct_of(p.typestr) != 0
-            return 0
-        ubyte psize = element_size(p.typestr)
-        if psize != 1 and psize != 2
-            return 0
-        return p
+        }
+        bool a_free = true
+        bool hl_free = true
+        bool de_free = true
+        while total != 0 {
+            p = s.params
+            ubyte k = 1
+            while k < total {
+                p = p.next
+                k++
+            }
+            ubyte where = 0
+            if p.name != 0 and p.typestr != 0 and not text_has(p.typestr, "[") and not text_has(p.typestr, "float")
+                    and struct_of(p.typestr) == 0 {
+                ubyte psize = element_size(p.typestr)
+                if psize == 1 and a_free {
+                    where = 1
+                    a_free = false
+                }
+                else if psize == 2 and hl_free {
+                    where = 2
+                    hl_free = false
+                }
+                else if psize == 2 and de_free {
+                    where = 3
+                    de_free = false
+                }
+            }
+            if p == want
+                return where
+            total--
+        }
+        return 0
     }
 
-    ; is the argument the one for that parameter?
-    sub is_register_arg(^^ir.Arg a, ^^ir.Param p) -> bool {
-        if p == 0 or a.next != 0 or a.name == 0 or size_of(a.type) != element_size(p.typestr)
-            return false
-        ; (the argument's name may be without its scope)
-        long pn = strings.length(p.name)
+    ; how many parameters are passed in registers
+    sub register_params(^^ir.Sub s) -> ubyte {
+        ubyte n = 0
+        if s == 0
+            return 0
+        ^^ir.Param p = s.params
+        while p != 0 {
+            if param_register(s, p) != 0
+                n++
+            p = p.next
+        }
+        return n
+    }
+
+    ; the parameter that the argument is for (the argument's name may be without its
+    ; scope), or 0
+    sub param_of(^^ir.Sub s, ^^ir.Arg a) -> ^^ir.Param {
+        if s == 0 or a.name == 0
+            return 0
         long an = strings.length(a.name)
-        if an > pn or strings.compare(p.name + (pn - an), a.name) != 0
-            return false
-        return an == pn or p.name[pn - an - 1] == '.'
+        ^^ir.Param p = s.params
+        while p != 0 {
+            if p.name != 0 and p.typestr != 0 and size_of(a.type) == element_size(p.typestr) {
+                long pn = strings.length(p.name)
+                if an <= pn and strings.compare(p.name + (pn - an), a.name) == 0 and (an == pn or p.name[pn - an - 1] == '.')
+                    return p
+            }
+            p = p.next
+        }
+        return 0
+    }
+
+    ; where the argument of a call to s is passed (as param_register)
+    sub arg_register(^^ir.Sub s, ^^ir.Arg a) -> ubyte {
+        ^^ir.Param p = param_of(s, a)
+        if p == 0
+            return 0
+        return param_register(s, p)
     }
 
     sub call_instruction(^^ir.Instr i) {
@@ -2761,9 +2830,19 @@ genz80 {
         long kept_from = 0
         if comes_back
             kept_from = save_own(i)
-        ^^ir.Param in_reg = register_param(callee)
+        ; (in registers when the call has an argument for every parameter that is
+        ; passed so)
         bool by_register = false
+        ubyte in_registers = 0
         ^^ir.Arg a = i.args
+        while a != 0 {
+            if arg_register(callee, a) != 0
+                in_registers++
+            a = a.next
+        }
+        if in_registers != 0 and in_registers == register_params(callee)
+            by_register = true
+        a = i.args
         while a != 0 {
             ubyte size = size_of(a.type)
             if a.name == 0 or size == 0 or size > 4 {
@@ -2771,22 +2850,8 @@ genz80 {
                 return
             }
             ubyte k = 0
-            if is_register_arg(a, in_reg) {
-                by_register = true
-                if size == 2 {
-                    if a.reg != 0
-                        pair_from_reg("hl", a.reg, 0)
-                    else
-                        pair_imm("hl", a.value as long)
-                }
-                else {
-                    if a.reg != 0
-                        a_from_reg(a.reg, 0)
-                    else
-                        a_imm(a.value as long)
-                }
-                k = size
-            }
+            if by_register and arg_register(callee, a) != 0
+                k = size            ; (loaded last, below)
             while k < size {
                 ; (a word at a time where there is one, else a byte)
                 bool wide = size - k >= 2
@@ -2827,6 +2892,39 @@ genz80 {
                 nl()
             }
             a = a.next
+        }
+        if by_register {
+            ; (DE, then HL, then A: none of the loads disturbs the one before)
+            ubyte where = 3
+            while where != 0 {
+                a = i.args
+                while a != 0 {
+                    if arg_register(callee, a) == where {
+                        when where {
+                            1 -> {
+                                if a.reg != 0
+                                    a_from_reg(a.reg, 0)
+                                else
+                                    a_imm(a.value as long)
+                            }
+                            2 -> {
+                                if a.reg != 0
+                                    pair_from_reg("hl", a.reg, 0)
+                                else
+                                    pair_imm("hl", a.value as long)
+                            }
+                            else -> {
+                                if a.reg != 0
+                                    pair_from_reg("de", a.reg, 0)
+                                else
+                                    pair_imm("de", a.value as long)
+                            }
+                        }
+                    }
+                    a = a.next
+                }
+                where--
+            }
         }
         start("call")
         if by_register
@@ -2873,8 +2971,10 @@ genz80 {
             }
             bl = bl.next
         }
+        pointer_calls = true
         if sub_count == 0
             return
+        pointer_calls = false
         all_subs = mem.alloc(sub_count * sizeof(pointer))
         reaches = mem.alloc(sub_count * sub_count)
         long k = 0
@@ -2902,6 +3002,8 @@ genz80 {
                 if c.kind != ir.C_ASM {
                     ^^ir.Instr i = c.first
                     while i != 0 {
+                        if i.op == ir.OP_CALLI
+                            pointer_calls = true
                         if i.op == ir.OP_CALL and i.sym != 0 {
                             long to_index = index_of(i.sym)
                             if to_index >= 0

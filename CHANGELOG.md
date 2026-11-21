@@ -38,10 +38,10 @@
   additions, and the long multiplication and division do no more steps
   than the numbers need (`make z80bench`: 9.4 seconds before, 3.4 now).
   A large program no longer has memory for temporary values that the
-  pass made unnecessary, a call has its last argument in A or HL, and what
+  pass made unnecessary, a call has up to three arguments in A, HL and DE, and what
   the registers hold is known past the end of an `if`.  An editor for the
-  TRS-80 Model 4 was 37,317 bytes and is 30,086 (prog8c-llvm's: 29,921);
-  its 128K version 48,895 and 39,251 (39,889), which is what lets it run.
+  TRS-80 Model 4 was 37,317 bytes and is 29,347 (prog8c-llvm's: 29,921);
+  its 128K version 48,895 and 38,161 (39,889), which is what lets it run.
 
 - The Z80 machines have a library of their own (`lib/targets/z80`), no
   longer llvm16's, and its most used routines are Z80 assembly now: the
