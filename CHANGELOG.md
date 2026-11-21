@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- A variable named `a` in a block with `%option no_symbol_prefixing` made
+  the 6502 code generator's programs compute wrong values: 64tass took the
+  operand of `inc a`, `asl a` and the like for the variable.  The
+  accumulator's instructions are written without an operand now (`asl`,
+  `ina`).
+  Assembly written by hand, a library's too, is not changed by this, so a
+  symbol named `a` in such a block gets a warning.
+
 ## 0.3.0
 
 A Z80 code generator, for CP/M and the TRS-80 Models I, III and 4;

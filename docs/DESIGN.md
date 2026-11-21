@@ -267,6 +267,11 @@ The generator knows the 6502 and the 65C02.  On the 65C02 it uses `stz`,
 `bbs`, `rmb` or `smb`: the 65816, which many Commander X16s have, does not
 have them.  The 65816 and the 45GS02 have sections of their own below.
 
+The accumulator's instructions are written without an operand: `asl`,
+`lsr`, `rol`, `ror`, and `ina` and `dea` for `inc a` and `dec a`.  In a
+block with `%option no_symbol_prefixing` a variable may be named `a`, and
+64tass would take an operand `a` for that variable.
+
 Multiplication, division, shifts by a variable and floating point use the
 library's routines, the same ones the reference compiler calls.  A
 multiplication by a constant is done in line where that is cheaper: shifts

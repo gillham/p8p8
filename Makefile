@@ -304,6 +304,16 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^@main.Point main.p=\$$c000$$' $(OUT)/structmapped.p8ir
 	@grep -q '^^^main.Point\[1\] main.ptrs=\$$c000 ' $(OUT)/structmapped.p8ir
 	@grep -q '^main.Point prog8_struct_instances.main_copy size=3$$' $(OUT)/structmapped.p8ir
+	@echo "test accname (a variable named a in an unprefixed block: no operand a for the accumulator)"
+	@for t in cx16 c64 mega65; do \
+		$(P8P8) -lib lib -target $$t -asm -out $(OUT) tests/accname.p8 2> /dev/null || exit 1; \
+		if awk '/^test\.run +\.proc/,/\.pend/' $(OUT)/accname.asm | grep -E '^ +(inc|dec|asl|lsr|rol|ror) +a *$$'; then echo "accname ($$t): an accumulator instruction names a"; exit 1; fi; \
+	done
+	@$(P8P8) -lib lib -target cx16 -asm -out $(OUT) tests/accname.p8 2>&1 | grep -q "^tests/accname.p8:19:15: warning: 'a' in a block with %option no_symbol_prefixing"
+	@$(P8P8) -lib lib -target cx16 -check tests/accname.p8 2>&1 | grep -q "^tests/accname.p8:44:[0-9]*: warning: 'a' in a block"
+	@if $(P8P8) -lib lib -target cpm -check tests/accname.p8 2>&1 | grep -q warning; then echo "accname: a warning on a Z80 machine"; exit 1; fi
+	@grep -q '^    ina$$' $(OUT)/accname.asm
+	@grep -q '^    lsr$$' $(OUT)/accname.asm
 	@echo "test console runtime"
 	@$(P8P8) -lib lib -target llvm64 -llvm -out $(OUT) tests/console.p8
 	@grep -c '^declare i32 @prog8_getkey()\|^declare i32 @prog8_termsize()' $(OUT)/console.ll | diff -u tests/expected/console_two.txt -

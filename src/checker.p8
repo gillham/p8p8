@@ -114,8 +114,11 @@ checker {
             while e != 0 {
                 if e.kind == ast.N_DIRECTIVE
                     directive(e, L_MODULE)
-                else if e.kind == ast.N_BLOCK
+                else if e.kind == ast.N_BLOCK {
+                    unprefixed = not m.is_library and for_6502() and not importer.z80 and block_unprefixed(e.name)
                     block(e)
+                    unprefixed = false
+                }
                 e = e.next
             }
             m = m.next
@@ -604,7 +607,10 @@ checker {
                 }
             }
             ast.N_STRUCT, ast.N_UNION -> struct_decl(n)
-            ast.N_LABEL -> check_name(n, n.name)
+            ast.N_LABEL -> {
+                check_name(n, n.name)
+                accumulator_name(n, n.name)
+            }
             ast.N_ASSIGN -> assignment(n)
             ast.N_AUGASSIGN -> {
                 target(n.a, true)
@@ -765,6 +771,34 @@ checker {
         }
     }
 
+    ; In a block with %option no_symbol_prefixing (the user's own, on a 6502 machine) a
+    ; symbol named "a" is what the assembler takes the operand of "asl a" for.  The code
+    ; generator writes no such operand, but inline assembly and the library's may.
+    bool unprefixed = false
+
+    ; Is a block of this name without prefixes?  Any part of it counts: a block that is
+    ; merged into a library's block gets that block's option.
+    sub block_unprefixed(^^ubyte name) -> bool {
+        ^^ubyte kw_noprefix = strtab.intern_cstr("no_symbol_prefixing")
+        ^^importer.Module m = importer.modules
+        while m != 0 {
+            ^^ast.Node e = m.tree.a
+            while e != 0 {
+                if e.kind == ast.N_BLOCK and e.name == name
+                        and (symtab.has_option(e.a, kw_noprefix) or symtab.has_option(m.tree.a, kw_noprefix))
+                    return true
+                e = e.next
+            }
+            m = m.next
+        }
+        return false
+    }
+
+    sub accumulator_name(^^ast.Node at, ^^ubyte name) {
+        if unprefixed and name != 0 and name[0] == 'a' and name[1] == 0
+            warning(at, "'a' in a block with %option no_symbol_prefixing: assembly that names the accumulator (like asl a) will use this symbol instead")
+    }
+
     ; ---- declarations ----
 
     sub vardecl(^^ast.Node n) {
@@ -779,6 +813,11 @@ checker {
         if init != 0 and init.kind == ast.N_TUPLE
             is_tuple = true
         checks++
+        ^^ast.Node declared = n.c
+        while declared != 0 {
+            accumulator_name(declared, declared.name)
+            declared = declared.next
+        }
         if for_6502() and t != 0 and not floats_enabled() and n.op != token.T_KW_CONST
                 and types.is_array(t) and types.elem_of(t) == types.T_FLOAT
             error(n, "floating point used, but that is not enabled via options")
@@ -1977,6 +2016,12 @@ checker {
         check_name(s, s.name)
         if symtab.builtins != 0 and symtab.find_in(symtab.builtins, s.name) != 0
             error(s, "builtin function cannot be redefined")
+        accumulator_name(s, s.name)
+        ^^ast.Node param = s.a
+        while param != 0 {
+            accumulator_name(param, param.name)
+            param = param.next
+        }
         params(s.a)
         return_types(s.b)
         ^^symtab.Sym saved_sub = current_sub

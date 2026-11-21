@@ -156,8 +156,12 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
   upstream's own test suite.
 - **Warnings and notes.**  Upstream prints warnings and information lines
   (a variable made constant, recursion, and so on).  p8p8 prints errors and
-  two warnings, and has others on request (`-warnunused`,
-  `-warnunreachable`, `-warnshadow`, `-warnall`).
+  three warnings, and has others on request (`-warnunused`,
+  `-warnunreachable`, `-warnshadow`, `-warnall`).  One of the three is
+  p8p8's own: a symbol named `a` in a block with
+  `%option no_symbol_prefixing` on a 6502 machine, which the assembler
+  takes for the operand of `asl a` in assembly written by hand.  (p8p8's
+  own code is not affected; upstream's computes wrong values there.)
 - **Format.**  p8p8's messages are `file:line:column: error: text`, without
   colors.  Parse errors are worded differently (the parser is written by
   hand, not generated from the grammar).

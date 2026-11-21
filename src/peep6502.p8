@@ -670,12 +670,26 @@ peep6502 {
                 at = M_BRA * 3
         }
         buf.add_str(dest, "    ")
+        if lok[i] == O_ACC {
+            ; Without the operand "a": in a block with %option no_symbol_prefixing a variable
+            ; may have that name, and the assembler would take the operand for it.
+            when lmn[i] {
+                M_INC -> buf.add_str(dest, "ina")
+                M_DEC -> buf.add_str(dest, "dea")
+                else -> {
+                    buf.add_byte(dest, mnemonics[at])
+                    buf.add_byte(dest, mnemonics[at + 1])
+                    buf.add_byte(dest, mnemonics[at + 2])
+                }
+            }
+            buf.add_byte(dest, '\n')
+            return
+        }
         buf.add_byte(dest, mnemonics[at])
         buf.add_byte(dest, mnemonics[at + 1])
         buf.add_byte(dest, mnemonics[at + 2])
         ^^strtab.Sym s = lsym[i]
         when lok[i] {
-            O_ACC -> buf.add_str(dest, "  a")
             O_NUM -> {
                 buf.add_str(dest, "  #")
                 buf.add_long(dest, lval[i])
