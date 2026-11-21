@@ -962,6 +962,49 @@ peepz80 {
         return false
     }
 
+    ; the number after the "+" in "(name+2)", or 0
+    sub offset_of(long at, uword n) -> uword {
+        uword b = base_len(at, n)
+        uword v = 0
+        if b < n and src.data[at + b] == '+' {
+            b++
+            while b < n and src.data[at + b] >= '0' and src.data[at + b] <= '9' {
+                v = v * 10 + (src.data[at + b] - '0')
+                b++
+            }
+        }
+        return v
+    }
+
+    ; Does line j have to do with the place C?  Not when it only loads or stores, with a
+    ; register, another part of the same IR register's place that is two bytes or more
+    ; away (the other half of a long).
+    sub touches(long j, long at, uword n) -> bool {
+        if not mentions(j, at, n)
+            return false
+        if not kept(j) or not is(m_at, m_len, "ld")
+            return true
+        long p_at = o1_at
+        uword p_len = o1_len
+        long r_at = o2_at
+        uword r_len = o2_len
+        if not place(p_at, p_len) {
+            p_at = o2_at
+            p_len = o2_len
+            r_at = o1_at
+            r_len = o1_len
+        }
+        if not place(p_at, p_len) or r_len == 0 or r_len > 2 or src.data[r_at] == '('
+            return true
+        if not (is(r_at, r_len, "hl") or is(r_at, r_len, "de") or is(r_at, r_len, "bc") or is(r_at, r_len, "a"))
+            return true
+        uword off1 = offset_of(at, n)
+        uword off2 = offset_of(p_at, p_len)
+        if off1 >= off2 + 2 or off2 >= off1 + 2
+            return false
+        return true
+    }
+
     ; A byte made a word through its place, and the word then taken into DE or HL:
     ;     ld (C),a / xor a / ld (C+1),a / [ld hl,X] / ld de,(C)
     ; The byte goes to E while A still has it.
@@ -1033,7 +1076,7 @@ peepz80 {
             while j < count {
                 if fates[j] != F_KEEP
                     break
-                if mentions(j, c_at, c_len) {
+                if touches(j, c_at, c_len) {
                     if kept(j) and is(m_at, m_len, "ld") and same(o2_at, o2_len, c_at, c_len) {
                         ubyte how = 0
                         if wide and is(o1_at, o1_len, "hl")

@@ -937,19 +937,28 @@ adding from the constant's top bit down; a word is shifted in HL; word
 logic with a constant touches only the bytes the constant changes; a word
 against 0 is `ld a,h / or l`; the flags of a word's increment are made
 only when a branch reads them; long addition, subtraction and logic walk
-two pointers.  The long multiplication stops when nothing of the
-multiplier is left, and the long division moves the dividend up a byte at
-a time while its top byte is empty.
+two pointers.  A long sum or difference is two word additions with the
+carry between them.  The long multiplication is made of 16-bit products
+in registers (the low words give 32 bits; a high word that is not zero
+adds its product with the other's low word to the top), and the long
+division by a 16-bit divisor, which most are, is two 16-step divisions in
+registers, the high word first.  Only a wider divisor takes the routine
+that works in memory, which moves the dividend up a byte at a time while
+its top byte is empty.  And the pass sees the two halves of a long in an
+IR register's place as two places, so a long's way through such a place
+is taken out like a word's.
 
 Measured on CP/M programs, bytes without and with all of this: the string
 routines' test 10,263 and 4,694; long arithmetic 4,564 and 3,200;
 fromtests 4,469 and 2,975; fromdocs_builtins 3,362 and 1,821; hello 138
 and 80.  `make z80bench` times a sieve, a word loop and a long loop in
-tnylpo: 9.4 seconds before any of this, 3.4 now (most of it from the
-multiplications and divisions).  prog8c-llvm's build of the same program
-runs in 0.6 seconds and is 16,156 bytes against 1,654: the code here is
-small, and slow by comparison, because every value still lives in memory
-between instructions.
+tnylpo: 2.6 seconds, in 1,838 bytes.  prog8c-llvm's build of the same
+program takes 2.8 seconds and is 16,479 bytes.  (The word and long loops
+start from a number that is read from memory and feed each result into
+the next run: an earlier form of the program had loops that llvm worked
+out while compiling, which made its build look five times faster than it
+is.  Part by part: the sieve 0.58 seconds here and 0.64 there, the word
+loop 1.37 and 1.51, the long loop 0.73 and 0.73.)
 
 The IR's hardware register slots are places in memory here (`p8_slot_N`).
 A subroutine with several results stores them there before it returns, and

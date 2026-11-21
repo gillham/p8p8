@@ -36,7 +36,11 @@
   before), long arithmetic 3,200 (4,564), hello 80 (138).  `-noopt` gives
   the code as it was.  It is faster too: multiplications by constants are
   additions, and the long multiplication and division do no more steps
-  than the numbers need (`make z80bench`: 9.4 seconds before, 3.4 now).
+  than the numbers need.  Long multiplication and division work in
+  registers (16-bit products; a 16-bit divisor in two 16-step divisions),
+  and a long sum is two word additions.  `make z80bench`, whose loops no
+  compiler can work out beforehand now: 2.6 seconds in 1,838 bytes, where
+  prog8c-llvm's build takes 2.8 seconds in 16,479.
   A large program no longer has memory for temporary values that the
   pass made unnecessary, a call has up to three arguments in A, HL and DE, and what
   the registers hold is known past the end of an `if`.  An editor for the
