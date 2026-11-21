@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Follows Prog8 master at 32f82e9e1 and the LLVM branch at 62101daa8 (the
+  library and the reference material; the Amiga has a new `hwinfo` module).
+- Struct variables, as upstream has them now: `Point p`,
+  `Point p = [1, 2]`, `Point p = Point:[x=1, y=2]`, with `p.x`, a copy of
+  the whole struct (`q = p`), `&p` and `&&p` (in the data of arrays and
+  other instances too), a struct type declared inside a subroutine, and one
+  at a fixed address (`&Point regs = $d000`).  They are fixed storage, also
+  inside a subroutine, where field values are data that is there when the
+  program is loaded.  On every code generator.  What upstream refuses is
+  refused in its words (a struct compared, given a number, a wrong value
+  for a field).
+- On the 6502 a struct instance without values is in the BSS section
+  (`prog8_struct_instances_bss`), as upstream has it: cleared at startup,
+  not part of the program file, and in RAM when the program is in a ROM.
+  It was zeros in the program file.
+- Three programs that were compiled into something else than was written
+  are errors, as on the LLVM branch: the remainder of a float (`f % 2.0`
+  divided; use `floats.mod()`), `repeat` with a constant count below zero
+  (it ran 256 minus that many times), and an array filled from a range
+  whose ends are not constants (it was filled with zeros).
 - The end of a `for` loop's range is checked as upstream checks it: a value
   that is not a number must have the loop variable's own type
   (`for long k in 0 to wordvalue` is "range end value is incompatible with

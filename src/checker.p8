@@ -620,6 +620,8 @@ checker {
                     error(n, "pointer arithmetic only supported for + and - operators, maybe cast to uword?")
                 else if at == types.T_FLOAT and (n.op == token.T_SHLEQ or n.op == token.T_SHREQ)
                     error(n, "right operand of bit shift must be an integer")
+                else if n.op == token.T_PERCENTEQ and (at == types.T_FLOAT or vt == types.T_FLOAT)
+                    error(n, "remainder (%) requires integer operands, use floats.mod() for floats")
             }
             ast.N_INCDEC -> target(n.a, true)
             ast.N_CALLSTMT -> {
@@ -647,6 +649,14 @@ checker {
             }
             ast.N_REPEAT -> {
                 expression(n.a)
+                if n.a != 0 {
+                    ; a count that is known to be below zero
+                    bool count_known
+                    quad count
+                    count_known, count = typer.const_eval(n.a)
+                    if count_known and count < 0
+                        error(n.a, "repeat count can't be negative")
+                }
                 loop_body(n.b)
             }
             ast.N_UNROLL -> unroll_check(n)
@@ -841,8 +851,11 @@ checker {
                 and (has_tag(n, strtab.intern_cstr("zp")) or has_tag(n, strtab.intern_cstr("requirezp")))
             error(n, "zeropage variables can't have alignment")
         declaration_tags(n, t)
-        if init != 0 and not is_tuple
+        if init != 0 and not is_tuple {
             struct_values(n, t, init)
+            if t != 0 and types.is_struct(t) and n.op != token.T_AMP
+                struct_target_value(0, init, true)
+        }
         if no_quads and t != 0 {
             uword qt = t
             if types.is_array(qt) or types.is_pointer(qt)
@@ -887,8 +900,6 @@ checker {
         else if n.op == token.T_AMP {
             if t == types.T_STR
                 error(n, "strings cannot be memory-mapped")
-            else if types.is_struct(t)
-                error(n, "struct instances cannot be declared as memory-mapped currently, use a pointer and memory allocation call or direct address assignment instead")
             else if types.is_array(t) and types.is_pointer(types.elem_of(t))
                 error(n, "pointer arrays cannot be memory-mapped (codegen limitation)")
             if init != 0 and not is_tuple {
@@ -911,8 +922,6 @@ checker {
             }
             else if types.is_array(t)
                 array_decl(n, t)
-            else if types.is_struct(t)
-                error(n, "struct instances cannot be declared directly, use a pointer and memory allocation call or direct address assignment instead")
             if has_tag(n, dirty_name) {
                 if t == types.T_STR
                     error(n, "string variables cannot be @dirty")
@@ -1044,13 +1053,40 @@ checker {
         return false
     }
 
+    ; What a struct variable (or an element or p^^ that is a struct) cannot be given, in
+    ; upstream's words.  A declaration takes field values; an assignment only another struct.
+    sub struct_target_value(^^ast.Node target, ^^ast.Node value, bool declaration) {
+        if value == 0 or value.kind == ast.N_TUPLE
+            return
+        if value.kind == ast.N_ARRAYLIT {
+            if not declaration
+                error(value, "cannot assign array")
+            return
+        }
+        if value.kind == ast.N_STRUCTINIT {
+            if not declaration
+                error(value, "no support yet for assigning a struct instance by value")
+            return
+        }
+        if value.type != 0 and not types.is_struct(value.type) {
+            error(value, "assigning this value to struct instance not supported")
+            return
+        }
+        if not declaration and value.kind == ast.N_DEREF and target != 0 and target.kind == ast.N_IDENT
+            error(value, "no support yet for assigning a struct instance by value")
+    }
+
     ; [a, b, c] for a struct: a value for every field or for none
     sub struct_values(^^ast.Node at, uword target_type, ^^ast.Node value) {
         if value == 0 or (value.kind != ast.N_ARRAYLIT and value.kind != ast.N_STRUCTINIT)
             return
-        if not types.is_pointer(target_type) or not types.is_struct(types.elem_of(target_type))
+        ; (for a pointer to a struct, and for a struct variable)
+        uword struct_type = target_type
+        if types.is_pointer(target_type)
+            struct_type = types.elem_of(target_type)
+        if struct_type == 0 or not types.is_struct(struct_type)
             return
-        ^^types.Type st = types.get(types.elem_of(target_type))
+        ^^types.Type st = types.get(struct_type)
         ^^symtab.Sym ss = st.strct
         if ss == 0 or ss.inner == 0
             return
@@ -1095,6 +1131,37 @@ checker {
                 }
                 nf = nf.next
             }
+        }
+        ; a boolean or a float is not a value for an integer field
+        ^^ast.Node tv = value.a
+        ^^symtab.Sym tf = ss.inner.syms
+        while tv != 0 {
+            ^^ast.Node given_value = tv
+            ^^symtab.Sym its_field = 0
+            if tv.kind == ast.N_NAMEDFIELD {
+                given_value = tv.a
+                its_field = ss.inner.syms
+                while its_field != 0 and not (its_field.kind == symtab.K_FIELD and tv.name != 0 and strings.compare(its_field.name, tv.name) == 0)
+                    its_field = its_field.next
+            }
+            else {
+                while tf != 0 and tf.kind != symtab.K_FIELD
+                    tf = tf.next
+                its_field = tf
+                if tf != 0
+                    tf = tf.next
+            }
+            if given_value != 0 and its_field != 0 and its_field.type != 0 and types.is_integer(its_field.type) {
+                if given_value.type == types.T_BOOL {
+                    error(given_value, "no implicit cast from boolean to integer allowed")
+                    return
+                }
+                if given_value.type == types.T_FLOAT {
+                    error(given_value, "refused truncating of float to avoid loss of precision")
+                    return
+                }
+            }
+            tv = tv.next
         }
         while f != 0 {
             if f.kind == symtab.K_FIELD {
@@ -1180,6 +1247,25 @@ checker {
 
     ; the size rules of an array variable (not memory mapped)
     sub array_decl(^^ast.Node n, uword t) {
+        ; a range that fills an array is worked out when the program is compiled
+        if n.b != 0 and n.b.kind == ast.N_RANGE {
+            bool rok
+            quad rv
+            bool constant = true
+            ; (whole numbers written as floats count)
+            rok, rv = typer.const_eval(n.b.a)
+            constant = constant and (rok or typer.float_eval(n.b.a))
+            rok, rv = typer.const_eval(n.b.b)
+            constant = constant and (rok or typer.float_eval(n.b.b))
+            if n.b.c != 0 {
+                rok, rv = typer.const_eval(n.b.c)
+                constant = constant and (rok or typer.float_eval(n.b.c))
+            }
+            if not constant {
+                error(n, "range used as array initializer must have constant from, to and step values")
+                return
+            }
+        }
         ; a plain variable as an element is not a constant
         if n.b != 0 and n.b.kind == ast.N_ARRAYLIT {
             ^^ast.Node el = n.b.a
@@ -2091,7 +2177,10 @@ checker {
         else
             expression(value)
         if n.a.next == 0 and n.a.kind != ast.N_VOID {
-            struct_values(n, n.a.type, value)
+            if n.a.type != 0 and types.is_struct(n.a.type)
+                struct_target_value(n.a, value, false)
+            else
+                struct_values(n, n.a.type, value)
             ; arrays are copied whole: the same number of elements on both sides
             uword tt = n.a.type
             if tt != 0 and types.is_array(tt) and value.type != 0 and (types.is_array(value.type) or value.kind == ast.N_ARRAYLIT) {
@@ -2913,9 +3002,18 @@ checker {
         uword lt = e.a.type
         uword rt = e.b.type
         ubyte op = e.op
+        if op == token.T_PERCENT and (lt == types.T_FLOAT or rt == types.T_FLOAT)
+            error(e, "remainder (%) requires integer operands, use floats.mod() for floats")
         if (op == token.T_EQ or op == token.T_NE or op == token.T_LT or op == token.T_LE or op == token.T_GT or op == token.T_GE)
                 and lt != 0 and rt != 0 and types.is_array(lt) and types.is_array(rt)
             error(e, "invalid left operand type")
+        if op == token.T_EQ or op == token.T_NE or op == token.T_LT or op == token.T_LE or op == token.T_GT or op == token.T_GE {
+            ; whole structs are not compared
+            if lt != 0 and types.is_struct(lt) and e.a.kind == ast.N_IDENT
+                error(e.a, "invalid left operand type")
+            if rt != 0 and types.is_struct(rt) and e.b.kind == ast.N_IDENT
+                error(e.b, "invalid right operand type")
+        }
         if (op == token.T_EQ or op == token.T_NE or op == token.T_LT or op == token.T_LE or op == token.T_GT or op == token.T_GE)
                 and lt != 0 and rt != 0 and (lt == types.T_STR) != (rt == types.T_STR) {
             uword other = lt

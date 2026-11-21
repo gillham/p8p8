@@ -9099,9 +9099,32 @@ gen6502 {
             raw("    .send BSS_SLABS")
             raw("")
         }
-        ; Struct instances, with values and without: one block, so that every one is
-        ; prog8_struct_instances.name.  One without values is all zeros (in the program
-        ; file: it is not cleared at startup, as a variable in the BSS section would be).
+        ; Struct instances without values are in the BSS section, as upstream has them
+        ; (prog8_struct_instances_bss.name): cleared at startup, not part of the program
+        ; file, and in RAM when the program is in a ROM.
+        any = false
+        v = prog.vars
+        while v != 0 {
+            if v.kind == ir.V_INSTANCE and v.init == 0 {
+                if not any {
+                    raw("    .section BSS")
+                    raw("prog8_struct_instances_bss  .block")
+                    any = true
+                }
+                put(unscoped(v.name))
+                put("  .fill  ")
+                putn(v.size)
+                nl()
+            }
+            v = v.next
+        }
+        if any {
+            raw("    .bend")
+            raw("    .send BSS")
+            raw("")
+        }
+        ; Those with values, in one block with names for the others, so that every one
+        ; is prog8_struct_instances.name.
         any = false
         v = prog.vars
         while v != 0 {
@@ -9117,9 +9140,9 @@ gen6502 {
                     instance_values(v.init)
                 }
                 else {
-                    put("  .fill  ")
-                    putn(v.size)
-                    raw(", 0")
+                    put(" = prog8_struct_instances_bss.")
+                    put(unscoped(v.name))
+                    nl()
                 }
             }
             v = v.next

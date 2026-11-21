@@ -108,7 +108,12 @@ as well (no `bbr`, `bbs`, `rmb`, `smb`), as upstream does.
   upstream rejects and p8p8 accepts:
   - an `if` expression whose two values have types that cannot be assigned;
   - `unroll` with a count that is not constant;
-  - `p^^ = array[i]` where upstream asks for `&`;
+  - `p^^ = array[i]` and `array[i] = p^^` for structs, where upstream asks
+    for `&`;
+  - a `long` parameter in one register (`long v @R0`), where upstream wants
+    a pair (`@R0R1`);
+  - a `for` loop over a `long` range with a step that is a variable, which
+    the LLVM branch refuses for the 6502;
   - `w * w` of a signed `word` passed where a `word` is wanted: upstream
     makes it a square, whose type is `uword`, and then reports a type
     mismatch;

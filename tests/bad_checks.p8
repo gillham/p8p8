@@ -88,7 +88,7 @@ declarations $2000 {                ; specific block addresses are not available
         ubyte x
     }
 
-    &Point mapped = $4000           ; struct instances cannot be declared as memory-mapped currently, ...
+    &Point mapped = $4000           ; fine (upstream refused it until its struct variables came)
     &^^ubyte[4] pointers = $5000    ; pointer arrays cannot be memory-mapped (codegen limitation)
     ubyte[4] @alignword @zp aligned ; zeropage variables can't have alignment
 

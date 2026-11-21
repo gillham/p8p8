@@ -93,6 +93,21 @@ matter: it has opcodes p8p8 does not generate or translate (`storep_inc`,
 `loadiz`, `loadmzl`, `bsigb`, `midb`) and a `<LOOP>` element, so only the
 simplest programs get through.
 
+### Struct variables
+
+A variable whose type is a struct (`Point p`) is not a variable in the IR
+but a struct instance, like the one a struct initializer makes, with a name
+made from where it is declared: `prog8_struct_instances.main_start_p` (and
+`p8b_main_p8s_start_p8i_p` where names carry prefixes).  `sym_name` gives
+that name, so everything that takes a variable's address works unchanged;
+`identifier` and `field_address` load the address where they would load a
+pointer's value, and from there a field is reached as through a pointer.
+Field values in the declaration are the instance's data; another struct as
+the initializer, and `q = p`, are a call of `sys.memcopy`.  One at a fixed
+address (`&Point regs = $d000`) is a memory-mapped name whose address is
+loaded as a number.  The code generators needed nothing new for this,
+except that the 6502's puts instances without values in the BSS section.
+
 ## Conventions of the source
 
 - **Memory is allocated and not freed.**  A compiler is a batch job.

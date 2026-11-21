@@ -29,7 +29,6 @@ tests/bad_checks.p8:77:13: error: indexing requires an iterable, address uword, 
 tests/bad_checks.p8:78:12: error: left and right operands aren't the same type: str vs ubyte
 tests/bad_checks.p8:80:9: error: %asm with native assembly code can't be used on the llvm targets, use %ir instead
 tests/bad_checks.p8:86:1: error: specific block addresses are not available on the hosted llvm64 target
-tests/bad_checks.p8:91:5: error: struct instances cannot be declared as memory-mapped currently, use a pointer and memory allocation call or direct address assignment instead
 tests/bad_checks.p8:92:5: error: pointer arrays cannot be memory-mapped (codegen limitation)
 tests/bad_checks.p8:93:5: error: zeropage variables can't have alignment
 tests/bad_checks.p8:95:19: error: can only use R0-R15 as register param for normal subroutines

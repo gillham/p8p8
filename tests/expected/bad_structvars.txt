@@ -1,0 +1,12 @@
+tests/bad_structvars.p8:37:14: error: value type Point doesn't match target type ^^Point
+tests/bad_structvars.p8:26:13: error: assigning this value to struct instance not supported
+tests/bad_structvars.p8:27:13: error: cannot assign array
+tests/bad_structvars.p8:28:13: error: no support yet for assigning a struct instance by value
+tests/bad_structvars.p8:29:13: error: no support yet for assigning a struct instance by value
+tests/bad_structvars.p8:30:12: error: invalid left operand type
+tests/bad_structvars.p8:30:17: error: invalid right operand type
+tests/bad_structvars.p8:32:9: error: invalid number of arguments: expected 2 or 0 but got 3
+tests/bad_structvars.p8:33:24: error: assigning this value to struct instance not supported
+tests/bad_structvars.p8:34:26: error: no implicit cast from boolean to integer allowed
+tests/bad_structvars.p8:35:30: error: refused truncating of float to avoid loss of precision
+tests/bad_structvars.p8:36:9: error: initialization value contains non-constant elements

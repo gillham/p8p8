@@ -1,0 +1,5 @@
+tests/bad_upstream3.p8:13:13: error: remainder (%) requires integer operands, use floats.mod() for floats
+tests/bad_upstream3.p8:14:9: error: remainder (%) requires integer operands, use floats.mod() for floats
+tests/bad_upstream3.p8:16:16: error: repeat count can't be negative
+tests/bad_upstream3.p8:25:9: error: range used as array initializer must have constant from, to and step values
+tests/bad_upstream3.p8:26:9: error: range used as array initializer must have constant from, to and step values

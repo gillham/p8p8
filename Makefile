@@ -299,6 +299,11 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -target amiga500 -codegen own -ir -out $(OUT) tests/programs/amiga/chipram.p8
 	@grep '^    section  .*_c,' $(OUT)/chipram.asm | diff -u tests/expected/chipram_sections.txt -
 	@grep -q '^<BLOCK NAME="p8b_chip" ADDRESS="" AMIGACHIPRAM="true"' $(OUT)/chipram.p8ir
+	@echo "test structmapped (a struct variable at a fixed address, in the IR)"
+	@$(P8P8) -lib lib -target virtual -ir -out $(OUT) tests/structmapped.p8
+	@grep -q '^@main.Point main.p=\$$c000$$' $(OUT)/structmapped.p8ir
+	@grep -q '^^^main.Point\[1\] main.ptrs=\$$c000 ' $(OUT)/structmapped.p8ir
+	@grep -q '^main.Point prog8_struct_instances.main_copy size=3$$' $(OUT)/structmapped.p8ir
 	@echo "test console runtime"
 	@$(P8P8) -lib lib -target llvm64 -llvm -out $(OUT) tests/console.p8
 	@grep -c '^declare i32 @prog8_getkey()\|^declare i32 @prog8_termsize()' $(OUT)/console.ll | diff -u tests/expected/console_two.txt -
@@ -327,7 +332,7 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -target cx16 -check tests/bad_overlay.p8 2>&1 | diff -u tests/expected/bad_overlay.txt -
 	@echo "test bad_far (far memory on the MEGA65: what is refused)"
 	@$(P8P8) -lib lib -target mega65 -check tests/bad_far.p8 2>&1 | diff -u tests/expected/bad_far.txt -
-	@for t in bad_upstream bad_upstream2 bad_upstream_syntax bad_ranges; do \
+	@for t in bad_upstream bad_upstream2 bad_upstream_syntax bad_ranges bad_structvars bad_upstream3; do \
 	    echo "test $$t (upstream's checks, for the X16; must be rejected)"; \
 	    $(P8P8) -lib lib -target cx16 -check tests/$$t.p8 > $(OUT)/$$t.out 2>&1; \
 	    [ $$? -eq 1 ] || { echo "expected exit status 1"; exit 1; }; \
@@ -441,9 +446,10 @@ nativecmp16c64:	$(P8P8)
 	    $(filter-out %/bitshift.p8 %/animalgame.p8 %/testforloops.p8 %/fnv64.p8,$(NATIVETESTS))
 
 # every cx16 and c64 example must build to a program file through p8p8 (nothing is run)
+# (not examples/test.p8: upstream's scratch file, for whatever machine was worked on last)
 buildall:	$(P8P8)
-	@tests/buildall.sh $(P8P8) .prog8-reference cx16 $(wildcard .prog8-reference/examples/*.p8 .prog8-reference/examples/cx16/*.p8)
-	@tests/buildall.sh $(P8P8) .prog8-reference c64 $(wildcard .prog8-reference/examples/*.p8 .prog8-reference/examples/c64/*.p8)
+	@tests/buildall.sh $(P8P8) .prog8-reference cx16 $(filter-out %/examples/test.p8,$(wildcard .prog8-reference/examples/*.p8 .prog8-reference/examples/cx16/*.p8))
+	@tests/buildall.sh $(P8P8) .prog8-reference c64 $(filter-out %/examples/test.p8,$(wildcard .prog8-reference/examples/*.p8 .prog8-reference/examples/c64/*.p8))
 
 # what programs draw: recordings of x16emu's video for the reference build and p8p8's (see tests/gfxcmp.sh)
 gfxcmp:	$(P8P8)

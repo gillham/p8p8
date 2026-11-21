@@ -387,6 +387,27 @@ irgen {
         if s.irname != 0
             return s.irname
         bool prefixed = wants_prefix(s)
+        if s.kind == symtab.K_VAR and is_struct(s.type) {
+            ; a struct variable is a struct instance, named after where it is declared as
+            ; upstream names it: prog8_struct_instances.main_start_name (with p8i_ before
+            ; the name where names have prefixes)
+            buf.clear(nb)
+            scope_name_into(s.scope, prefixed)
+            long sk
+            for sk in 0 to nb.len - 1 {
+                if nb.data[sk] == '.'
+                    nb.data[sk] = '_'
+            }
+            ^^buf.Buf ib = buf.new(64)
+            buf.add_str(ib, "prog8_struct_instances.")
+            buf.add_bytes(ib, nb.data, nb.len)
+            buf.add_byte(ib, '_')
+            if prefixed
+                buf.add_str(ib, "p8i_")
+            buf.add_str(ib, s.name)
+            s.irname = strtab.intern(ib.data, ib.len as uword)
+            return s.irname
+        }
         buf.clear(nb)
         scope_name_into(s.scope, prefixed)
         if nb.len != 0
@@ -663,6 +684,22 @@ irgen {
     }
 
     ; the name whose address stands for a symbol in initialized data
+    ; &name in static data: @name, or the number of a memory-mapped variable's address
+    sub address_into(^^buf.Buf b, ^^symtab.Sym s) {
+        if s.kind == symtab.K_MEMVAR {
+            ^^ubyte vs
+            long va
+            vs, va = var_ref(s)
+            if vs == 0 {
+                ir.text = b
+                ir.add_number(va)
+                return
+            }
+        }
+        buf.add_byte(b, '@')
+        buf.add_str(b, data_name(s))
+    }
+
     sub data_name(^^symtab.Sym s) -> ^^ubyte {
         if is_split(s)
             return split_name(s, false)
@@ -767,6 +804,16 @@ irgen {
                 is_tuple = true
         }
         ^^types.Type t = types.get(s.type)
+        if t.base == types.T_STRUCT and s.kind == symtab.K_VAR {
+            ; a struct variable: an instance, with its values when it has an initializer
+            ; (load-time data, also inside a subroutine)
+            ^^ast.Node fieldvalues = 0
+            if init != 0 and (init.kind == ast.N_STRUCTINIT or init.kind == ast.N_ARRAYLIT)
+                fieldvalues = init.a
+            ; (another struct as the initializer is copied where the declaration stands)
+            void named_instance(sym_name(s), fieldvalues, t.strct)
+            return
+        }
         ^^ubyte inittext = 0
         long strlength = 0
         bool ok
@@ -943,9 +990,8 @@ irgen {
                 buf.add_str(ab, iname)
             }
             else if e.kind == ast.N_ADDROF and e.a.kind == ast.N_IDENT and e.a.extra != 0 {
-                buf.add_byte(ab, '@')
                 ^^symtab.Sym asym = e.a.extra
-                buf.add_str(ab, data_name(asym))
+                address_into(ab, asym)
             }
             else if e.kind == ast.N_IDENT and e.extra != 0 and is_address_name(e) {
                 ; a string, array or subroutine name in a word array: its address
@@ -1008,6 +1054,11 @@ irgen {
     ; none at all leaves it uninitialized).  Gives the instance's name.
     ; Buffers of its own: instances nest, and this is reached from expression().
     sub struct_instance(^^ast.Node vals, ^^symtab.Sym ss) -> ^^ubyte {
+        return named_instance(0, vals, ss)
+    }
+
+    ; the same with a name of its own (a struct variable), or 0 for a numbered one
+    sub named_instance(^^ubyte given, ^^ast.Node vals, ^^symtab.Sym ss) -> ^^ubyte {
         instance_seq++
         ^^buf.Buf nm = buf.new(64)
         buf.add_str(nm, "prog8_struct_instances.")
@@ -1023,6 +1074,10 @@ irgen {
         buf.add_byte(nm, '_')
         buf.add_long(nm, instance_seq)
         ^^ubyte iname = strtab.intern(nm.data, nm.len as uword)
+        if given != 0 {
+            iname = given
+            instance_seq--
+        }
         ^^ubyte values = 0
         if vals != 0 and ss.inner != 0 {
             ^^buf.Buf vb = buf.new(128)
@@ -1244,8 +1299,7 @@ irgen {
         }
         if fv.kind == ast.N_ADDROF and fv.a.kind == ast.N_IDENT and fv.a.extra != 0 {
             ^^symtab.Sym asym = fv.a.extra
-            buf.add_byte(b, '@')
-            buf.add_str(b, data_name(asym))
+            address_into(b, asym)
             return
         }
         if fv.kind == ast.N_IDENT and fv.extra != 0 and is_address_name(fv) {
@@ -1269,7 +1323,7 @@ irgen {
                 buf.add_str(b, known)
                 return
             }
-            unsupported(fv, "non-constant struct field value")
+            error(fv, "initialization value contains non-constant elements")
             cv = 0
         }
         ir.text = b
@@ -2860,6 +2914,14 @@ irgen {
         if s.kind != symtab.K_VAR
             return          ; a constant or a memory-mapped variable: its value is not stored anywhere
         ^^types.Type t = types.get(s.type)
+        if t.base == types.T_STRUCT {
+            ; field values are initialized data; another struct is copied here
+            if n.b.kind != ast.N_STRUCTINIT and n.b.kind != ast.N_ARRAYLIT {
+                n.c.type = s.type
+                struct_copy(n.c, n.b)
+            }
+            return
+        }
         if t.base == types.T_ARRAY or t.base == types.T_STR
             return          ; initialized data
         if n.b.kind == ast.N_TUPLE {
@@ -3343,12 +3405,24 @@ irgen {
                         ^^ubyte vs
                         long va
                         vs, va = var_ref(s)
-                        void ir.emit_rm(chunk, ir.OP_LOADM, ir.T_POINTER, pr, vs, va)
+                        if is_struct(s.type) {
+                            ; a struct variable: where it is (its fixed address, when memory-mapped)
+                            if vs == 0
+                                void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_POINTER, pr, va)
+                            else
+                                void ir.emit_rsym(chunk, ir.OP_LOAD, ir.T_POINTER, pr, vs, 0)
+                        }
+                        else
+                            void ir.emit_rm(chunk, ir.OP_LOADM, ir.T_POINTER, pr, vs, va)
                     }
                 }
                 else {
-                    ; a field of the struct the pointer points to
+                    ; a field of the struct the pointer points to (or of the struct variable)
                     ^^symtab.Sym st = pointee(curtype)
+                    if st == 0 and is_struct(curtype) {
+                        ^^types.Type direct = types.get(curtype)
+                        st = direct.strct
+                    }
                     if st == 0 {
                         error(node, "field access through a non-struct pointer")
                         return 0, 0
@@ -5372,6 +5446,14 @@ irgen {
                 ^^ubyte vs
                 long va
                 vs, va = var_ref(s)
+                if is_struct(s.type) {
+                    ; a struct variable is used by its address too
+                    if vs == 0
+                        void ir.emit_ri(chunk, ir.OP_LOAD, ir.T_POINTER, r, va)
+                    else
+                        void ir.emit_rsym(chunk, ir.OP_LOAD, ir.T_POINTER, r, vs, 0)
+                    return r, ir.T_POINTER
+                }
                 if types.is_array(s.type) or s.type == types.T_STR {
                     ; arrays and strings are used by their address
                     if is_split(s)
