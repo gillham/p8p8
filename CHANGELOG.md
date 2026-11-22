@@ -1,6 +1,8 @@
 # Changes
 
-## Unreleased
+## 0.3.1
+
+One fix for the 6502 code generator.
 
 ### Fixed
 
