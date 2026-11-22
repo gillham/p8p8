@@ -727,6 +727,12 @@ same file, from `plain_image`; `-noimage` leaves the assembler's file); an overl
 begins with the overlay, the window being below the program.  The assembler
 is only run for the overlays that exist (there are 127 numbers).
 
+A target file with `fixed_blocks_apart = true` (the GameTank's) has a block
+at an address placed out of line: the generator notes the program counter
+before `* = address` and sets it back after the block, so the variables with
+values and the strings that follow in the assembly stay with the program.
+A `.cerror` at the end refuses a block that lies where the program is.
+
 Not there: an overlay of more than the window, code of the library in an
 overlay, overlays in an IR file (`-ir` does not write the directive).
 Assembly in an overlay block that calls another overlay by its label is not

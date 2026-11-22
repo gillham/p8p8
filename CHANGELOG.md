@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- A target file can have `fixed_blocks_apart = true`: a block at an address
+  is then placed there out of line, and the rest of the program (variables
+  with values, strings) does not follow it.  The GameTank's has it, so a
+  binary can be put at an exact place of the cartridge with a block and
+  `%asmbinary`.
+
 ### Changed
 
 - GameTank: the program file is always the image of a 2 MB flash cartridge

@@ -312,6 +312,13 @@ test:	$(TESTBIN) $(P8P8)
 	@test "$$(wc -c < $(OUT)/accname.bin | tr -d ' ')" = 16384
 	@tail -c 16384 $(OUT)/accname.gtr | cmp -s - $(OUT)/accname.bin
 	@test "$$(head -c 2080768 $(OUT)/accname.gtr | LC_ALL=C tr -d '\377' | wc -c | tr -d ' ')" = 0
+	@echo "test fixedblock (GameTank: a block at an address is placed out of line, up to the vectors)"
+	@$(P8P8) -lib lib -target gametank -noimage -out $(OUT) tests/fixedblock.p8
+	@test "$$(wc -c < $(OUT)/fixedblock.bin | tr -d ' ')" = 16384
+	@test "$$(tail -c 514 $(OUT)/fixedblock.bin | head -c 12)" = P8FIXEDBLOCK
+	@test "$$(LC_ALL=C grep -c -a 'P8FIXEDBLOCK' $(OUT)/fixedblock.bin)" = 1
+	@$(P8P8) -lib lib -target cx16 -asm -out $(OUT) tests/accname.p8 2> /dev/null
+	@if grep -q p8_apart $(OUT)/accname.asm; then echo "fixedblock: placed apart on a machine without the key"; exit 1; fi
 	@echo "test accname (a variable named a in an unprefixed block: no operand a for the accumulator)"
 	@for t in cx16 c64 mega65; do \
 		$(P8P8) -lib lib -target $$t -asm -out $(OUT) tests/accname.p8 2> /dev/null || exit 1; \

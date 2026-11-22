@@ -2917,10 +2917,26 @@ gen6502 {
             return
         }
         if true {
+            bool apart = false
             if bl.address != 0 {
+                ^^ubyte key = target.text("fixed_blocks_apart")
+                apart = key != 0 and strings.compare(key, "true") == 0
+                if apart {
+                    ; the block is placed out of line: what follows it in the assembly
+                    ; goes on where the program was
+                    apart_count++
+                    put("p8_apart_from_")
+                    putn(apart_count)
+                    raw(" = *")
+                }
                 put("* = ")
                 put(bl.address)
                 nl()
+                if apart {
+                    put("p8_apart_at_")
+                    putn(apart_count)
+                    raw(" = *")
+                }
             }
             put(bl.name)
             if bl.force_output
@@ -2957,9 +2973,19 @@ gen6502 {
                 raw("  .bend")
             else
                 raw("  .pend")
+            if apart {
+                put("p8_apart_end_")
+                putn(apart_count)
+                raw(" = *")
+                put("* = p8_apart_from_")
+                putn(apart_count)
+                nl()
+            }
             raw("")
         }
     }
+
+    long apart_count = 0            ; blocks at an address that were placed out of line (fixed_blocks_apart)
 
     ; Assembly that calls or jumps to a subroutine in an overlay by its name: the compiler
     ; writes the way into an overlay for calls in Prog8 code only, so unless the code is
@@ -9278,6 +9304,18 @@ gen6502 {
             put(", \" bytes, memtop=")
             puthex(memtop)
             raw("\"")
+        }
+        long ak = 1
+        while ak <= apart_count {
+            ; (the block is not part of what lies between the program's start and its end)
+            put("    .cerror p8_apart_at_")
+            putn(ak)
+            put(" < prog8_program_end && p8_apart_end_")
+            putn(ak)
+            put(" > prog8_program_start, \"the block at \", p8_apart_at_")
+            putn(ak)
+            raw(", \" is where the program is (it ends at \", prog8_program_end, \")\"")
+            ak++
         }
     }
 
