@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Library
+
+- GameTank: `gametank_audio` and `gametank_music`, Prog8 versions of the
+  GameTank SDK's audio and music sources, and the SDK's boot jingle, which
+  `gametank.sdk_init()` plays now.
+
 ## 0.3.1
 
 One fix for the 6502 code generator.
