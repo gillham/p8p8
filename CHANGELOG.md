@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- GameTank: the program file is always the image of a 2 MB flash cartridge
+  (`name.gtr`), with the program at its end, as it was for a program with
+  overlays only.  `-noimage` writes the program alone (`name.bin`), as
+  before.  A target file asks for this with `image_size` and `image_ext`
+  (the names `overlay_image_size` and `overlay_image_ext` are still read).
+
 ### Library
 
 - GameTank: `gametank_audio` and `gametank_music`, Prog8 versions of the

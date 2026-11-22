@@ -304,6 +304,14 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^@main.Point main.p=\$$c000$$' $(OUT)/structmapped.p8ir
 	@grep -q '^^^main.Point\[1\] main.ptrs=\$$c000 ' $(OUT)/structmapped.p8ir
 	@grep -q '^main.Point prog8_struct_instances.main_copy size=3$$' $(OUT)/structmapped.p8ir
+	@echo "test image (GameTank: the program file is the image of the cartridge; -noimage: the program alone)"
+	@rm -f $(OUT)/accname.gtr $(OUT)/accname.bin
+	@$(P8P8) -lib lib -target gametank -out $(OUT) tests/accname.p8 2> /dev/null
+	@test "$$(wc -c < $(OUT)/accname.gtr | tr -d ' ')" = 2097152 && test ! -f $(OUT)/accname.bin
+	@$(P8P8) -lib lib -target gametank -noimage -out $(OUT) tests/accname.p8 2> /dev/null
+	@test "$$(wc -c < $(OUT)/accname.bin | tr -d ' ')" = 16384
+	@tail -c 16384 $(OUT)/accname.gtr | cmp -s - $(OUT)/accname.bin
+	@test "$$(head -c 2080768 $(OUT)/accname.gtr | LC_ALL=C tr -d '\377' | wc -c | tr -d ' ')" = 0
 	@echo "test accname (a variable named a in an unprefixed block: no operand a for the accumulator)"
 	@for t in cx16 c64 mega65; do \
 		$(P8P8) -lib lib -target $$t -asm -out $(OUT) tests/accname.p8 2> /dev/null || exit 1; \

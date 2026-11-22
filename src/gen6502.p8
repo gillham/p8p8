@@ -2767,7 +2767,7 @@ gen6502 {
             put("p8_overlay_store = ")
             puthex(target.number("overlay_store", 0))
             nl()
-            if target.number("overlay_image_size", 0) == 0 {
+            if target.image_size() == 0 {
                 ; (for a machine that copies an overlay in: how much of it there is)
                 raw("p8_overlay_sizes:")
                 ubyte sn

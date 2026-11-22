@@ -300,6 +300,23 @@ target {
         return digits > 0, v
     }
 
+    ; A machine whose program file is an image of a fixed size (a cartridge) with the
+    ; program at its end: the size, or 0, and the file's extension.  (The keys were
+    ; overlay_image_size and overlay_image_ext when only overlays made such a file.)
+    sub image_size() -> long {
+        long size = number("image_size", 0)
+        if size == 0
+            size = number("overlay_image_size", 0)
+        return size
+    }
+
+    sub image_ext() -> ^^ubyte {
+        ^^ubyte ext = text("image_ext")
+        if ext == 0
+            ext = text("overlay_image_ext")
+        return ext
+    }
+
     ; the number a key has, or the default when it is missing or not a number
     sub number(str key, long default) -> long {
         ^^ubyte v = text(key)

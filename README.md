@@ -260,6 +260,7 @@ Options p8p8 has that the reference compiler does not:
 | `-noopt` | the own code generator without its optimizations |
 | `-asm` | write the assembly of p8p8's code generator (`name.asm`) and stop: no assembler or linker is run, and none needs to be installed.  For the 6502 family, the 68000 and the Z80 |
 | `-verbose` | print the commands that are run and the assembler's summary |
+| `-noimage` | on a machine whose program file is the image of a whole cartridge (the GameTank: a 2 MB `.gtr`): write the program alone (a `.bin`) |
 | `-nooverlays` | take no notice of `%overlay`: the program is built in one piece, as on a machine without overlays |
 | `-overlayinfo` | after a 6502 program is built: every block (and the larger subroutines of the ones that stay) with its bytes and whether it could go into an overlay, or why not |
 | `-meminfo` | after a 6502 program is built: what it takes of main memory and of each overlay, and what is left (`-verbose` prints this too) |

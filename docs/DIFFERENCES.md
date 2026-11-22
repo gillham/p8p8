@@ -291,6 +291,10 @@ overlap; one block stays inside a 64 KB bank.
 
 ## Things p8p8 has that upstream does not
 
+- A target file can say that the program file is the image of a whole
+  cartridge (`image_size`, `image_ext`).  The GameTank's does: `p8c` writes
+  a 2 MB `name.gtr` with the program at its end, where `prog8c` writes the
+  16 KB `name.bin`.  `-noimage` gives that file.
 - It is written in Prog8 and compiles itself; it is built from its own
   earlier output with clang alone, on macOS, Linux and Windows.
 - It starts at once: there is no Java virtual machine to start.

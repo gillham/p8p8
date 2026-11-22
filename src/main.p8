@@ -358,6 +358,8 @@ main {
                 opt_verbose = true
             else if strings.compare(arg, "-meminfo") == 0
                 opt_meminfo = true
+            else if strings.compare(arg, "-noimage") == 0
+                opt_noimage = true
             else if strings.compare(arg, "-nooverlays") == 0
                 gen6502.overlays_off = true
             else if strings.compare(arg, "-overlayinfo") == 0 {
@@ -733,6 +735,8 @@ main {
         out.nl()
         out.puts("  -verbose       print the commands that are run, and let the assembler print its summary of the program")
         out.nl()
+        out.puts("  -noimage       a machine whose program file is the image of a whole cartridge (GameTank): the program alone")
+        out.nl()
         out.puts("  -nooverlays    take no notice of %overlay: the program in one piece, as for a machine without overlays")
         out.nl()
         out.puts("  -overlayinfo   for a 6502 machine: list the blocks and main's subroutines with their sizes, and what stands against moving each into an overlay")
@@ -1083,6 +1087,7 @@ main {
     ^^ubyte built_ext = 0           ; the extension build() gave the program
     bool opt_warnshadow = false     ; -warnshadow: the assembler's warnings about symbols that hide others
     bool opt_overlayinfo = false    ; -overlayinfo: after a 6502 program is built, what of it could go into an overlay
+    bool opt_noimage = false        ; -noimage: the program file as it is, not in the image of a cartridge
     bool opt_meminfo = false        ; -meminfo: after a 6502 program is built, how much memory it takes and leaves
     bool opt_verbose = false        ; -verbose: say what is run, and let the assembler print its summary
 
@@ -1819,9 +1824,9 @@ main {
             out.puts("no: ")
             out.puts(why_not)
         }
-        else if keeps_data and (target.number("overlay_image_size", 0) != 0 or target.text("overlay_return") == 0) {
+        else if keeps_data and (target.image_size() != 0 or target.text("overlay_return") == 0) {
             out.puts("no: its assembly keeps variables in its own code")
-            if target.number("overlay_image_size", 0) != 0
+            if target.image_size() != 0
                 out.puts(" (an overlay is ROM here)")
             else
                 out.puts(" (an overlay is copied in afresh here)")
@@ -2012,11 +2017,11 @@ main {
             report_number(support, 1)
             out.nl()
         }
-        if target.number("overlay_image_size", 0) != 0 {
+        if target.image_size() != 0 {
             out.puts("  file: ")
             out.puts(name)
-            if target.text("overlay_image_ext") != 0
-                out.puts(target.text("overlay_image_ext"))
+            if target.image_ext() != 0
+                out.puts(target.image_ext())
             out.puts(", the whole cartridge, ")
             report_number(ov_file_size, 1)
             out.puts(" bytes")
@@ -2049,6 +2054,8 @@ main {
 
     ; the path of an output file, in ov_path
     sub ov_output(^^ubyte name, ^^ubyte extension) -> ^^ubyte {
+        if ov_path == 0
+            ov_path = buf.new(1024)
         buf.clear(ov_path)
         if outdir != 0 {
             buf.add_str(ov_path, outdir)
@@ -2106,7 +2113,13 @@ main {
                 break
             n--
         }
-        if target.number("overlay_image_size", 0) != 0 {
+        if target.image_size() != 0 {
+            if opt_noimage {
+                out.err()
+                out.puts("-noimage: a program with overlays is the image of the cartridge, its parts are banks of it")
+                out.nl()
+                out.exit(1)
+            }
             overlay_image(name)
             return
         }
@@ -2228,8 +2241,46 @@ main {
     ; start, each bank as large as the window, and the main program at its end, where
     ; the fixed bank is.  In an overlay's run the assembler's file begins with the
     ; overlay, the window being below the main program.
+    ; The same file for a program without overlays: the image filled with $ff and the
+    ; program at its end.  The assembler's file is not kept.  Returns the extension.
+    sub plain_image(^^ubyte name, ^^ubyte built) -> ^^ubyte {
+        long image_size = target.image_size()
+        long header = 2
+        if strings.compare(gen6502.output_type, "RAW") == 0
+            header = 0
+        ^^ubyte data
+        long size
+        data, size = ov_read(ov_output(name, built))
+        long main_size = size - header
+        if main_size > image_size {
+            out.err()
+            out.puts("the program is larger than the cartridge")
+            out.nl()
+            out.exit(1)
+        }
+        ^^ubyte image = mem.alloc(image_size)
+        long k
+        for k in 0 to image_size - 1
+            image[k] = $ff
+        mem.copy(data + header, image + image_size - main_size, main_size)
+        ^^ubyte extension = target.image_ext()
+        if extension == 0
+            extension = ".bin"
+        bool same = strings.compare(extension, built) == 0
+        if not same
+            io_platform.delete_file(ov_path.data)
+        if not io_platform.write_file(ov_output(name, extension), image, image_size) {
+            out.err()
+            out.puts("cannot write ")
+            out.puts(ov_path.data)
+            out.nl()
+            out.exit(1)
+        }
+        return extension
+    }
+
     sub overlay_image(^^ubyte name) {
-        long image_size = target.number("overlay_image_size", 0)
+        long image_size = target.image_size()
         long first = target.number("overlay_image_first", 0)
         long bank_size = gen6502.overlay_end - gen6502.overlay_start
         long header = 2
@@ -2290,7 +2341,7 @@ main {
                     ov_sizes[n] = length
             }
         }
-        ^^ubyte extension = target.text("overlay_image_ext")
+        ^^ubyte extension = target.image_ext()
         if extension == 0
             extension = ".bin"
         if not io_platform.write_file(ov_output(name, extension), image, image_size) {
@@ -2685,6 +2736,9 @@ main {
         }
         run_cmd("building the program")
         built_ext = extension
+        if opt_own and not is_llvm and not opt_noimage and target.image_size() != 0
+                and strings.compare(gen6502.output_type, "LIBRARY") != 0
+            built_ext = plain_image(name, extension)
         if opt_own and not is_llvm and (opt_meminfo or opt_verbose)
             memory_report(name)
         if opt_own and not is_llvm and opt_overlayinfo
