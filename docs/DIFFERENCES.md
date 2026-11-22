@@ -295,6 +295,9 @@ overlap; one block stays inside a 64 KB bank.
   cartridge (`image_size`, `image_ext`).  The GameTank's does: `p8c` writes
   a 2 MB `name.gtr` with the program at its end, where `prog8c` writes the
   16 KB `name.bin`.  `-noimage` gives that file.
+- A target file can make the golden ram the place of the variables without
+  an option (`vars_golden`; the GameTank's does), where `prog8c` wants
+  `-varsgolden`.
 - A target file can have blocks at an address placed out of line
   (`fixed_blocks_apart`; the GameTank's does), where `prog8c` has the rest
   of the program follow such a block.

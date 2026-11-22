@@ -326,6 +326,11 @@ test:	$(TESTBIN) $(P8P8)
 	fi
 	@$(P8P8) -lib lib -target cx16 -asm -out $(OUT) tests/accname.p8 2> /dev/null
 	@if grep -q p8_apart $(OUT)/accname.asm; then echo "fixedblock: placed apart on a machine without the key"; exit 1; fi
+	@echo "test vars_golden (GameTank: the variables are in the golden ram without an option)"
+	@$(P8P8) -lib lib -target gametank -asm -out $(OUT) tests/fixedblock.p8
+	@grep -q '^  \* = \$$600$$' $(OUT)/fixedblock.asm
+	@$(P8P8) -lib lib -target gametank -varshigh 1 -asm -out $(OUT) tests/fixedblock.p8
+	@grep -q '^  \* = \$$1e00$$' $(OUT)/fixedblock.asm
 	@echo "test accname (a variable named a in an unprefixed block: no operand a for the accumulator)"
 	@for t in cx16 c64 mega65; do \
 		$(P8P8) -lib lib -target $$t -asm -out $(OUT) tests/accname.p8 2> /dev/null || exit 1; \

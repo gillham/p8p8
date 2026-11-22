@@ -1422,6 +1422,7 @@ gen6502 {
     sub rom_requirements() {
         if prog.floats
             error("When ROMable code is selected, floating point support is not available", 0)
+        default_vars()
         if vars_address < 0 and not vars_golden and vars_high_bank < 0 and target.text("vars_address") == 0
             error("When ROMable code is selected, variables and memory slabs should be moved to a RAM memory region using either -varsgolden, -varshigh or -varsaddress option or %varsaddress directive", 0)
     }
@@ -2983,6 +2984,16 @@ gen6502 {
             }
             raw("")
         }
+    }
+
+    ; A target file with vars_golden = true (a machine whose program is ROM): the golden
+    ; ram is where the variables go when no option and no directive says where.
+    sub default_vars() {
+        if vars_address >= 0 or prog.vars_address >= 0 or vars_golden or vars_high_bank >= 0
+            return
+        ^^ubyte key = target.text("vars_golden")
+        if key != 0 and strings.compare(key, "true") == 0
+            vars_golden = true
     }
 
     long apart_count = 0            ; blocks at an address that were placed out of line (fixed_blocks_apart)
@@ -9240,6 +9251,7 @@ gen6502 {
         long vars_end = 0
         if vars_address < 0
             vars_address = prog.vars_address        ; (%varsaddress; the command line's goes first)
+        default_vars()
         if vars_address >= 0 {
             vars_start = vars_address
             vars_end = $ffff
