@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	m6809cmp cococmp cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	m6809cmp cococmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -554,6 +554,16 @@ m6809cmp:	$(P8P8)
 # the machine's ROMs where XRoar looks for them); a few seconds for each program.
 cococmp:	$(P8P8)
 	@M6809CMP_MACHINE=coco2 tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/m6809/*.p8)
+
+# make coco3cmp: the same for the coco3 target on XRoar's Color Computer 3, on its 32
+# column screen and then on its 80 column one; make coco3screen: what is in the 80
+# column screen's memory after a program wrote to it
+coco3cmp:	$(P8P8)
+	@M6809CMP_MACHINE=coco3 tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/m6809/*.p8)
+	@M6809CMP_MACHINE=coco3w tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/m6809/*.p8)
+
+coco3screen:	$(P8P8)
+	@tests/coco3screen.sh $(P8P8)
 
 # make cocosys: files on the Color Computer (diskio), in XRoar with a disk image that
 # toolshed's decb makes and reads back

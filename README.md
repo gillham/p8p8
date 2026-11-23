@@ -43,7 +43,8 @@ The command is `p8c`.
   generator's simple way leaves.  `asmsub` and `extsub` name the 6809's
   registers, `diskio` reads and writes Disk BASIC's files, and floats are
   those of the BASIC in the ROM (five bytes, its routines).  A command line
-  is not there (the machine has none), and the Color Computer 3 is used as a Color Computer 2 (32 columns).
+  is not there (the machine has none), and the Color Computer 3's 40 and 80 column screens are there
+  (`txt.set_width`).
   The test programs print what they print on the host, in usim09batch and
   in XRoar; nothing was run on a real machine.
 - For the host it writes LLVM IR and builds a native executable with clang.
@@ -342,6 +343,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make trs80cmp`, `make trs80cmp3`, `make trs80cmp4` | the same programs on a TRS-80 Model I, III and 4 in trs80gp (`TRS80GP` names the emulator), against the host |
 | `make z80sys`, `make trs80sys`, `make trs80dos`, `make trs80screen` | on the Z80 machines: the command line and files, the DOS still working after a program has ended, and the screen routines |
 | `make m6809cmp`, `make cococmp` | programs built for a bare 6809 print in usim09batch, and built for the Color Computer print in XRoar (without a window; `COCO_MACHINE=coco3` for its Color Computer 3), what they print on the host |
+| `make coco3cmp`, `make coco3screen` | the `coco3` target on XRoar's Color Computer 3: the test programs on its 32 and its 80 column screen, and what a program leaves in the 80 column screen's memory |
 | `make cocosys` | files on the Color Computer, in XRoar with a disk image that toolshed's `decb` makes and reads back |
 | `make z80bench` | the time and size of a benchmark for CP/M, against `prog8c-llvm`'s build |
 | `make irroundtrip` | a program built from the IR file that `p8c -ir` wrote is the same bytes as from its source |

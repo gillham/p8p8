@@ -11,6 +11,8 @@
 # With M6809CMP_MACHINE=coco2 the second is built for the Color Computer 2 instead (the
 # coco2 target as tests/m6809/xroar-coco2.properties has it) and run in XRoar by
 # tests/cocorun.sh, unattended; COCO_MACHINE=coco3 makes it XRoar's Color Computer 3.
+# M6809CMP_MACHINE=coco3 is the coco3 target on that machine, on its 32 column screen,
+# and coco3w the same on its 80 column screen.
 #
 # A program with floats prints them as the machine's BASIC does (its floats are the
 # ROM's): there tests/floatsame.py compares, number by number, to seven digits.
@@ -24,6 +26,17 @@ here=$(cd "$(dirname "$0")" && pwd)
 machine=${M6809CMP_MACHINE:-sim6809}
 where="usim09batch"
 [ "$machine" = coco2 ] && where="Color Computer in XRoar, ${COCO_MACHINE:-coco2bus}"
+# (the coco3 target, on its 32 column screen or, as coco3w, on its 80 column one)
+variant=xroar-coco2
+if [ "$machine" = coco3 ] || [ "$machine" = coco3w ]; then
+    variant=xroar-coco3
+    [ "$machine" = coco3w ] && variant=xroar-coco3-80
+    where="Color Computer 3 in XRoar, target coco3 ($variant)"
+    COCO_MACHINE=coco3
+    export COCO_MACHINE
+    machine=coco2
+    targetdir=coco3
+fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_m6809cmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/host" "$work/m6809"
@@ -42,7 +55,7 @@ for f in "$@"; do
         cp "${f%.p8}.out" "$work/host/$name.out"
     fi
     if [ "$machine" = coco2 ]; then
-        "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco2" -target "$here/m6809/xroar-coco2.properties" -out "$work/m6809" "$f" > "$work/m6809.err" 2>&1
+        "$p8c" -lib "$lib" -srcdirs "$lib/targets/${targetdir:-coco2}" -target "$here/m6809/$variant.properties" -out "$work/m6809" "$f" > "$work/m6809.err" 2>&1
         built="$work/m6809/$name.bin"
     else
         "$p8c" -lib "$lib" -target sim6809 -out "$work/m6809" "$f" > "$work/m6809.err" 2>&1

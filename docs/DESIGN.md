@@ -1187,7 +1187,25 @@ read until two reads agree, and a wait is `sync` until it changes (none
 when interrupts are off, where it never would).  `textio` for both Color
 Computers is one module in the shared library (`shared_coco_textio`).  The
 program loads at $0e00, over Disk BASIC's graphics pages and program text.
-`coco3` is the same machine for now: 32 columns.
+
+`coco3` has the Color Computer 3's 40 and 80 column screens as well, on
+whichever BASIC's WIDTH has on (`$e7`).  Such a screen is cells of two bytes,
+the character and its attribute, in memory block $36, which is not among the
+64 KB that a program sees; BASIC puts it at $2000 while it writes to it,
+where a program loaded at $0e00 is.  The target's console routine and the
+`textio` module (`coco3/textio.p8`, its own: `setchr`, `getchr`, `plot`,
+the colors) put it at $e000 instead, for as long as they read or write it,
+with interrupts off: BASIC's own code is there, which is not called
+meanwhile, and the page from $fe00 with BASIC's cursor variables stays what
+it is.  The cursor is BASIC's (its address as BASIC has the screen, column,
+line), so BASIC goes on where the program stopped; the underline that BASIC
+leaves at the cursor is taken away.  `txt.set_width(32, 40 or 80)` calls
+the ROM's own WIDTH routines after their argument is read ($f652, $f65c,
+$f679 in the Color Computer 3's ROM; its PAL ROM differs there in table
+values only).  `make coco3screen` has a program write to the 80 column
+screen and compares what is in block $36 of XRoar's snapshot afterwards;
+`make coco3cmp` runs the test programs for the `coco3` target on the 32
+column screen and again on the 80 column one (72 the same each).
 
 `src/peep6809.p8` goes over each subroutine's lines (not with `-noopt`).
 It follows what A, B, D and X hold of the register places, of constants
