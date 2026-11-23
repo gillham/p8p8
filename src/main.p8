@@ -992,6 +992,8 @@ main {
         if irtext != 0 {
             ; the IR is there already: no front end
             types.set_target(importer.family)
+            if importer.m6809
+                types.FLOAT_SIZE = 5        ; (the five bytes of the BASIC in the machine's ROM)
             encoding.set_target(importer.family)
             if parser.scratch == 0
                 parser.scratch = buf.new(64)        ; (the driver's own scratch buffer is the parser's)
@@ -1048,6 +1050,8 @@ main {
         if diag.errors > 0
             out.exit(1)
         types.set_target(importer.family)
+        if importer.m6809
+            types.FLOAT_SIZE = 5        ; (the five bytes of the BASIC in the machine's ROM)
         types.far_bits = 0
         if target.loaded and target.number("far_address_bits", 0) != 0 {
             ; (only for the CPU that has the instructions: the one of -cpu, or the target's)

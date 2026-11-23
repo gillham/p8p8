@@ -1129,8 +1129,48 @@ directory, the files' bytes); Disk BASIC's own `DIR`, `FREE` and `LINE
 INPUT` were tried on such a disk by hand.  Loading at $0e00 leaves Disk
 BASIC's memory, which ends below it, alone.
 
-Not there yet: floats (the instruction is an error that says so), a command
-line.
+Floats on a 6809 machine are those of the BASIC in its ROM: five bytes in
+Microsoft's format (the 6502 machines' format, so the front end's float is
+five bytes here too: `types.FLOAT_SIZE` under `importer.m6809`), and the
+ROM's routines, through its accumulator, with the other number's address in
+X.  The generator knows what the routines do and not where they are: the
+target file has their addresses and the accumulator's (`float_...`), since
+the Color Computer's and the Dragon's BASIC have the same routines at
+different places; a target without those keys has no floats (`sim6809`: the
+instruction is an error that says so).  A load, a store and a move are five
+bytes copied; a constant is five immediate bytes.  `first op second` puts
+the second into the accumulator and gives the routine the first's address:
+the ROM's subtraction and division are "the number at X by the
+accumulator".  A float result of a subroutine is in the accumulator.  The
+conversions: a signed word is the ROM's own entry; an unsigned word and a
+long are put into the accumulator's bytes as a whole number with an
+exponent of 16 or 32 and normalized by the ROM, the carry saying that it is
+not negative; a float becomes a long with the ROM's routine for it, which
+goes down, so it gets the number without its sign and the long is turned
+over after it (towards zero, as a cast is).  `floor` is the ROM's, `ceil`
+is it with the sign turned over, `round` is a half more and down (a half
+goes up, not to the even one), `log2` is the natural logarithm times a
+constant, and the power is the ROM's routine behind its `^`.  The ROM's
+errors are BASIC's: a division by zero or a number too large ends the
+program with BASIC's message.  The `floats` module (`shared_coco_floats`)
+is the llvm16 one with the two routines of its own that need the ROM:
+`tostr` is BASIC's number-to-text (so a float prints as BASIC prints it,
+`.5` and `3`), `parse` its text-to-number.
+
+The addresses were read off a disassembly of Color BASIC 1.3 and Extended
+BASIC 1.1; Color BASIC 1.2 differs from 1.3 in 11 bytes elsewhere, and the
+Color Computer 3's ROM has the same code at these places (its differences
+are in the first bytes and in its patches).  `make cococmp` runs the
+programs with floats too: where one prints floats, `tests/floatsame.py`
+compares its output with the host's number by number, to seven digits.  72
+the same on XRoar's Color Computer 2 and 3.
+
+A program that switches the ROMs off (the Color Computer's all-RAM mode)
+cannot call any of this: floats, the keys and DSKCON alike would need a
+piece of code in low memory that switches the ROMs back on around each
+call.  That is not there.
+
+Not there yet: a command line.
 
 The Color Computer's console is the target file's: a character goes into
 the screen's memory at the address BASIC keeps as its cursor's ($88), in the

@@ -195,6 +195,7 @@ program does in XRoar.  The keys it reads:
 | `wait_jiffy` | a routine that takes a 60th of a second, for `sys.wait` (without it there is no wait) |
 | `ticks` | a routine: D = the clock in 60ths of a second (without it `sys.ticks()` is 0) |
 | `tail_code` | lines after everything else (the simulator's reset vector) |
+| `float_accumulator`, `float_load`, `float_store`, `float_add`, `float_sub`, `float_mul`, `float_div`, `float_compare`, `float_from_word`, `float_normalize`, `float_to_long`, `float_floor`, `float_half`, `float_unpack`, `float_power`, `float_sqrt`, `float_sin`, `float_cos`, `float_tan`, `float_atan`, `float_ln` | floats are those of a Microsoft BASIC in the machine's ROM: where its accumulator is, and its routines (the comments in `coco2/target.properties` say which each is).  Without them the machine has no floats |
 | `run_command` | what `-run` runs, with `{file}` for the program |
 | `library` | the directory with the modules; the target's own directory is searched before it |
 

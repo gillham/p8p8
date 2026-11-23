@@ -12,8 +12,11 @@
   `extsub` name the 6809's registers (`A`, `B`, `D`, `X`, `Y`, `U`, and
   `Pc`).  A pass over the assembly makes the programs about a quarter
   smaller.  `diskio` on the Color Computers reads and writes Disk BASIC's
-  files (through its sector routine alone).  Not there yet: floats, and the
-  Color Computer 3's own screens (it is used as a Color Computer 2).
+  files (through its sector routine alone).  Floats there are those of the
+  BASIC in the ROM: five bytes, its arithmetic and functions, and a float
+  prints as BASIC prints it.  Not there yet: the Color Computer 3's own
+  screens (it is used as a Color Computer 2), and anything for a program
+  that switches the ROMs off.
   `make m6809cmp` and `make cococmp` compare the test programs with the
   host, in usim09batch and in XRoar.
 

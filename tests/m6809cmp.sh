@@ -12,6 +12,9 @@
 # coco2 target as tests/m6809/xroar-coco2.properties has it) and run in XRoar by
 # tests/cocorun.sh, unattended; COCO_MACHINE=coco3 makes it XRoar's Color Computer 3.
 #
+# A program with floats prints them as the machine's BASIC does (its floats are the
+# ROM's): there tests/floatsame.py compares, number by number, to seven digits.
+#
 # Usage: tests/m6809cmp.sh <p8c> <program.p8>...
 #        (needs clang, lwasm (lwtools) and usim09batch, or XRoar with the machine's ROMs)
 p8c=$1
@@ -65,10 +68,9 @@ for f in "$@"; do
     else
         usim09batch --timeout=400000000 "$built" < /dev/null > "$work/m6809/$name.out" 2>&1
     fi
-    if [ "$name" = floatchains ]; then
-        skipped=$((skipped + 1))
-    elif cmp -s "$work/host/$name.out" "$work/m6809/$name.out" ||
-            { [ -f "$here/m6809/$name.out" ] && cmp -s "$here/m6809/$name.out" "$work/m6809/$name.out"; }; then
+    if cmp -s "$work/host/$name.out" "$work/m6809/$name.out" ||
+            { [ -f "$here/m6809/$name.out" ] && cmp -s "$here/m6809/$name.out" "$work/m6809/$name.out"; } ||
+            { grep -q '^%import floats' "$f" && python3 "$here/floatsame.py" "$work/host/$name.out" "$work/m6809/$name.out"; }; then
         same=$((same + 1))
         echo "ok: $f"
     else

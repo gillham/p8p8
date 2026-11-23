@@ -41,8 +41,9 @@ The command is `p8c`.
   6809 in usim09batch.  Text goes straight into the screen's memory, the
   keys are the ROM's.  A pass over the assembly takes out what the
   generator's simple way leaves.  `asmsub` and `extsub` name the 6809's
-  registers, and `diskio` reads and writes Disk BASIC's files.  Floats are
-  not there yet, and the Color Computer 3 is used as a Color Computer 2 (32 columns).
+  registers, `diskio` reads and writes Disk BASIC's files, and floats are
+  those of the BASIC in the ROM (five bytes, its routines).  A command line
+  is not there, and the Color Computer 3 is used as a Color Computer 2 (32 columns).
   The test programs print what they print on the host, in usim09batch and
   in XRoar; nothing was run on a real machine.
 - For the host it writes LLVM IR and builds a native executable with clang.
