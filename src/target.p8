@@ -120,19 +120,42 @@ target {
     sub load(^^ubyte name) -> bool {
         if not parse(name, false)
             return false
+        ; (and that one may name a third: up to four deep; each is beside the one that
+        ; names it)
         ^^ubyte from = text("base")
-        if from != 0 {
+        ^^ubyte from_dir = dir
+        ubyte depth = 0
+        while from != 0 and depth < 4 {
             ^^buf.Buf bp = buf.new(256)
-            if dir != 0 and from[0] != '/' {
-                buf.add_str(bp, dir)
+            if from_dir != 0 and from[0] != '/' {
+                buf.add_str(bp, from_dir)
                 buf.add_byte(bp, '/')
             }
             buf.add_str(bp, from)
             buf.add_byte(bp, 0)
+            ubyte before = count
             if not parse(bp.data, true) {
                 loaded = false
                 return false
             }
+            ; the directory of the file just read, and the base that it names itself
+            long cut = bp.len - 1
+            while cut > 0 and bp.data[cut] != '/'
+                cut--
+            from_dir = 0
+            if cut > 0
+                from_dir = strtab.intern(bp.data, cut as uword)
+            from = 0
+            ubyte k = before
+            while k < count {
+                ^^ubyte named = values[k]
+                if strings.compare(keys[k], "base") == 0 and named[0] != 0 {
+                    from = named
+                    break
+                }
+                k++
+            }
+            depth++
         }
         return true
     }

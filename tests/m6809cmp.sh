@@ -38,6 +38,13 @@ if [ "$machine" = coco3 ] || [ "$machine" = coco3w ]; then
     machine=coco2
     targetdir=coco3
 fi
+# (the coco2ram target: the program with the ROMs switched out, on a 64 KB machine)
+if [ "$machine" = coco2ram ]; then
+    variant=xroar-coco2ram
+    where="Color Computer 2 in XRoar, target coco2ram (the ROMs switched out)"
+    machine=coco2
+    targetdir=coco2ram
+fi
 # (the dragon32 target, on XRoar's Dragon 32 or Dragon 64)
 if [ "$machine" = dragon32 ] || [ "$machine" = dragon64 ]; then
     variant=xroar-dragon32

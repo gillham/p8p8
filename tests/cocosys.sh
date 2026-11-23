@@ -33,6 +33,15 @@ decb copy -1 -a "$work/host.txt" "$work/t.dsk,HOST.TXT" > /dev/null || exit 1
     mkdir "$work/dragon"
     "$p8c" -lib "$lib" -srcdirs "$lib/targets/dragon32" -target "$here/m6809/xroar-dragon32.properties" -out "$work/dragon" "$here/cocosys/upper.p8" > "$work/upper.log" 2>&1 &&
         COCO_MACHINE=dragon64 "$here/cocorun.sh" "$work/dragon/upper.bin" && COCO_MACHINE=dragon32 "$here/cocorun.sh" "$work/dragon/upper.bin"
+    # the coco2ram target (the program with the ROMs switched out): the clock and the
+    # memory where the ROMs were, and the files again, through the ROM's sector routine
+    mkdir "$work/ram"
+    "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco2ram" -target "$here/m6809/xroar-coco2ram.properties" -out "$work/ram" "$here/cocosys/romsout.p8" > "$work/ram.log" 2>&1 &&
+        "$here/cocorun.sh" "$work/ram/romsout.bin"
+    decb dskini "$work/r.dsk" > /dev/null
+    decb copy -1 -a "$work/host.txt" "$work/r.dsk,HOST.TXT" > /dev/null
+    "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco2ram" -target "$here/m6809/xroar-coco2ram.properties" -out "$work/ram" "$here/cocosys/files.p8" > "$work/ram.log" 2>&1 &&
+        COCO_OPTIONS="-load-fd0 $work/r.dsk" "$here/cocorun.sh" "$work/ram/files.bin"
 } > "$work/printed.txt" 2>&1
 if diff -u "$here/cocosys/expected.txt" "$work/printed.txt"; then
     echo "files on the Color Computer: as expected"

@@ -1191,8 +1191,48 @@ moment of the access, with interrupts off, since BASIC's interrupt routine
 is in the ROM, and the ROMs back on ($ffde).  `present()` changes a byte up
 there and reads it back, and looks that the lower half did not change with
 it.  `make cocosys` runs it with 64 KB and with 32 KB, and on XRoar's
-Dragon 64 and Dragon 32.  A program that itself runs with the ROMs off, with
-its ROM calls through code in low memory, is not there.
+Dragon 64 and Dragon 32.
+
+`coco2ram` is the other way to use that memory: the program runs with the
+ROMs switched out.  It came from porting the user's editor: with its simple
+text store the program is 25 KB and has no room for text below the ROMs, and
+with its paged store over `highram` it is 33 KB (30 KB with every optional
+feature off), which does not fit below them at all.  The target file has
+`rom_out` and `rom_in` (the SAM's two addresses) and `rom_start`; with them
+the generator switches the ROMs out after the target's first instructions
+and in again at the end, and a call into the ROM is a call of a few
+instructions of the program's own, one set for each routine (`p8rom_N`:
+`jsr p8_rom_in`, the call, `jmp p8_rom_out`).  The two routines switch with
+interrupts off for the moment of it and with the flags as they were, since
+a routine takes and gives values in them, and count in `p8_rom_on` that the
+ROMs are in.  Which calls: the generator's own of the float routines, a call
+of an `extsub` at an address, and in assembly (the target file's, the
+library's, the program's) a `jsr` of an address from `rom_start` on, or one
+with the comment `;rom` (`rom_line`): so `diskio` and `floats` are as they
+were, but for two places that read the ROM or call BASIC's character
+routine in low memory, which carry the comment.  The program, its variables
+and its stack (BASIC's) stay below $8000, where LOADM puts the program and
+where the ROM's routines find what they work on; $8000-$feff is plain
+memory.  The interrupts are the target's business: its first instructions
+look whether there is RAM under the ROMs (without it the program returns to
+BASIC) and put a routine of the target's in place of BASIC's interrupt
+routine, which is in the ROM.  That routine switches the ROMs in and gives
+BASIC's a made-up interrupt frame to return through, to where the ROMs go
+out again; when the interrupt came during a call into the ROM it is
+BASIC's as it is.  So the clock, the waits and the disk drive's motor work.
+`make cocoramcmp`: 72 programs the same as on the host; `make cocosys` runs
+the clock, the memory and the file test on it.
+
+A target file's `base` may itself have a `base` (up to four deep, each
+beside the one that names it): the tests' variant of `coco2ram` is made
+from `coco2ram`, which is made from `coco2`.
+
+The user's editor (p8vi) is the second real program: with a platform file
+of its own for the Color Computer (written outside this repository, from
+its TRS-80 one), built for `coco2ram` with its gap buffer in the upper 32
+KB, it runs in XRoar and passes the 17 file suites of its own tests that
+its TRS-80 Model III build runs (a harness made from its TRS-80 one: a disk
+image by `decb`, the keys played from a file).
 
 `-target llvm16 -triple mc6809-coco`, as prog8c-llvm spells it, names the
 `coco2` target (and `mc6809-sim` names `sim6809`) unless `-llvm` asks for

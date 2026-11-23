@@ -20,6 +20,11 @@
   ROMs off.
   The `highram` module of `coco2`, `dragon32` and `dragon64` uses the upper
   32 KB of a 64 KB machine as memory for data.
+  `-target coco2ram` is the Color Computer 2 with 64 KB for a program that
+  runs with the ROMs switched out: $8000-$feff is its memory, and its calls
+  into the ROM (keys, floats, the disk) switch the ROMs in around them.
+  `sys.progend()`, `sys.progstart()` and `sys.stack()` on the 6809
+  machines.  A target file's `base` may have a `base` of its own.
   `-target dragon32` and `-target dragon64` build for the Dragons (a
   DragonDOS binary; the same screen, keys and floats through the Dragon's
   ROM; no `diskio`).

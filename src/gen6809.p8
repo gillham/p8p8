@@ -72,6 +72,13 @@ gen6809 {
     bool carry_cell = false         ; this subroutine keeps the IR's carry in a place of its own (see carry_scan)
     bool carry_loaded = false       ; the instruction's carry was just taken from there
     bool entry_pending = false      ; the subroutine's first label is still to come
+    ; A machine whose ROMs the program switches out (the target file's rom_out and
+    ; rom_in): a call of a routine in the ROM goes through a few instructions of the
+    ; program that switch them in around it (see rom_call).
+    bool rom_switched = false
+    ^^ubyte[48] rom_routines        ; what is called so, as the operand of the call
+    ubyte rom_count = 0
+    bool rom_closed = false         ; the instructions for them are written
     ubyte skip_next = 0             ; so many instructions that follow are done already (a call that gave the carry)
     bool wide_error = false         ; the error about a register used wider than it is was said
     bool[32] need_rt                ; the routines of the system calls (the RT_ numbers)
@@ -498,6 +505,9 @@ gen6809 {
             body = buf.new(65536)
         buf.clear(body)
         o = body
+        rom_switched = target.text("rom_out") != 0 and target.text("rom_in") != 0
+        rom_count = 0
+        rom_closed = false
         uses_floats = false
         need_fa = false
         need_ftol = false
@@ -587,6 +597,9 @@ gen6809 {
         line("sts  p8_entry_s")
         if target.number("stack_size", 0) > 0
             line("lds  #p8_stack_top")
+        ; (the ROMs out, on a machine whose target file has that: see rom_call)
+        if rom_switched
+            target_lines("rom_out")
         ; the variables without values are zero
         line("ldx  #p8_bss_start")
         raw("p8_clear:")
@@ -604,6 +617,8 @@ gen6809 {
         raw("p8_exit:")
         if target.text("exit_hook") != 0
             target_lines("exit_hook")
+        if rom_switched
+            target_lines("rom_in")
         line("lds  p8_entry_s")
         target_lines("exit_code")
         raw("p8_entry_s:  fdb  0")
@@ -628,11 +643,8 @@ gen6809 {
                 stop++
             if stop == k or text[stop - 1] != ':'
                 put("    ")
-            while text[k] != 0 and text[k] != '\n' {
-                buf.add_byte(o, text[k])
-                k++
-            }
-            nl()
+            code_line(text + k, stop - k)
+            k = stop
             if text[k] == '\n'
                 k++
         }
@@ -742,8 +754,7 @@ gen6809 {
             if last > p {
                 if text[last - 1] != ':' and text[p] != ';'
                     put("    ")
-                buf.add_bytes(o, text + p, last - p)
-                nl()
+                code_line(text + p, last - p)
             }
             p = stop + 1
         }
@@ -2187,8 +2198,149 @@ gen6809 {
             error("floats: the target file does not say where the ROM has this routine", key)
             return
         }
+        rom_call(where, buf.cstr_len(where))
+    }
+
+    ; ---- a machine whose ROMs are switched out ----
+    ;
+    ; The program runs with RAM where the machine's ROMs are (the target file's rom_out
+    ; switches them out at the start, rom_in back in at the end): the memory there is the
+    ; program's, as plain memory.  A call of a routine in the ROM is then a call of a few
+    ; instructions of the program's own, one set for each routine, that switch the ROMs
+    ; in, call it and switch them out again: p8_rom_in and p8_rom_out do the switching,
+    ; with interrupts off for the moment of it and with the flags as they were (a
+    ; routine takes and gives values in them), and count in p8_rom_on that the ROMs are
+    ; in, for an interrupt routine of the target's to know.  The program itself, its
+    ; variables and its stack must be below the ROMs: the ROM's routines work on them.
+    ; Which calls: the generator's own of the ROM's float routines, a call of an extsub at
+    ; an address, and in assembly (the target file's, the library's, the program's) a
+    ; "jsr" of an address from rom_start on (written as $hex, or in brackets) or one
+    ; with the comment ";rom".
+
+    ; a call of a routine at an address (an extsub): through the switching when the
+    ; address is in the ROM
+    sub rom_call_at(^^ubyte address_text) {
+        if rom_switched and number_of(address_text) >= target.number("rom_start", $8000)
+            rom_call(address_text, buf.cstr_len(address_text))
+        else {
+            op("jsr")
+            put(address_text)
+            nl()
+        }
+    }
+
+    ; "    jsr  " and the routine, or the instructions that switch the ROMs for it
+    sub rom_call(^^ubyte operand, long length) {
         op("jsr")
-        put(where)
+        if not rom_switched {
+            buf.add_bytes(o, operand, length)
+            nl()
+            return
+        }
+        ^^ubyte wanted = strtab.intern(operand, length as uword)
+        ubyte k = 0
+        while k < rom_count and rom_routines[k] != wanted
+            k++
+        if k == rom_count {
+            if rom_closed or rom_count == len(rom_routines) {
+                error("too many routines of the ROM are called, or one is called from the first instructions", wanted)
+                return
+            }
+            rom_routines[rom_count] = wanted
+            rom_count++
+        }
+        put("p8rom_")
+        putn(k)
+        nl()
+    }
+
+    ; Is the line of assembly a call into the ROM: "jsr" of an address from rom_start on,
+    ; or with the comment ";rom"?  Gives the length of its operand then (operand_from is
+    ; where it begins), else 0.
+    long operand_from = 0
+
+    sub rom_line(^^ubyte text, long length) -> long {
+        if not rom_switched or length < 6 or text[0] != 'j' or text[1] != 's' or text[2] != 'r' or (text[3] != ' ' and text[3] != '\t')
+            return 0
+        long p = 3
+        while p < length and (text[p] == ' ' or text[p] == '\t')
+            p++
+        operand_from = p
+        long stop = p
+        while stop < length and text[stop] != ' ' and text[stop] != '\t' and text[stop] != ';'
+            stop++
+        ; the comment says so
+        long q = stop
+        while q + 3 < length {
+            if text[q] == ';' and text[q + 1] == 'r' and text[q + 2] == 'o' and text[q + 3] == 'm'
+                return stop - p
+            q++
+        }
+        ; an address: $hex, [$hex], >$hex
+        q = p
+        if q < stop and (text[q] == '[' or text[q] == '>')
+            q++
+        if q >= stop or text[q] != '$'
+            return 0
+        long address = 0
+        q++
+        while q < stop {
+            ubyte c = text[q] | 32
+            if text[q] >= '0' and text[q] <= '9'
+                address = address * 16 + (text[q] - '0')
+            else if c >= 'a' and c <= 'f'
+                address = address * 16 + (c - 'a' + 10)
+            else
+                break
+            q++
+        }
+        if address >= target.number("rom_start", $8000)
+            return stop - p
+        return 0
+    }
+
+    ; a line of assembly as it is, or as a call through the ROM's switching
+    sub code_line(^^ubyte text, long length) {
+        long operand_len = rom_line(text, length)
+        if operand_len != 0
+            rom_call(text + operand_from, operand_len)
+        else {
+            buf.add_bytes(o, text, length)
+            nl()
+        }
+    }
+
+    ; the instructions for the calls into the ROM that the program has
+    sub rom_routines_code() {
+        if not rom_switched
+            return
+        rom_closed = true
+        raw("; the ROMs in and out around a call into them, with the flags as they are")
+        raw("p8_rom_in:")
+        line("pshs  cc")
+        line("orcc  #$50")
+        target_lines("rom_in")
+        line("inc  p8_rom_on")
+        line("puls  cc,pc")
+        raw("p8_rom_out:")
+        line("pshs  cc")
+        line("orcc  #$50")
+        line("dec  p8_rom_on")
+        target_lines("rom_out")
+        line("puls  cc,pc")
+        raw("p8_rom_on:  fcb  0")
+        ubyte k = 0
+        while k < rom_count {
+            put("p8rom_")
+            putn(k)
+            put(":\n")
+            line("jsr  p8_rom_in")
+            op("jsr")
+            put(rom_routines[k])
+            nl()
+            line("jmp  p8_rom_out")
+            k++
+        }
         nl()
     }
 
@@ -2877,12 +3029,13 @@ gen6809 {
             }
             a = a.next
         }
-        op("jsr")
         if by_address
-            put(i.sym)
-        else
+            rom_call_at(i.sym)
+        else {
+            op("jsr")
             name(i.sym)
-        nl()
+            nl()
+        }
         ; the values: a flag is left for the branch that follows, so the stores of the
         ; other values must not disturb it
         bool flag = false
@@ -3766,6 +3919,7 @@ gen6809 {
             target_lines("char_in")
         }
         nl()
+        rom_routines_code()
     }
 
     ; ---- variables ----
