@@ -1053,11 +1053,70 @@ gen6809 {
         }
     }
 
+    ; how many times 2 a number is when it is a power of two (1 is 0 times), or 255
+    sub power_of_two(long value) -> ubyte {
+        ubyte n = 0
+        if value <= 0 or (value & (value - 1)) != 0
+            return 255
+        while value > 1 {
+            value >>= 1
+            n++
+        }
+        return n
+    }
+
+    ; Times, divided by, or the remainder by a constant that is a power of two, without
+    ; a sign (a product does not mind one): shifts, or a mask.  False when it is not
+    ; such an instruction.
+    sub by_power_of_two(^^ir.Instr i, ubyte group, ubyte kind, ubyte size) -> bool {
+        if (group != 1 and group != 4) or size > 2 or (kind != 5 and kind != 6 and kind != 7)
+            return false
+        long constant = (i.value as long) & $ffff
+        if size == 1
+            constant &= 255
+        ubyte n = power_of_two(constant)
+        if n == 255 or (kind != 7 and n > 4)
+            return false
+        if size == 1 {
+            op_first("ldb", i, group, 0, 1, 1)
+            if kind == 7
+                op_imm("andb", constant - 1)
+            else repeat n {
+                if kind == 5
+                    line("lslb")
+                else
+                    line("lsrb")
+            }
+            op_first("stb", i, group, 0, 1, 1)
+        }
+        else {
+            op_first("ldd", i, group, 0, 2, 2)
+            if kind == 7 {
+                op_imm("anda", ((constant - 1) >> 8) & 255)
+                op_imm("andb", (constant - 1) & 255)
+            }
+            else repeat n {
+                if kind == 5 {
+                    line("lslb")
+                    line("rola")
+                }
+                else {
+                    line("lsra")
+                    line("rorb")
+                }
+            }
+            op_first("std", i, group, 0, 2, 2)
+        }
+        return true
+    }
+
     ; an arithmetic instruction of any size
     sub arith(^^ir.Instr i, ubyte group) {
         ubyte size = size_of(i.type)
         ubyte kind = kind_of(i.op)
         ubyte half
+        if by_power_of_two(i, group, kind, size)
+            return
         if size == 1 {
             if kind <= 4 {
                 op_first("ldb", i, group, 0, 1, 1)
@@ -1072,9 +1131,18 @@ gen6809 {
                 op_first("stb", i, group, 0, 1, 1)
             }
             else {
-                op_second("ldb", i, group, 0, 1)
-                widen(kind)
-                line("tfr  d,x")
+                if group == 1 or group == 4 {
+                    ; (a constant: as a word, with its sign when the division has one)
+                    long divisor = (i.value as long) & 255
+                    if kind >= 8 and divisor >= 128
+                        divisor |= $ff00
+                    op_imm("ldx", divisor)
+                }
+                else {
+                    op_second("ldb", i, group, 0, 1)
+                    widen(kind)
+                    line("tfr  d,x")
+                }
                 op_first("ldb", i, group, 0, 1, 1)
                 widen(kind)
                 divide(kind)
@@ -1200,6 +1268,12 @@ gen6809 {
 
     ; first = -first
     sub negate(^^ir.Instr i, ubyte group, ubyte size) {
+        if size == 1 and group <= 2 {
+            op_cell("ldb", i.r1, 0, 1)
+            line("negb")
+            op_cell("stb", i.r1, 0, 1)
+            return
+        }
         if size == 1 {
             op_first("neg", i, group, 0, 1, 1)
             return
@@ -1420,12 +1494,10 @@ gen6809 {
                     op_cell("std", i.r1, 0, 2)
                 }
                 else if size == 1 {
-                    if (i.value as long) & 255 == 0
-                        op_cell("clr", i.r1, 0, 1)
-                    else {
-                        op_imm("ldb", (i.value as long) & 255)
-                        op_cell("stb", i.r1, 0, 1)
-                    }
+                    ; (through B also for a zero: the pass over the assembly then knows
+                    ; what the place holds)
+                    op_imm("ldb", (i.value as long) & 255)
+                    op_cell("stb", i.r1, 0, 1)
                 }
                 else if size == 2 {
                     op_imm("ldd", (i.value as long) & $ffff)
@@ -1462,9 +1534,15 @@ gen6809 {
             ir.OP_LOADMZ -> {
                 ; a byte from memory into a wider register, the rest zero
                 op_mem("ldb", i, 0, 1, 1)
-                op_cell("stb", i.r1, 0, 1)
-                for k in 1 to rsize(i.r1) - 1
-                    op_cell("clr", i.r1, k, 1)
+                if rsize(i.r1) == 2 {
+                    line("clra")
+                    op_cell("std", i.r1, 0, 2)
+                }
+                else {
+                    op_cell("stb", i.r1, 0, 1)
+                    for k in 1 to rsize(i.r1) - 1
+                        op_cell("clr", i.r1, k, 1)
+                }
             }
             ir.OP_LOADR -> {
                 if size == 0
@@ -1691,7 +1769,17 @@ gen6809 {
                 if i.op == ir.OP_INCM or i.op == ir.OP_DECM
                     where = 3
                 bool up = i.op == ir.OP_INC or i.op == ir.OP_INCM
-                if size == 1 {
+                if size == 1 and where == 1 {
+                    ; (a register: through B, where the pass over the assembly can
+                    ; join it with what is around it)
+                    op_cell("ldb", i.r1, 0, 1)
+                    if up
+                        line("incb")
+                    else
+                        line("decb")
+                    op_cell("stb", i.r1, 0, 1)
+                }
+                else if size == 1 {
                     if up
                         op_first("inc", i, where, 0, 1, 1)
                     else
@@ -1740,6 +1828,17 @@ gen6809 {
                     place = 3
                 if size == 0
                     unsupported(i)
+                else if place == 1 and size == 1 {
+                    op_cell("ldb", i.r1, 0, 1)
+                    line("comb")
+                    op_cell("stb", i.r1, 0, 1)
+                }
+                else if place == 1 and size == 2 {
+                    op_cell("ldd", i.r1, 0, 2)
+                    line("coma")
+                    line("comb")
+                    op_cell("std", i.r1, 0, 2)
+                }
                 else for k in 0 to size - 1
                     op_first("com", i, place, k, 1, size)
             }
@@ -2510,7 +2609,7 @@ gen6809 {
         when i.op {
             ir.OP_ROL, ir.OP_ROR, ir.OP_ROXL, ir.OP_ROXR, ir.OP_ROLM, ir.OP_RORM, ir.OP_ROXLM, ir.OP_ROXRM -> rotation = true
         }
-        if size <= 2 and not rotation and count > 1 {
+        if size <= 2 and not rotation and (count > 1 or (count == 1 and place == 1)) {
             ; (several bits: in B or D; the last bit out is in the carry, as the IR has it)
             bool left = i.op == ir.OP_LSL or i.op == ir.OP_LSLI or i.op == ir.OP_LSLM
             bool arithmetic = i.op == ir.OP_ASR or i.op == ir.OP_ASRI or i.op == ir.OP_ASRM

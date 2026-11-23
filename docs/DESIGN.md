@@ -1067,9 +1067,10 @@ registers (`cx16.r0L`, at the made-up address of `r0`) is the second of its
 two bytes here.
 
 Branches are written in their short form, and at the end
-`peep6809.branches` makes those long whose label is not within 24
-instructions with nothing but instructions between (an instruction is at
-most five bytes, so that is in reach).  lwasm's own choice (`pragma
+`peep6809.branches` makes those long whose label is not in reach: it adds
+up the most bytes that each instruction between can be, from how it is
+written (`most_bytes`), and takes the short form up to 127 of them, with
+nothing but instructions between.  lwasm's own choice (`pragma
 autobranchlength`) takes the long form for every branch forward.  A branch
 in `%asm` is left as it is written.  The IR's carry is handled as on the
 Z80: after a compare the 6809's is the other way round than the IR's, and a
@@ -1197,8 +1198,28 @@ same.  What is known of variables is forgotten at every write to memory
 that is not a place (it may be through a pointer) and at every call and
 label; a memory-mapped variable is not followed, and a place that stands
 for a variable is read as the variable once, so the program reads its
-variables as often as it did.  The test programs are about a quarter
-smaller for it (the conformance program `functions`: 5626 bytes with
+variables as often as it did.  A store through X leaves what X is known to
+hold of a variable: only a pointer that points at itself would be changed
+by it.  Smaller things: a load of D before a call of one of the program's
+subroutines that is only moved to X is a load of X; a compare of B with 0
+before a branch on zero goes after an instruction that left B's flags;
+a load of 0 is a clear where nothing takes the carry.  The generator writes
+for it: a byte in a register is counted, negated and shifted through B, not
+in its place, so that the pass can join the pieces; times, divided by and
+the remainder by a constant power of two are shifts and a mask.
+
+The library's most carried routines are 6809 assembly, as on the Z80: the
+decimal and hexadecimal digits of numbers and the reading of numbers in
+`conv`, and `length`, `ncopy` and `compare` in `strings`.
+
+The user's game (its Color Computer build, which was written for
+prog8c-llvm's 6809 profile) is the real program this was measured on: it
+builds, loads with LOADM from a disk image, shows its title screen and
+starts a level on Enter in XRoar.  12,662 bytes when it first built; 10,931
+after the above; prog8c-llvm's build is 10,090.
+
+The test programs are about a quarter
+smaller for the pass (the conformance program `functions`: 5626 bytes with
 `-noopt`, 4121 without, both as Color Computer files; `-noopt` also passes
 no parameters in registers).
 

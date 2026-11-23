@@ -518,8 +518,19 @@ peep6809 {
                         held_len[r] = operand_len
                     }
                     else {
+                        ; (A store through X leaves what X is known to hold of a variable:
+                        ; only a pointer that points at itself would be changed by it.)
+                        long x_at = held_at[R_X]
+                        uword x_len = held_len[R_X]
+                        bool through_x = operand_len >= 2 and src.data[operand_at + operand_len - 2] == ',' and src.data[operand_at + operand_len - 1] == 'x'
                         memory_written()
-                        if followed() {
+                        if through_x {
+                            held_at[R_X] = x_at
+                            held_len[R_X] = x_len
+                        }
+                        ; (the register holds the variable too now; what it is known to
+                        ; hold of a place or a constant is kept, which lasts longer)
+                        if held_len[r] == 0 and followed() {
                             held_at[r] = operand_at
                             held_len[r] = operand_len
                         }
@@ -645,6 +656,23 @@ peep6809 {
         }
     }
 
+    ; is line k a call of one of the program's subroutines ("_name" or "p8e_name")?
+    sub program_call(long k) -> bool {
+        operand(k)
+        if operand_len == 0
+            return false
+        if src.data[operand_at] == '_'
+            return true
+        return operand_len > 4 and buf.bytes_equal(src.data + operand_at, "p8e_", 4)
+    }
+
+    ; does line k read the carry?
+    sub reads_carry(long k) -> bool {
+        return is(k, "rolb") or is(k, "rola") or is(k, "rorb") or is(k, "rora") or is(k, "rol") or is(k, "ror")
+            or is(k, "adcb") or is(k, "adca") or is(k, "sbcb") or is(k, "sbca") or is(k, "bcc") or is(k, "bcs")
+            or is(k, "blo") or is(k, "bhs") or is(k, "bhi") or is(k, "bls") or is(k, "tfr") or is(k, "pshs")
+    }
+
     sub twice() {
         long k = 0
         while k < count {
@@ -656,16 +684,48 @@ peep6809 {
             long third = -1
             if second >= 0
                 third = next_code(second)
-            ; "ldd Q / tfr d,x / ldd R" is "ldx Q / ldd R"
+            ; "cmpb #0" before a branch on zero only is "tstb"
+            if second >= 0 and lengths[k] == 12 and buf.bytes_equal(src.data + starts[k], "    cmpb  #0", 12) and (is(second, "beq") or is(second, "bne")) {
+                ; (and nothing at all after an instruction that left B's flags)
+                long first = k - 1
+                while first >= 0 and kinds[first] == K_GONE
+                    first--
+                if first >= 0 and kinds[first] == K_CODE and (is(first, "ldb") or is(first, "stb") or is(first, "addb") or is(first, "subb")
+                        or is(first, "andb") or is(first, "orb") or is(first, "eorb") or is(first, "incb") or is(first, "decb")
+                        or is(first, "negb") or is(first, "comb"))
+                    kinds[k] = K_GONE
+                else {
+                    sys.memcopy("    tstb    ", src.data + starts[k], 12)
+                    lengths[k] = 8
+                }
+            }
+            ; "ldd Q / tfr d,x" before a call of a subroutine of the program, which takes
+            ; nothing in D (a byte for it in B would be loaded after this), is "ldx Q"
             if third >= 0 and is(k, "ldd") and is(second, "tfr") and lengths[second] == 12 and buf.bytes_equal(src.data + starts[second] + 9, "d,x", 3)
+                    and ((is(third, "jsr") and program_call(third)) or is(third, "ldb") or is(third, "lda")) {
+                src.data[starts[k] + 6] = 'x'
+                kinds[second] = K_GONE
+            }
+            ; "ldd Q / tfr d,x / ldd R" is "ldx Q / ldd R"
+            else if third >= 0 and is(k, "ldd") and is(second, "tfr") and lengths[second] == 12 and buf.bytes_equal(src.data + starts[second] + 9, "d,x", 3)
                     and is(third, "ldd") {
                 src.data[starts[k] + 6] = 'x'
                 kinds[second] = K_GONE
             }
-            ; a load, and then the same register is loaded again
-            else if second >= 0 and plain_load(k) and ((is(k, "ldd") and is(second, "ldd")) or (is(k, "ldb") and (is(second, "ldb") or is(second, "ldd")))
+            ; a load, and then the same register is loaded again (after a load of D, one
+            ; of A or B: the generator never takes the other half from what was there)
+            else if second >= 0 and plain_load(k) and ((is(k, "ldd") and (is(second, "ldd") or is(second, "ldb") or is(second, "lda")))
+                    or (is(k, "ldb") and (is(second, "ldb") or is(second, "ldd")))
                     or (is(k, "lda") and (is(second, "lda") or is(second, "ldd"))) or (is(k, "ldx") and is(second, "ldx")))
                 kinds[k] = K_GONE
+            ; a zero: cleared, where nothing takes the carry that the clearing clears
+            if kinds[k] == K_CODE and second >= 0 and lengths[k] == 11 and (buf.bytes_equal(src.data + starts[k], "    ldb  #0", 11) or buf.bytes_equal(src.data + starts[k], "    lda  #0", 11))
+                    and not reads_carry(second) {
+                ubyte which = src.data[starts[k] + 6]
+                sys.memcopy("    clr", src.data + starts[k], 7)
+                src.data[starts[k] + 7] = which
+                lengths[k] = 8
+            }
             k++
         }
     }
@@ -808,16 +868,42 @@ peep6809 {
 
     ; ---- the whole program: which branches are long ----
 
-    const long NEAR = 24            ; so many instructions are less than 127 bytes
+    ; How many bytes an instruction is at most, from how it is written: nothing after it
+    ; 2 (most are 1), a constant 3, a place in memory 3, through a register up to 4 (with
+    ; a 16-bit offset), and one more for the instructions with a first byte before
+    ; their own; a branch as its long form.
+    sub most_bytes(long k) -> long {
+        operand(k)
+        ^^ubyte t = src.data + starts[k] + 4
+        long more = 0
+        if is(k, "cmpd") or is(k, "cmpy") or is(k, "cmpu") or is(k, "cmps") or is(k, "ldy") or is(k, "sty") or is(k, "lds") or is(k, "sts")
+            more = 1
+        if operand_len == 0
+            return 2
+        if is(k, "tfr") or is(k, "exg") or is(k, "pshs") or is(k, "puls") or is(k, "andcc") or is(k, "orcc")
+            return 2
+        if t[0] == 'b' and lengths[k] > 7 and t[3] == ' ' and not is(k, "bit")
+            return 4
+        if src.data[operand_at] == '#'
+            return 3 + more
+        long q = operand_at
+        while q < operand_at + operand_len {
+            if src.data[q] == ',' or src.data[q] == '['
+                return 4 + more
+            q++
+        }
+        return 3 + more
+    }
 
-    ; is the label of this name within reach of line k: at most NEAR instructions away,
-    ; with nothing but instructions between?
+    ; is the label of this name within reach of the short branch in line k, with nothing
+    ; but instructions between?  (127 bytes forward from the end of the branch, 128 back
+    ; from there.)
     sub near(long k, long name_at, uword name_len) -> bool {
-        long seen = 0
+        long bytes = 0
         long j = k + 1
-        while j < count and seen <= NEAR {
+        while j < count and bytes <= 127 {
             if kinds[j] == K_CODE
-                seen++
+                bytes += most_bytes(j)
             else if kinds[j] == K_ASM
                 break
             else if is_label(j, name_at, name_len)
@@ -826,11 +912,14 @@ peep6809 {
                 break
             j++
         }
-        seen = 0
+        bytes = 2
         j = k - 1
-        while j >= 0 and seen < NEAR {
-            if kinds[j] == K_CODE
-                seen++
+        while j >= 0 {
+            if kinds[j] == K_CODE {
+                bytes += most_bytes(j)
+                if bytes > 128
+                    break
+            }
             else if kinds[j] == K_ASM
                 break
             else if is_label(j, name_at, name_len)
