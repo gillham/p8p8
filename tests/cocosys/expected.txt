@@ -1,0 +1,21 @@
+truefalse
+10:first line
+6:second
+21:third, without an end
+true 300 0
+true true 181
+falsetruefalse false
+ok 5100 5100 0
+from the host|second line||
+0
+HOST.TXT
+LINES.TXT
+BIG.DAT
+EMPTY
+HOST TXT 1 A 1
+LINES TXT 1 A 1
+BIG DAT 1 A 3
+EMPTY 1 A 1
+41
+941128517 5100
+0

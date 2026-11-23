@@ -41,7 +41,8 @@ The command is `p8c`.
   6809 in usim09batch.  Text goes straight into the screen's memory, the
   keys are the ROM's.  A pass over the assembly takes out what the
   generator's simple way leaves.  `asmsub` and `extsub` name the 6809's
-  registers.  Floats and files are not there yet, and the Color Computer 3 is used as a Color Computer 2 (32 columns).
+  registers, and `diskio` reads and writes Disk BASIC's files.  Floats are
+  not there yet, and the Color Computer 3 is used as a Color Computer 2 (32 columns).
   The test programs print what they print on the host, in usim09batch and
   in XRoar; nothing was run on a real machine.
 - For the host it writes LLVM IR and builds a native executable with clang.
@@ -340,6 +341,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make trs80cmp`, `make trs80cmp3`, `make trs80cmp4` | the same programs on a TRS-80 Model I, III and 4 in trs80gp (`TRS80GP` names the emulator), against the host |
 | `make z80sys`, `make trs80sys`, `make trs80dos`, `make trs80screen` | on the Z80 machines: the command line and files, the DOS still working after a program has ended, and the screen routines |
 | `make m6809cmp`, `make cococmp` | programs built for a bare 6809 print in usim09batch, and built for the Color Computer print in XRoar (without a window; `COCO_MACHINE=coco3` for its Color Computer 3), what they print on the host |
+| `make cocosys` | files on the Color Computer, in XRoar with a disk image that toolshed's `decb` makes and reads back |
 | `make z80bench` | the time and size of a benchmark for CP/M, against `prog8c-llvm`'s build |
 | `make irroundtrip` | a program built from the IR file that `p8c -ir` wrote is the same bytes as from its source |
 | `tools/benchmega65.sh` | loops of long, word and byte arithmetic on the MEGA65 as 6502 code and as 45GS02 code |

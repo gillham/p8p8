@@ -1112,8 +1112,25 @@ stands under its name; one declared `inline` gets the `rts` it does not
 have and is called like the others.  `tests/m6809/asmsub.p8` runs them;
 `tests/bad_m6809.p8` is what the checker refuses.
 
-Not there yet: floats (the instruction is an error that says so), files, a
-command line.
+Files on the Color Computer are a module of the library, `diskio`
+(`shared_coco_diskio`, for both machines): Disk BASIC's files, read and
+written by the module itself.  It knows the disk as RS-DOS lays it out (the
+directory on track 17, a file a chain of granules of nine sectors in the
+table in that track's second sector, the bytes of the last sector in the
+entry) and calls one routine of the ROM, DSKCON through its vector at
+$c004, for a sector; Disk BASIC's own file routines have no entries that
+stay where they are from one version to the next.  A file's length is exact.
+The table is written when a file is closed.  Disk BASIC keeps a copy of a
+disk's table in memory only while it has files open on it, so after a
+program that was started from the prompt it reads the table again.  `make
+cocosys` runs `tests/cocosys/files.p8` in XRoar with a disk image that
+toolshed's `decb` made, and has `decb` read the disk afterwards (its
+directory, the files' bytes); Disk BASIC's own `DIR`, `FREE` and `LINE
+INPUT` were tried on such a disk by hand.  Loading at $0e00 leaves Disk
+BASIC's memory, which ends below it, alone.
+
+Not there yet: floats (the instruction is an error that says so), a command
+line.
 
 The Color Computer's console is the target file's: a character goes into
 the screen's memory at the address BASIC keeps as its cursor's ($88), in the
