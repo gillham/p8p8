@@ -18,6 +18,8 @@
 # A program with floats prints them as the machine's BASIC does (its floats are the
 # ROM's): there tests/floatsame.py compares, number by number, to seven digits.
 #
+# M6809CMP_OPTIONS is more for p8c when it builds for the machine (-varshigh 0).
+#
 # Usage: tests/m6809cmp.sh <p8c> <program.p8>...
 #        (needs clang, lwasm (lwtools) and usim09batch, or XRoar with the machine's ROMs)
 p8c=$1
@@ -81,7 +83,7 @@ for f in "$@"; do
         cp "${f%.p8}.out" "$work/host/$name.out"
     fi
     if [ "$machine" = coco2 ]; then
-        "$p8c" -lib "$lib" -srcdirs "$lib/targets/${targetdir:-coco2}" -target "$here/m6809/$variant.properties" -out "$work/m6809" "$f" > "$work/m6809.err" 2>&1
+        "$p8c" -lib "$lib" $M6809CMP_OPTIONS -srcdirs "$lib/targets/${targetdir:-coco2}" -target "$here/m6809/$variant.properties" -out "$work/m6809" "$f" > "$work/m6809.err" 2>&1
         built="$work/m6809/$name.bin"
     else
         "$p8c" -lib "$lib" -target sim6809 -out "$work/m6809" "$f" > "$work/m6809.err" 2>&1

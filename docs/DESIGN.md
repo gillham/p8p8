@@ -1268,8 +1268,14 @@ after an `org` at the end of the assembly (only `rmb`, so the file has no
 bytes there), cleared at the start after `rom_out`, and `sys.upperstart()`
 is the first address after them.  The editor's variables below went from
 3.5 KB to 1.5 KB; with every feature on it ends 478 bytes before the limit
-and has 30 KB for text.  `coco2ram` does not have this: a program written
-for it takes $8000 as the start of its memory.  `make coco3ramcmp`: 72
+and has 30 KB for text.  On `coco2ram` it is there with `-varshigh 0`,
+upstream's option for variables in a machine's high memory (the number, a
+bank on the X16, means nothing here), and the target file says where with
+the 6502 machines' keys (`bss_highram_start`, `bss_highram_end`): without
+the option a program takes $8000 as the start of its memory, as before.
+With it the editor's Color Computer 2 build ends at $7948 with every
+feature on (marks and the z commands were left out for room before), and
+its test build, which ended above the limit at $7ec1, at $7992.  `make coco3ramcmp`: 72
 programs the same as on the host, on the 80 column screen; `make cocosys`
 runs `tests/cocosys/ownblocks.p8`.
 

@@ -54,6 +54,7 @@ The command is `p8c`.
   the memory beyond its 64 KB: 384 KB of a 512 KB machine, 48 KB with 128 KB;
   `-target coco3ram` is `coco2ram` for that machine (memory blocks of the
   program's own where BASIC is, 32 KB, with most of its variables there).
+  `-varshigh 0` does that with the variables on `coco2ram`.
   `-target dragon32` and `-target dragon64` are the Dragons, with the same
   screen and floats (the ROM's, at the Dragon's addresses) and no `diskio`.
 - For the host it writes LLVM IR and builds a native executable with clang.

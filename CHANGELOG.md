@@ -28,6 +28,10 @@
   the program in the user's editor; `sys.upperstart()` is where the memory
   after them begins.
 
+- `-varshigh 0` with `-target coco2ram`: the same for the Color Computer 2,
+  where it is the program's choice (without it the memory from $8000 on is
+  the program's as before).
+
 ### Changed
 
 - The Color Computer 3's `textio` and `highram` are in the shared

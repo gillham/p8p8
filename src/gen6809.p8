@@ -41,8 +41,9 @@ gen6809 {
     ^^ubyte reg_used = 0            ; per IR register: named by the code that was written
     long part = 0                   ; which subroutine's registers: its number
     ^^buf.Buf cells = 0             ; the places of the registers, written at the end
-    ; Variables in the program's upper memory (the target file's upper_variables, on a
-    ; machine whose ROMs the program switches out): the registers' places that are not
+    ; Variables in the program's upper memory (the target file's upper_variables, or
+    ; -varshigh with its bss_highram_start, on a machine whose ROMs the program
+    ; switches out): the registers' places that are not
     ; a float's, and the variables without values that are not floats, structs or of
     ; a block that the target names (lower_blocks), go there, as long as they fit
     ; before upper_variables_end.  What a routine of the ROM is given the address of
@@ -496,6 +497,16 @@ gen6809 {
         if target.text("rom_out") != 0 and target.text("rom_in") != 0 and target.number("upper_variables", 0) > 0 {
             upper_start = target.number("upper_variables", 0)
             upper_left = target.number("upper_variables_end", $10000) - upper_start
+        }
+        else if gen6502.vars_high_bank >= 0 {
+            ; -varshigh (its number means nothing here): the same where the target file
+            ; says where the high memory is, as the 6502 machines' target files do
+            if target.text("rom_out") != 0 and target.text("rom_in") != 0 and target.number("bss_highram_start", 0) > 0 {
+                upper_start = target.number("bss_highram_start", 0)
+                upper_left = target.number("bss_highram_end", $ffff) + 1 - upper_start
+            }
+            else
+                error("the target has no high ram area (bss_highram_start, bss_highram_end, with rom_out and rom_in) for -varshigh", 0)
         }
         ; (the memory-mapped variables, for the pass over the assembly: their values may
         ; change by themselves)

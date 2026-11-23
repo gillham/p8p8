@@ -341,6 +341,11 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^    org  3584$$' $(OUT)/divmix.asm
 	@grep -q '^p8_memory_end:  equ  32256$$' $(OUT)/divmix.asm
 	@grep -q '^    ifgt  \*-p8_memory_end$$' $(OUT)/divmix.asm
+	@$(P8P8) -lib lib -target coco2ram -varshigh 0 -asm -out $(OUT) tests/programs/divmix.p8
+	@grep -q '^p8_upper_start:$$' $(OUT)/divmix.asm
+	@$(P8P8) -lib lib -target coco2ram -asm -out $(OUT) tests/programs/divmix.p8
+	@grep -q '^p8_upper_end:  equ  32768$$' $(OUT)/divmix.asm
+	@! $(P8P8) -lib lib -target coco2 -varshigh 0 -asm -out $(OUT) tests/programs/divmix.p8 > /dev/null 2>&1
 	@$(P8P8) -lib lib -target coco3ram -asm -out $(OUT) tests/programs/divmix.p8
 	@grep -q '^    org  32768$$' $(OUT)/divmix.asm
 	@grep -q '^p8_upper_start:$$' $(OUT)/divmix.asm
@@ -577,6 +582,8 @@ coco3ramcmp:	$(P8P8)
 # make cocoramcmp: the same for the coco2ram target (the program with the ROMs switched out)
 cocoramcmp:	$(P8P8)
 	@M6809CMP_MACHINE=coco2ram tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/m6809/*.p8)
+	@echo "and with -varshigh 0 (variables in the memory where the ROMs were)"
+	@M6809CMP_MACHINE=coco2ram M6809CMP_OPTIONS="-varshigh 0" tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/m6809/*.p8)
 
 # make dragoncmp: the same for the dragon32 target, on XRoar's Dragon 32 and Dragon 64
 dragoncmp:	$(P8P8)
