@@ -170,8 +170,8 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 ### A 6809 machine
 
 `cpu = 6809` makes the target a 6809 machine: p8p8's 6809 code generator
-writes the program (assembly for lwasm of lwtools).  `coco2`, `coco3` and
-`sim6809` are such targets.  The routines are lines of assembly that end by
+writes the program (assembly for lwasm of lwtools).  `coco2`, `coco3`,
+`dragon32`, `dragon64` and `sim6809` are such targets.  The routines are lines of assembly that end by
 returning, as for a Z80 machine; a line that ends with a colon is a label.
 `tests/m6809/xroar-coco2.properties` is a target file made from `coco2`
 (`base`): its program ends at a fixed address, where XRoar is told to stop,
@@ -182,7 +182,7 @@ program does in XRoar.  The keys it reads:
 |-----|---------|
 | `load_address` | where the program begins (`$0e00` for the Color Computer) |
 | `output_extension` | of the program file (`.bin`, `.hex`) |
-| `output_format` | lwasm's format: `decb` (a file for `LOADM`, the default), `ihex`, `srec`, `raw` |
+| `output_format` | lwasm's format: `decb` (a file for `LOADM`, the default), `dragon` (a DragonDOS binary), `ihex`, `srec`, `raw` |
 | `startup_code` | the first instructions, when the machine needs any |
 | `stack_size` | the program gets a stack of its own of this many bytes; without it the stack is the one it was called on |
 | `exit_code` | how the program ends; `sys.exit` comes here too, with the status in B.  The stack pointer is what it was at the start, so `rts` goes back to who called the program |

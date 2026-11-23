@@ -12,7 +12,8 @@
 # coco2 target as tests/m6809/xroar-coco2.properties has it) and run in XRoar by
 # tests/cocorun.sh, unattended; COCO_MACHINE=coco3 makes it XRoar's Color Computer 3.
 # M6809CMP_MACHINE=coco3 is the coco3 target on that machine, on its 32 column screen,
-# and coco3w the same on its 80 column screen.
+# and coco3w the same on its 80 column screen; dragon32 and dragon64 are the dragon32
+# target on XRoar's Dragons.
 #
 # A program with floats prints them as the machine's BASIC does (its floats are the
 # ROM's): there tests/floatsame.py compares, number by number, to seven digits.
@@ -36,6 +37,15 @@ if [ "$machine" = coco3 ] || [ "$machine" = coco3w ]; then
     export COCO_MACHINE
     machine=coco2
     targetdir=coco3
+fi
+# (the dragon32 target, on XRoar's Dragon 32 or Dragon 64)
+if [ "$machine" = dragon32 ] || [ "$machine" = dragon64 ]; then
+    variant=xroar-dragon32
+    where="Dragon in XRoar, $machine"
+    COCO_MACHINE=$machine
+    export COCO_MACHINE
+    machine=coco2
+    targetdir=dragon32
 fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_m6809cmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT

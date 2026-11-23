@@ -1166,6 +1166,22 @@ programs with floats too: where one prints floats, `tests/floatsame.py`
 compares its output with the host's number by number, to seven digits.  72
 the same on XRoar's Color Computer 2 and 3.
 
+`dragon32` and `dragon64` are the Dragons: the Color Computer's sisters,
+with the same screen and the same Microsoft BASIC at other addresses.  Their
+target file is `coco2`'s with the program written as a DragonDOS binary
+(lwasm's `dragon` format), the keys through the ROM's jump at $8006, and
+the float routines where the Dragon 32's ROM has them: each was found by
+the bytes of the Color Computer's routine (most are byte for byte the same
+for 16 bytes; the square root, the power and the trigonometric ones, which
+begin with addresses, by the closest match and then read in a disassembly:
+the Dragon's cosine and square root begin a few bytes before what matched).
+The Dragon 64's first ROM has them at the same places.  `floats` is the
+Color Computers' module with the four addresses it has itself changed
+(`shared_dragon_floats`).  There is no `diskio`: DragonDOS is another
+system.  `make dragoncmp`: 72 programs the same as on the host on XRoar's
+Dragon 32 and on its Dragon 64, the ones with floats among them; keys were
+tried with a script of key presses.
+
 A program that switches the ROMs off (the Color Computer's all-RAM mode)
 cannot call any of this: floats, the keys and DSKCON alike would need a
 piece of code in low memory that switches the ROMs back on around each

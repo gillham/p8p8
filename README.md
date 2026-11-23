@@ -47,6 +47,8 @@ The command is `p8c`.
   (`txt.set_width`).
   The test programs print what they print on the host, in usim09batch and
   in XRoar; nothing was run on a real machine.
+  `-target dragon32` and `-target dragon64` are the Dragons, with the same
+  screen and floats (the ROM's, at the Dragon's addresses) and no `diskio`.
 - For the host it writes LLVM IR and builds a native executable with clang.
   That is how p8p8 compiles itself.
 
@@ -344,6 +346,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make z80sys`, `make trs80sys`, `make trs80dos`, `make trs80screen` | on the Z80 machines: the command line and files, the DOS still working after a program has ended, and the screen routines |
 | `make m6809cmp`, `make cococmp` | programs built for a bare 6809 print in usim09batch, and built for the Color Computer print in XRoar (without a window; `COCO_MACHINE=coco3` for its Color Computer 3), what they print on the host |
 | `make coco3cmp`, `make coco3screen` | the `coco3` target on XRoar's Color Computer 3: the test programs on its 32 and its 80 column screen, and what a program leaves in the 80 column screen's memory |
+| `make dragoncmp` | the same programs for the `dragon32` target on XRoar's Dragon 32 and Dragon 64 |
 | `make cocosys` | files on the Color Computer, in XRoar with a disk image that toolshed's `decb` makes and reads back |
 | `make z80bench` | the time and size of a benchmark for CP/M, against `prog8c-llvm`'s build |
 | `make irroundtrip` | a program built from the IR file that `p8c -ir` wrote is the same bytes as from its source |

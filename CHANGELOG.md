@@ -18,6 +18,9 @@
   and 80 column screens too, whichever is on, and `txt.set_width` switches
   (BASIC's WIDTH).  Not there yet: anything for a program that switches the
   ROMs off.
+  `-target dragon32` and `-target dragon64` build for the Dragons (a
+  DragonDOS binary; the same screen, keys and floats through the Dragon's
+  ROM; no `diskio`).
   `make m6809cmp` and `make cococmp` compare the test programs with the
   host, in usim09batch and in XRoar.  `-target llvm16 -triple mc6809-coco`
   and `mc6809-sim`, as `prog8c-llvm` spells its 6809 profiles, name `coco2`
