@@ -47,6 +47,8 @@ The command is `p8c`.
   (`txt.set_width`).
   The test programs print what they print on the host, in usim09batch and
   in XRoar; nothing was run on a real machine.
+  The upper 32 KB of a 64 KB machine are memory for data (the `highram`
+  module).
   `-target dragon32` and `-target dragon64` are the Dragons, with the same
   screen and floats (the ROM's, at the Dragon's addresses) and no `diskio`.
 - For the host it writes LLVM IR and builds a native executable with clang.

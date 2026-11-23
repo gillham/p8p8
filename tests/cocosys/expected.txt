@@ -19,3 +19,11 @@ EMPTY 1 A 1
 41
 941128517 5100
 0
+upper memory
+0 123 8 7777 0
+2.82842713
+no upper memory
+upper memory
+0 123 8 7777 0
+2.82842713
+no upper memory

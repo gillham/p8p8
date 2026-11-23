@@ -18,6 +18,8 @@
   and 80 column screens too, whichever is on, and `txt.set_width` switches
   (BASIC's WIDTH).  Not there yet: anything for a program that switches the
   ROMs off.
+  The `highram` module of `coco2`, `dragon32` and `dragon64` uses the upper
+  32 KB of a 64 KB machine as memory for data.
   `-target dragon32` and `-target dragon64` build for the Dragons (a
   DragonDOS binary; the same screen, keys and floats through the Dragon's
   ROM; no `diskio`).

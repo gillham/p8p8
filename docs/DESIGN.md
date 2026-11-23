@@ -1182,10 +1182,17 @@ system.  `make dragoncmp`: 72 programs the same as on the host on XRoar's
 Dragon 32 and on its Dragon 64, the ones with floats among them; keys were
 tried with a script of key presses.
 
-A program that switches the ROMs off (the Color Computer's all-RAM mode)
-cannot call any of this: floats, the keys and DSKCON alike would need a
-piece of code in low memory that switches the ROMs back on around each
-call.  That is not there.
+The upper 32 KB of a 64 KB Color Computer 1 or 2 or Dragon 64 is memory for
+data (the user's choice of the two ways to use it): the `highram` module
+(`shared_sam_highram`).  The program stays below $8000 with the ROMs on, so
+the keys, the floats and the disk work as ever; `get`, `put`, `getbyte`,
+`setbyte`, `fill` and `move` switch the RAM in at the SAM ($ffdf) for the
+moment of the access, with interrupts off, since BASIC's interrupt routine
+is in the ROM, and the ROMs back on ($ffde).  `present()` changes a byte up
+there and reads it back, and looks that the lower half did not change with
+it.  `make cocosys` runs it with 64 KB and with 32 KB, and on XRoar's
+Dragon 64 and Dragon 32.  A program that itself runs with the ROMs off, with
+its ROM calls through code in low memory, is not there.
 
 `-target llvm16 -triple mc6809-coco`, as prog8c-llvm spells it, names the
 `coco2` target (and `mc6809-sim` names `sim6809`) unless `-llvm` asks for

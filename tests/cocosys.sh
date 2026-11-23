@@ -3,7 +3,9 @@
 # routine), run in XRoar with a disk image: tests/cocosys/files.p8 writes, reads,
 # renames and deletes files and reads one that toolshed's decb put on the disk.  What it
 # prints is compared with tests/cocosys/expected.txt; then decb reads the disk: its
-# directory, and the files' bytes.
+# directory, and the files' bytes.  Then tests/cocosys/upper.p8: the upper 32 KB as data
+# (the highram module), on a Color Computer 2 with 64 KB and with 32 KB and on XRoar's
+# Dragon 64 and Dragon 32.
 #
 # Usage: tests/cocosys.sh <p8c>      (needs lwasm, XRoar with the Color Computer 2's and
 #                                     Disk BASIC's ROMs, and decb of toolshed)
@@ -25,6 +27,12 @@ decb copy -1 -a "$work/host.txt" "$work/t.dsk,HOST.TXT" > /dev/null || exit 1
     decb copy "$work/t.dsk,LINES.TXT" "$work/lines.out" > /dev/null && wc -c < "$work/lines.out" | tr -d ' '
     decb copy "$work/t.dsk,BIG.DAT" "$work/big.out" > /dev/null && cksum < "$work/big.out"
     decb copy "$work/t.dsk,EMPTY" "$work/empty.out" > /dev/null && wc -c < "$work/empty.out" | tr -d ' '
+    # the upper 32 KB as data (highram): with 64 KB, with 32 KB, and on the Dragons
+    "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco2" -target "$here/m6809/xroar-coco2.properties" -out "$work" "$here/cocosys/upper.p8" > "$work/upper.log" 2>&1 &&
+        "$here/cocorun.sh" "$work/upper.bin" && COCO_OPTIONS="-ram 32" "$here/cocorun.sh" "$work/upper.bin"
+    mkdir "$work/dragon"
+    "$p8c" -lib "$lib" -srcdirs "$lib/targets/dragon32" -target "$here/m6809/xroar-dragon32.properties" -out "$work/dragon" "$here/cocosys/upper.p8" > "$work/upper.log" 2>&1 &&
+        COCO_MACHINE=dragon64 "$here/cocorun.sh" "$work/dragon/upper.bin" && COCO_MACHINE=dragon32 "$here/cocorun.sh" "$work/dragon/upper.bin"
 } > "$work/printed.txt" 2>&1
 if diff -u "$here/cocosys/expected.txt" "$work/printed.txt"; then
     echo "files on the Color Computer: as expected"
