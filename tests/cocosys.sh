@@ -43,7 +43,25 @@ decb copy -1 -a "$work/host.txt" "$work/t.dsk,HOST.TXT" > /dev/null || exit 1
     "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco2ram" -target "$here/m6809/xroar-coco2ram.properties" -out "$work/ram" "$here/cocosys/files.p8" > "$work/ram.log" 2>&1 &&
         COCO_OPTIONS="-load-fd0 $work/r.dsk" "$here/cocorun.sh" "$work/ram/files.bin"
 } > "$work/printed.txt" 2>&1
-if diff -u "$here/cocosys/expected.txt" "$work/printed.txt"; then
+diff -u "$here/cocosys/expected.txt" "$work/printed.txt" || exit 1
+# tests/cocosys/lists.p8: the place in a file, the files of a disk listed, a second
+# drive; with the disks that the files program left (in drive 0) and a disk with two
+# files in drive 1, as the coco2 and as the coco2ram target
+{
+    for target in coco2 coco2ram; do
+        mkdir "$work/l$target"
+        printf '10 PRINT "ONE"\r' > "$work/one.bas"
+        decb dskini "$work/u.dsk" > /dev/null
+        decb copy -0 -a "$work/one.bas" "$work/u.dsk,ONE.BAS" > /dev/null
+        decb copy -1 -a "$work/host.txt" "$work/u.dsk,BOARD.DAT" > /dev/null
+        first=$work/t.dsk
+        [ $target = coco2ram ] && first=$work/r.dsk
+        "$p8c" -lib "$lib" -srcdirs "$lib/targets/$target" -target "$here/m6809/xroar-$target.properties" -out "$work/l$target" "$here/cocosys/lists.p8" > "$work/lists.log" 2>&1 &&
+            COCO_OPTIONS="-load-fd0 $first -load-fd1 $work/u.dsk" "$here/cocorun.sh" "$work/l$target/lists.bin"
+        decb dir "$work/u.dsk," | grep -v '^Directory' | grep -v '^$' | tr -s ' '
+    done
+} > "$work/lists.txt" 2>&1
+if diff -u "$here/cocosys/expected_lists.txt" "$work/lists.txt"; then
     echo "files on the Color Computer: as expected"
 else
     exit 1

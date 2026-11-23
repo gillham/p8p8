@@ -9,6 +9,11 @@
   BASIC's stack), and a program that with its variables does not end before
   it is an error of the assembler, where it was a program that overwrote
   the stack or, with the ROMs out, the upper memory.
+- `diskio` on the Color Computers: `f_seek`, and the files of a drive
+  listed (`lf_start_list`, `lf_next_entry`, `lf_end_list`, `list_filenames`)
+  with `list_filename`, `list_filetype` and `list_blocks`, all of them or
+  those that match a pattern with `*` and `?`, on any drive (`"*.BAS:1"`).
+- `strings.pattern_match` and `pattern_match_nocase` on the 6809 machines.
 
 ## 0.5.0
 
