@@ -171,7 +171,7 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 
 `cpu = 6809` makes the target a 6809 machine: p8p8's 6809 code generator
 writes the program (assembly for lwasm of lwtools).  `coco2`, `coco3`,
-`coco2ram`, `dragon32`, `dragon64` and `sim6809` are such targets.  The routines are lines of assembly that end by
+`coco2ram`, `coco3ram`, `dragon32`, `dragon64` and `sim6809` are such targets.  The routines are lines of assembly that end by
 returning, as for a Z80 machine; a line that ends with a colon is a label.
 `tests/m6809/xroar-coco2.properties` is a target file made from `coco2`
 (`base`): its program ends at a fixed address, where XRoar is told to stop,
@@ -196,7 +196,8 @@ program does in XRoar.  The keys it reads:
 | `wait_jiffy` | a routine that takes a 60th of a second, for `sys.wait` (without it there is no wait) |
 | `ticks` | a routine: D = the clock in 60ths of a second (without it `sys.ticks()` is 0) |
 | `tail_code` | lines after everything else (the simulator's reset vector) |
-| `rom_out`, `rom_in`, `rom_start` | a machine whose program runs with the ROMs switched out (`coco2ram`): the lines that switch them out and in, and the address from which a call is one into the ROM (default `$8000`).  The generator switches them out after `startup_code`, in before `exit_code`, and around every call into the ROM |
+| `rom_out`, `rom_in`, `rom_start` | a machine whose program runs with the ROMs switched out (`coco2ram`): the lines that switch them out and in, and the address from which a call is one into the ROM (default `$8000`).  The generator switches them out after `startup_code`, in before `exit_code`, and around every call into the ROM.  The lines must keep the registers (`coco3ram`, where they change the memory blocks, saves A) |
+| `upper_variables`, `upper_variables_end`, `lower_blocks` | on such a machine: variables in the memory that the program has in place of the ROMs, from the first address up to (not including) the second.  The variables without values go there, and the generator's own places for values, but no floats, structs or slabs, and not the variables of the blocks that `lower_blocks` names (with commas): what a routine of the ROM is given the address of must stay below.  `sys.upperstart()` is the first address after them (`coco3ram`) |
 | `float_accumulator`, `float_load`, `float_store`, `float_add`, `float_sub`, `float_mul`, `float_div`, `float_compare`, `float_from_word`, `float_normalize`, `float_to_long`, `float_floor`, `float_half`, `float_unpack`, `float_power`, `float_sqrt`, `float_sin`, `float_cos`, `float_tan`, `float_atan`, `float_ln` | floats are those of a Microsoft BASIC in the machine's ROM: where its accumulator is, and its routines (the comments in `coco2/target.properties` say which each is).  Without them the machine has no floats |
 | `run_command` | what `-run` runs, with `{file}` for the program |
 | `library` | the directory with the modules; the target's own directory is searched before it |

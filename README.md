@@ -51,7 +51,9 @@ The command is `p8c`.
   module), or, with `-target coco2ram`, the program runs with the ROMs
   switched out and has that memory as its own, its calls into the ROM
   switching them in for the moment.  On the Color Computer 3 `highram` is
-  the memory beyond its 64 KB: 384 KB of a 512 KB machine, 48 KB with 128 KB.
+  the memory beyond its 64 KB: 384 KB of a 512 KB machine, 48 KB with 128 KB;
+  `-target coco3ram` is `coco2ram` for that machine (memory blocks of the
+  program's own where BASIC is, 32 KB, with most of its variables there).
   `-target dragon32` and `-target dragon64` are the Dragons, with the same
   screen and floats (the ROM's, at the Dragon's addresses) and no `diskio`.
 - For the host it writes LLVM IR and builds a native executable with clang.
@@ -352,6 +354,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make m6809cmp`, `make cococmp` | programs built for a bare 6809 print in usim09batch, and built for the Color Computer print in XRoar (without a window; `COCO_MACHINE=coco3` for its Color Computer 3), what they print on the host |
 | `make coco3cmp`, `make coco3screen` | the `coco3` target on XRoar's Color Computer 3: the test programs on its 32 and its 80 column screen, and what a program leaves in the 80 column screen's memory |
 | `make cocoramcmp` | the same programs for `coco2ram`: the program with the ROMs switched out |
+| `make coco3ramcmp` | the same programs for `coco3ram`, on the 80 column screen |
 | `make dragoncmp` | the same programs for the `dragon32` target on XRoar's Dragon 32 and Dragon 64 |
 | `make cocosys` | files on the Color Computer, in XRoar with a disk image that toolshed's `decb` makes and reads back |
 | `make z80bench` | the time and size of a benchmark for CP/M, against `prog8c-llvm`'s build |

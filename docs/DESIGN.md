@@ -1197,7 +1197,7 @@ there and reads it back, and looks that the lower half did not change with
 it.  `make cocosys` runs it with 64 KB and with 32 KB, and on XRoar's
 Dragon 64 and Dragon 32.
 
-The Color Computer 3 has a `highram` module of its own (`coco3/highram.p8`),
+The Color Computer 3 has a `highram` module of its own (`shared_coco3_highram`),
 with the same routines over a long address: its memory is blocks of 8 KB,
 eight of them in the processor's 64 KB at a time by the registers at $ffa0,
 and BASIC, which runs from RAM there, has blocks $38 to $3f.  The module
@@ -1240,6 +1240,38 @@ out again; when the interrupt came during a call into the ROM it is
 BASIC's as it is.  So the clock, the waits and the disk drive's motor work.
 `make cocoramcmp`: 72 programs the same as on the host; `make cocosys` runs
 the clock, the memory and the file test on it.
+
+`coco3ram` is the same for the Color Computer 3, which has no ROMs to
+switch (BASIC runs from RAM there): `rom_out` puts memory blocks $30 to
+$33 at $8000-$ffff in place of BASIC's $3c to $3f, `rom_in` the reverse,
+both keeping A.  The page at $fe00, where the interrupts come in, is
+BASIC's whatever block is there, so the program has $8000-$fdff.  The
+screen's routines, which put the screen's block at $e000 for a moment, put
+back the block named in `p8_top_block` (a cell of the target's:
+BASIC's on `coco3`, the program's here), and the `highram` module puts back
+the blocks it found.  It came from porting the user's editor to the 80
+column screen: with its page store over `highram` the editor is 35 KB of
+code and does not fit below BASIC's stack, so the port is the gap buffer in
+this memory, as on the Color Computer 2.
+
+Even so the program was 1.5 KB too long, and the generator learned to put
+variables into that memory (`upper_variables`, `upper_variables_end`,
+`lower_blocks` in the target file).  What goes up: the places of the IR's
+registers that are not a float's, the carry cells, and the variables without
+values that are not floats, structs, slabs or of a block that the target
+names, in their order, as long as they fit.  What must stay below is what a
+routine of BASIC's is given the address of: a float (the accumulator's
+routines take X), a sector's buffer (`diskio`), and the variables of the
+modules that change the blocks themselves.  On `coco3ram` they go to
+$8000-$9fff, the one block that `highram` never changes.  They are written
+after an `org` at the end of the assembly (only `rmb`, so the file has no
+bytes there), cleared at the start after `rom_out`, and `sys.upperstart()`
+is the first address after them.  The editor's variables below went from
+3.5 KB to 1.5 KB; with every feature on it ends 478 bytes before the limit
+and has 30 KB for text.  `coco2ram` does not have this: a program written
+for it takes $8000 as the start of its memory.  `make coco3ramcmp`: 72
+programs the same as on the host, on the 80 column screen; `make cocosys`
+runs `tests/cocosys/ownblocks.p8`.
 
 A target file's `base` may itself have a `base` (up to four deep, each
 beside the one that names it): the tests' variant of `coco2ram` is made

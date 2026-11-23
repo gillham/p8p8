@@ -45,6 +45,15 @@ if [ "$machine" = coco2ram ]; then
     machine=coco2
     targetdir=coco2ram
 fi
+# (the coco3ram target: the program with blocks of its own where BASIC is, 80 columns)
+if [ "$machine" = coco3ram ]; then
+    variant=xroar-coco3ram
+    where="Color Computer 3 in XRoar, target coco3ram (BASIC's blocks switched out)"
+    COCO_MACHINE=coco3
+    export COCO_MACHINE
+    machine=coco2
+    targetdir=coco3ram
+fi
 # (the dragon32 target, on XRoar's Dragon 32 or Dragon 64)
 if [ "$machine" = dragon32 ] || [ "$machine" = dragon64 ]; then
     variant=xroar-dragon32

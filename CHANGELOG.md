@@ -19,6 +19,20 @@
   machines' module (`get`, `put`, `getbyte`, `setbyte`, `fill`, `move`,
   and `size()`): 384 KB of a 512 KB machine, 48 KB of one with 128 KB
   (there it is BASIC's high resolution graphics memory).
+- `-target coco3ram`: the Color Computer 3 for a program that has memory
+  blocks of its own where BASIC is ($8000-$fdff), as `coco2ram` is for the
+  Color Computer 2; calls of BASIC's routines put its blocks back for the
+  moment.  On this target the code generator puts the variables that BASIC
+  never has to see into that memory (target keys `upper_variables`,
+  `upper_variables_end`, `lower_blocks`), which leaves about 2 KB more for
+  the program in the user's editor; `sys.upperstart()` is where the memory
+  after them begins.
+
+### Changed
+
+- The Color Computer 3's `textio` and `highram` are in the shared
+  directory (`shared_coco3_textio`, `shared_coco3_highram`) and put back
+  the memory blocks they found, not BASIC's by number.
 
 ## 0.5.0
 

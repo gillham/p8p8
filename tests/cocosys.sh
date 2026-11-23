@@ -7,7 +7,8 @@
 # (the highram module), on a Color Computer 2 with 64 KB and with 32 KB and on XRoar's
 # Dragon 64 and Dragon 32.  Then tests/cocosys/lists.p8 (the place in a file, lists of
 # files, a second drive) and tests/cocosys/blocks.p8 (the Color Computer 3's memory
-# beyond its 64 KB), each with an expected file of its own.
+# beyond its 64 KB, and tests/cocosys/ownblocks.p8, the coco3ram target), each with an
+# expected file of its own.
 #
 # Usage: tests/cocosys.sh <p8c>      (needs lwasm, XRoar with the Color Computers', the
 #                                     Dragons' and Disk BASIC's ROMs, and decb of toolshed)
@@ -71,6 +72,11 @@ diff -u "$here/cocosys/expected_lists.txt" "$work/lists.txt" || exit 1
     "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco3" -target "$here/m6809/xroar-coco3.properties" -out "$work/blocks" "$here/cocosys/blocks.p8" > "$work/blocks.log" 2>&1 &&
         COCO_MACHINE=coco3 COCO_OPTIONS="-ram 128" "$here/cocorun.sh" "$work/blocks/blocks.bin" &&
         COCO_MACHINE=coco3 COCO_OPTIONS="-ram 512" "$here/cocorun.sh" "$work/blocks/blocks.bin"
+    # the coco3ram target: the program with blocks of its own where BASIC is
+    mkdir "$work/own"
+    "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco3ram" -target "$here/m6809/xroar-coco3ram.properties" -out "$work/own" "$here/cocosys/ownblocks.p8" > "$work/own.log" 2>&1 &&
+        COCO_MACHINE=coco3 COCO_OPTIONS="-ram 128" "$here/cocorun.sh" "$work/own/ownblocks.bin" &&
+        COCO_MACHINE=coco3 COCO_OPTIONS="-ram 512" "$here/cocorun.sh" "$work/own/ownblocks.bin"
 } > "$work/blocks.txt" 2>&1
 if diff -u "$here/cocosys/expected_blocks.txt" "$work/blocks.txt"; then
     echo "files on the Color Computer: as expected"

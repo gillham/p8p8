@@ -41,6 +41,15 @@ gen6809 {
     ^^ubyte reg_used = 0            ; per IR register: named by the code that was written
     long part = 0                   ; which subroutine's registers: its number
     ^^buf.Buf cells = 0             ; the places of the registers, written at the end
+    ; Variables in the program's upper memory (the target file's upper_variables, on a
+    ; machine whose ROMs the program switches out): the registers' places that are not
+    ; a float's, and the variables without values that are not floats, structs or of
+    ; a block that the target names (lower_blocks), go there, as long as they fit
+    ; before upper_variables_end.  What a routine of the ROM is given the address of
+    ; (a float, a sector's buffer) must be below, where the ROM sees it too.
+    ^^buf.Buf upper_cells = 0
+    long upper_start = 0            ; 0: none
+    long upper_left = 0             ; bytes that are still free there
     ^^ir.Instr previous = 0         ; the instruction before the one being written, in its chunk
     bool need_mul = false
     bool need_div = false
@@ -479,6 +488,15 @@ gen6809 {
         if cells == 0
             cells = buf.new(65536)
         buf.clear(cells)
+        if upper_cells == 0
+            upper_cells = buf.new(65536)
+        buf.clear(upper_cells)
+        upper_start = 0
+        upper_left = 0
+        if target.text("rom_out") != 0 and target.text("rom_in") != 0 and target.number("upper_variables", 0) > 0 {
+            upper_start = target.number("upper_variables", 0)
+            upper_left = target.number("upper_variables_end", $10000) - upper_start
+        }
         ; (the memory-mapped variables, for the pass over the assembly: their values may
         ; change by themselves)
         if peep6809.volatile == 0
@@ -608,6 +626,15 @@ gen6809 {
         line("clr  ,x+")
         line("bra  p8_clear")
         raw("p8_cleared:")
+        if upper_start != 0 {
+            line("ldx  #p8_upper_start")
+            raw("p8_clear_upper:")
+            line("cmpx  #p8_upper_end")
+            line("beq  p8_cleared_upper")
+            line("clr  ,x+")
+            line("bra  p8_clear_upper")
+            raw("p8_cleared_upper:")
+        }
         line("jsr  p8_init_globals")
         line("jsr  _main__start")
         line("clrb")
@@ -730,9 +757,14 @@ gen6809 {
         }
         register_cells()
         if carry_cell {
-            buf.add_str(cells, "p8c_")
-            buf.add_long(cells, part)
-            buf.add_str(cells, ":  rmb  1\n")
+            ^^buf.Buf carry_buf = cells
+            if upper_left >= 1 {
+                carry_buf = upper_cells
+                upper_left--
+            }
+            buf.add_str(carry_buf, "p8c_")
+            buf.add_long(carry_buf, part)
+            buf.add_str(carry_buf, ":  rmb  1\n")
         }
         carry_cell = false
     }
@@ -883,13 +915,18 @@ gen6809 {
         for r in 1 to ir.regcount {
             if reg_used[r] != 0 {
                 reg_used[r] = 0
-                buf.add_str(cells, "p8r_")
-                buf.add_long(cells, part)
-                buf.add_byte(cells, '_')
-                buf.add_long(cells, r)
-                buf.add_str(cells, ":  rmb  ")
-                buf.add_long(cells, rsize(r))
-                buf.add_byte(cells, '\n')
+                ^^buf.Buf cell_buf = cells
+                if rsize(r) != types.FLOAT_SIZE and upper_left >= rsize(r) {
+                    cell_buf = upper_cells
+                    upper_left -= rsize(r)
+                }
+                buf.add_str(cell_buf, "p8r_")
+                buf.add_long(cell_buf, part)
+                buf.add_byte(cell_buf, '_')
+                buf.add_long(cell_buf, r)
+                buf.add_str(cell_buf, ":  rmb  ")
+                buf.add_long(cell_buf, rsize(r))
+                buf.add_byte(cell_buf, '\n')
             }
         }
     }
@@ -4016,32 +4053,7 @@ gen6809 {
         ; comes after it, and the first instructions clear it)
         raw("; ---- variables without values, and the registers of the code")
         raw("p8_bss_start:")
-        v = prog.vars
-        while v != 0 {
-            if (v.kind == ir.V_VAR and v.init == 0) or v.kind == ir.V_SLAB or (v.kind == ir.V_INSTANCE and v.init == 0) {
-                long bytes = v.size
-                if v.kind == ir.V_VAR {
-                    long vsize = element_size(v.typestr)
-                    if struct_of(v.typestr) != 0
-                        vsize = struct_of(v.typestr).size
-                    if vsize == 0 {
-                        error("a variable of this type cannot be used on the 6809 yet", v.name)
-                        vsize = 1
-                    }
-                    bytes = element_count(v.typestr) * vsize
-                }
-                if v.align > 1 {
-                    put("    align  ")
-                    putn(v.align)
-                    nl()
-                }
-                name(v.name)
-                put(":  rmb  ")
-                putn(bytes)
-                nl()
-            }
-            v = v.next
-        }
+        bss_variables(false)
         buf.add_bytes(o, cells.data, cells.len)
         if need_vregs
             raw("p8_vregs:  rmb  32")
@@ -4085,8 +4097,90 @@ gen6809 {
             raw("    endc")
             raw("    endc")
         }
+        ; the variables in the program's upper memory (see upper_cells)
+        if upper_start != 0 {
+            put("    org  ")
+            putn(upper_start)
+            nl()
+            raw("p8_upper_start:")
+            buf.add_bytes(o, upper_cells.data, upper_cells.len)
+            bss_variables(true)
+            raw("p8_upper_end:")
+        }
+        else if target.text("rom_out") != 0 {
+            put("p8_upper_end:  equ  ")
+            putn(target.number("rom_start", $8000))
+            nl()
+        }
+        else
+            raw("p8_upper_end:  equ  p8_bss_end")
         if target.text("tail_code") != 0
             target_lines("tail_code")
+    }
+
+    ; The variables without values: those that stay below (upper false), or those of
+    ; the program's upper memory.  Which go up is found again in each of the two
+    ; passes, the same way: in their order, as long as they fit.
+    sub bss_variables(bool upper) {
+        long left = upper_left
+        ^^ir.Var v = prog.vars
+        while v != 0 {
+            if (v.kind == ir.V_VAR and v.init == 0) or v.kind == ir.V_SLAB or (v.kind == ir.V_INSTANCE and v.init == 0) {
+                long bytes = v.size
+                if v.kind == ir.V_VAR {
+                    long vsize = element_size(v.typestr)
+                    if struct_of(v.typestr) != 0
+                        vsize = struct_of(v.typestr).size
+                    if vsize == 0 {
+                        if not upper
+                            error("a variable of this type cannot be used on the 6809 yet", v.name)
+                        vsize = 1
+                    }
+                    bytes = element_count(v.typestr) * vsize
+                }
+                bool up = false
+                if upper_start != 0 and v.kind == ir.V_VAR and struct_of(v.typestr) == 0 and not text_has(v.typestr, "float")
+                        and bytes + v.align <= left and not lower_block(v.name) {
+                    up = true
+                    left -= bytes + v.align
+                }
+                if up == upper {
+                    if v.align > 1 {
+                        put("    align  ")
+                        putn(v.align)
+                        nl()
+                    }
+                    name(v.name)
+                    put(":  rmb  ")
+                    putn(bytes)
+                    nl()
+                }
+            }
+            v = v.next
+        }
+    }
+
+    ; is the variable one of a block that the target file keeps below (lower_blocks:
+    ; names with commas between them)?
+    sub lower_block(^^ubyte sym) -> bool {
+        ^^ubyte list = target.text("lower_blocks")
+        if list == 0
+            return false
+        long n = 0
+        while sym[n] != 0 and sym[n] != '.'
+            n++
+        long k = 0
+        while list[k] != 0 {
+            while list[k] == ',' or list[k] == ' '
+                k++
+            long m = 0
+            while list[k + m] != 0 and list[k + m] != ',' and list[k + m] != ' '
+                m++
+            if m == n and m != 0 and buf.bytes_equal(list + k, sym, n)
+                return true
+            k += m
+        }
+        return false
     }
 
     ; the struct that a type is an array of ("main.Two[4]"), or 0
