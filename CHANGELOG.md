@@ -1,43 +1,51 @@
 # Changes
 
-## Unreleased
+## 0.5.0
 
 ### Added
 
-- A code generator for the 6809 (`src/gen6809.p8`), a beginning: it writes
-  assembly for lwasm of lwtools.  `-target coco2` and `-target coco3` build
-  a Color Computer program (a DECB file for `LOADM` and `EXEC`, loaded at
-  $0e00) whose text goes straight into the screen's memory; `-target
-  sim6809` builds one for a bare 6809 in usim09batch.  `asmsub` and
-  `extsub` name the 6809's registers (`A`, `B`, `D`, `X`, `Y`, `U`, and
-  `Pc`).  A pass over the assembly makes the programs about a quarter
-  smaller.  `diskio` on the Color Computers reads and writes Disk BASIC's
-  files (through its sector routine alone).  Floats there are those of the
-  BASIC in the ROM: five bytes, its arithmetic and functions, and a float
-  prints as BASIC prints it.  `coco3` writes to the Color Computer 3's 40
-  and 80 column screens too, whichever is on, and `txt.set_width` switches
-  (BASIC's WIDTH).  Not there yet: anything for a program that switches the
-  ROMs off.
-  The `highram` module of `coco2`, `dragon32` and `dragon64` uses the upper
-  32 KB of a 64 KB machine as memory for data.
-  `-target coco2ram` is the Color Computer 2 with 64 KB for a program that
-  runs with the ROMs switched out: $8000-$feff is its memory, and its calls
-  into the ROM (keys, floats, the disk) switch the ROMs in around them.
-  `sys.progend()`, `sys.progstart()` and `sys.stack()` on the 6809
-  machines.  A target file's `base` may have a `base` of its own.
-  `-target dragon32` and `-target dragon64` build for the Dragons (a
-  DragonDOS binary; the same screen, keys and floats through the Dragon's
-  ROM; no `diskio`).
-  `make m6809cmp` and `make cococmp` compare the test programs with the
-  host, in usim09batch and in XRoar.  `-target llvm16 -triple mc6809-coco`
-  and `mc6809-sim`, as `prog8c-llvm` spells its 6809 profiles, name `coco2`
-  and `sim6809`; `%address` and `-address` say where the program loads.
+- A code generator for the 6809 (`src/gen6809.p8`, with a pass over its
+  assembly in `src/peep6809.p8`): it writes assembly for lwasm of lwtools.
+  The machines:
+  - `coco2`: the Tandy Color Computer 1 and 2.  The program is a DECB file
+    for `LOADM` and `EXEC`, loaded at $0e00; text goes straight into the
+    screen's memory, the keys are the ROM's.
+  - `coco3`: the Color Computer 3, on whichever of its screens is on: the
+    40 and 80 column ones too, and `txt.set_width` switches (BASIC's
+    WIDTH).
+  - `coco2ram`: the Color Computer 2 with 64 KB for a program that runs
+    with the ROMs switched out: $8000-$feff is its memory, and its calls
+    into the ROM (keys, floats, the disk) switch the ROMs in around them.
+  - `dragon32` and `dragon64`: the Dragons (a DragonDOS binary; the same
+    screen, keys and floats through the Dragon's ROM).
+  - `sim6809`: a bare 6809 in usim09batch, the machine of the tests.
+- On those machines: `asmsub` and `extsub` name the 6809's registers (`A`,
+  `B`, `D`, `X`, `Y`, `U`, and `Pc`); floats are those of the BASIC in the
+  ROM (five bytes, its arithmetic and functions; a float prints as BASIC
+  prints it; none on `sim6809`); `diskio` on the Color Computers reads and
+  writes Disk BASIC's files, through its sector routine alone (none on the
+  Dragons); the `highram` module of `coco2`, `dragon32` and `dragon64` uses
+  the upper 32 KB of a 64 KB machine as memory for data; `sys.progend()`,
+  `sys.progstart()` and `sys.stack()`.
+- `-target llvm16 -triple mc6809-coco` and `mc6809-sim`, as `prog8c-llvm`
+  spells its 6809 profiles, name `coco2` and `sim6809`; `%address` and
+  `-address` say where the program loads.
+- A target file's `base` may have a `base` of its own.
+- `make m6809cmp`, `cococmp`, `cocoramcmp`, `coco3cmp` and `dragoncmp`
+  compare the test programs with the host, in usim09batch and in XRoar;
+  `make cocosys` and `make coco3screen` test files, the upper memory and
+  the 80 column screen there.
+
+Nothing of this was run on a real machine: the Color Computers and the
+Dragons are XRoar's.
 
 ### Library
 
-- `targets/m6809`, the library of the 6809 machines (llvm16's modules, and
-  the Color Computer's `textio`), and the targets `coco2`, `coco3` and
-  `sim6809`.
+- `targets/m6809`, the library of the 6809 machines (llvm16's modules, with
+  the most carried routines of `conv` and `strings` in 6809 assembly, and
+  the Color Computers' and Dragons' `textio`, `diskio`, `floats` and
+  `highram`), and the targets `coco2`, `coco2ram`, `coco3`, `dragon32`,
+  `dragon64` and `sim6809`.
 
 ## 0.4.0
 
