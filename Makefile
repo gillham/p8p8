@@ -339,6 +339,8 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^    end  p8_start$$' $(OUT)/divmix.asm
 	@$(P8P8) -lib lib -target coco2 -asm -out $(OUT) tests/programs/divmix.p8
 	@grep -q '^    org  3584$$' $(OUT)/divmix.asm
+	@$(P8P8) -lib lib -target llvm16 -triple mc6809-coco -address 0x2500 -asm -out $(OUT) tests/programs/divmix.p8
+	@grep -q '^    org  9472$$' $(OUT)/divmix.asm
 	@grep -q '^    jsr  \[\$$a000\]$$' $(OUT)/divmix.asm || grep -q '^    stx  \$$88$$' $(OUT)/divmix.asm
 	@echo "test bad_m6809 (the 6809's registers in the declaration of a routine in assembly)"
 	@$(P8P8) -lib lib -target sim6809 -check tests/bad_m6809.p8 2>&1 | diff -u tests/expected/bad_m6809.txt -

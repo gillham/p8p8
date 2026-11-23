@@ -540,6 +540,29 @@ gen6809 {
         line("end  p8_start")
     }
 
+    ; the value of one of the program's options ("loadAddress"), or 0
+    sub option(str key) -> ^^ubyte {
+        ^^ubyte t = prog.options
+        if t == 0
+            return 0
+        long keylen = buf.cstr_len(key)
+        long i = 0
+        while t[i] != 0 {
+            if buf.bytes_equal(t + i, key, keylen) and t[i + keylen] == '=' {
+                long first = i + keylen + 1
+                long stop = first
+                while t[stop] != 0 and t[stop] != '\n'
+                    stop++
+                return strtab.intern(t + first, (stop - first) as uword)
+            }
+            while t[i] != 0 and t[i] != '\n'
+                i++
+            if t[i] == '\n'
+                i++
+        }
+        return 0
+    }
+
     ; The first lines: the program begins at the target's load address with the
     ; target's first instructions.
     sub head() {
@@ -547,8 +570,14 @@ gen6809 {
         put(prog.name)
         nl()
         raw("; written by p8p8's 6809 code generator, for lwasm")
+        ; (where the program begins: the target's load address, or what %address or
+        ; -address says)
         put("    org  ")
-        putn(target.number("load_address", $0e00))
+        long begins = target.number("load_address", $0e00)
+        ^^ubyte given = option("loadAddress")
+        if given != 0
+            begins = number_of(given)
+        putn(begins)
         nl()
         raw("p8_start:")
         ; (the machine's first instructions, when it needs any: where the stack is)

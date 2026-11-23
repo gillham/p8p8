@@ -18,7 +18,9 @@
   screens (it is used as a Color Computer 2), and anything for a program
   that switches the ROMs off.
   `make m6809cmp` and `make cococmp` compare the test programs with the
-  host, in usim09batch and in XRoar.
+  host, in usim09batch and in XRoar.  `-target llvm16 -triple mc6809-coco`
+  and `mc6809-sim`, as `prog8c-llvm` spells its 6809 profiles, name `coco2`
+  and `sim6809`; `%address` and `-address` say where the program loads.
 
 ### Library
 

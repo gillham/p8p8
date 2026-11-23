@@ -1171,7 +1171,13 @@ cannot call any of this: floats, the keys and DSKCON alike would need a
 piece of code in low memory that switches the ROMs back on around each
 call.  That is not there.
 
-Not there yet: a command line.
+`-target llvm16 -triple mc6809-coco`, as prog8c-llvm spells it, names the
+`coco2` target (and `mc6809-sim` names `sim6809`) unless `-llvm` asks for
+the LLVM IR, as `z80-cpm` names `cpm`; `%address` and `-address` say where
+the program loads.  So the command line of a build for prog8c-llvm's 6809
+profile builds with p8c as it is.
+
+Not there yet: a command line for the program.
 
 The Color Computer's console is the target file's: a character goes into
 the screen's memory at the address BASIC keeps as its cursor's ($88), in the

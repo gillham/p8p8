@@ -843,6 +843,17 @@ main {
             opt_target = "cpm"
             importer.triple = 0
         }
+        ; (and its 6809 profiles name the Color Computer 2 and the bare 6809 of usim09batch)
+        if opt_target != 0 and not opt_llvm and importer.triple != 0 and strings.compare(opt_target, "llvm16") == 0 {
+            if strings.compare(importer.triple, "mc6809-coco") == 0 {
+                opt_target = "coco2"
+                importer.triple = 0
+            }
+            else if strings.compare(importer.triple, "mc6809-sim") == 0 {
+                opt_target = "sim6809"
+                importer.triple = 0
+            }
+        }
         if opt_target != 0 {
             ^^ubyte tname = target.resolve(opt_target, lib_root)
             if tname == 0 {

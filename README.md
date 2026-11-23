@@ -43,7 +43,7 @@ The command is `p8c`.
   generator's simple way leaves.  `asmsub` and `extsub` name the 6809's
   registers, `diskio` reads and writes Disk BASIC's files, and floats are
   those of the BASIC in the ROM (five bytes, its routines).  A command line
-  is not there, and the Color Computer 3 is used as a Color Computer 2 (32 columns).
+  is not there (the machine has none), and the Color Computer 3 is used as a Color Computer 2 (32 columns).
   The test programs print what they print on the host, in usim09batch and
   in XRoar; nothing was run on a real machine.
 - For the host it writes LLVM IR and builds a native executable with clang.
