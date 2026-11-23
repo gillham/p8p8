@@ -12,11 +12,15 @@
 
 ### Changed
 
-- GameTank: the variables without an initial value are in the golden ram
-  ($600) by default, as `-varsgolden` puts them; the program is ROM, and
-  they could not be written to where they were.  `-varshigh`,
-  `-varsaddress` and `%varsaddress` still choose another place.  A target
-  file asks for this with `vars_golden = true`.
+- GameTank: the variables are in the golden ram ($600) by default, as
+  `-varsgolden` puts them; the program is ROM, and they could not be
+  written to where they were.  `-varshigh`, `-varsaddress` and
+  `%varsaddress` still choose another place.  That goes for the variables
+  with an initial value as well (an array or string with values stays in
+  the program): they get their value from code at the start, which before
+  only `%option romable` did, so that text output without that option
+  printed every character in the first column.  A target file asks for
+  this with `vars_golden = true`.
 - GameTank: the program file is always the image of a 2 MB flash cartridge
   (`name.gtr`), with the program at its end, as it was for a program with
   overlays only.  `-noimage` writes the program alone (`name.bin`), as

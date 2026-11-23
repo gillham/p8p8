@@ -329,6 +329,8 @@ test:	$(TESTBIN) $(P8P8)
 	@echo "test vars_golden (GameTank: the variables are in the golden ram without an option)"
 	@$(P8P8) -lib lib -target gametank -asm -out $(OUT) tests/fixedblock.p8
 	@grep -q '^  \* = \$$600$$' $(OUT)/fixedblock.asm
+	@if grep -q '^txt\.vcol  *\.byte' $(OUT)/fixedblock.asm; then echo "vars_golden: a variable with an initial value is in the ROM"; exit 1; fi
+	@grep -q '^txt\.vcol  *\.fill  1$$' $(OUT)/fixedblock.asm
 	@$(P8P8) -lib lib -target gametank -varshigh 1 -asm -out $(OUT) tests/fixedblock.p8
 	@grep -q '^  \* = \$$1e00$$' $(OUT)/fixedblock.asm
 	@echo "test accname (a variable named a in an unprefixed block: no operand a for the accumulator)"

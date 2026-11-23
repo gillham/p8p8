@@ -432,6 +432,8 @@ gen6502 {
             zp_safe = true
         v = option("romable")
         romable = v != 0 and strings.compare(v, "true") == 0
+        v = target.text("vars_golden")
+        rom_target = v != 0 and strings.compare(v, "true") == 0
         output_type = "PRG"
         v = option("output")
         if v != 0
@@ -1188,10 +1190,14 @@ gen6502 {
     ; program itself: a scalar variable with an initial value lives with the
     ; uninitialized ones in RAM and gets its value from code, like one in the zero
     ; page.  (Arrays and strings with initial values stay in the ROM, read only.)
+    ; A target file that has the variables in its golden ram (vars_golden) says the
+    ; same of its programs, for the scalars only: they are in RAM wherever the
+    ; variables are put, with nothing else of what %option romable asks.
     bool romable = false
+    bool rom_target = false
 
     sub ram_initialized(^^ir.Var v) -> bool {
-        return romable and v.kind == ir.V_VAR and v.init != 0 and v.zpaddr == 0 and not v.split
+        return (romable or rom_target) and v.kind == ir.V_VAR and v.init != 0 and v.zpaddr == 0 and not v.split
             and array_length(v.typestr) == 0
     }
 

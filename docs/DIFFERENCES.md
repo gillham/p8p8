@@ -297,7 +297,8 @@ overlap; one block stays inside a 64 KB bank.
   16 KB `name.bin`.  `-noimage` gives that file.
 - A target file can make the golden ram the place of the variables without
   an option (`vars_golden`; the GameTank's does), where `prog8c` wants
-  `-varsgolden`.
+  `-varsgolden`.  With that key no variable with an initial value is in the
+  program either, as in every program of `prog8c`'s.
 - A target file can have blocks at an address placed out of line
   (`fixed_blocks_apart`; the GameTank's does), where `prog8c` has the rest
   of the program follow such a block.

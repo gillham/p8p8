@@ -250,7 +250,10 @@ With `%option romable` nothing that is written may be in the program.  A
 scalar with an initial value lives with the uninitialized variables and gets
 its value from code at the start; the variables have to be somewhere else
 (`-varsgolden`, `-varshigh`, `-varsaddress`, `%varsaddress` or the target's
-`vars_address`), which is checked as upstream checks it.  What nobody can
+`vars_address`), which is checked as upstream checks it.  (A target file
+with `vars_golden` gets that much, the scalars in RAM, for every program:
+`rom_target` beside `romable` in `ram_initialized`.  The rest of this
+section is for `%option romable` only.)  What nobody can
 check by reading the generator is that none of its code, none of its
 peephole passes and no routine of the library writes into the program after
 all.  So the assembler checks: `rom_guard` goes over the finished assembly
