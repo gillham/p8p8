@@ -369,6 +369,8 @@ test:	$(TESTBIN) $(P8P8)
 	@test "$$(ls build/asmtest/6502 build/asmtest/z80 | tr '\n' ' ')" = "build/asmtest/6502: hello.asm  build/asmtest/z80: hello.asm "
 	@echo "test bad_overlay (%overlay: where it may stand)"
 	@$(P8P8) -lib lib -target cx16 -check tests/bad_overlay.p8 2>&1 | diff -u tests/expected/bad_overlay.txt -
+	@echo "test bad_builtin_names (an asmsub or extsub named as a builtin function)"
+	@$(P8P8) -lib lib -target cx16 -check tests/bad_builtin_names.p8 2>&1 | diff -u tests/expected/bad_builtin_names.txt -
 	@echo "test bad_far (far memory on the MEGA65: what is refused)"
 	@$(P8P8) -lib lib -target mega65 -check tests/bad_far.p8 2>&1 | diff -u tests/expected/bad_far.txt -
 	@for t in bad_upstream bad_upstream2 bad_upstream_syntax bad_ranges bad_structvars bad_upstream3; do \

@@ -27,11 +27,20 @@
   before.  A target file asks for this with `image_size` and `image_ext`
   (the names `overlay_image_size` and `overlay_image_ext` are still read).
 
+### Fixed
+
+- An `asmsub` or `extsub` with the name of a builtin function (`poke`,
+  `msb`) was accepted; it is an error, as it is for a `sub` and in
+  `prog8c`.
+
 ### Library
 
 - GameTank: `gametank_audio` and `gametank_music`, Prog8 versions of the
   GameTank SDK's audio and music sources, and the SDK's boot jingle, which
   `gametank.sdk_init()` plays now.
+- GameTank: one mirror each of the banking register (`banksMirror`, at $00)
+  and of the blitter flags (`flagsMirror`), used throughout; `cartbank`
+  keeps the ROM bank's number at $01 itself.
 
 ## 0.3.1
 

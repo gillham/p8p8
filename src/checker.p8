@@ -581,6 +581,8 @@ checker {
             }
             ast.N_ASMSUB, ast.N_EXTSUB -> {
                 check_name(n, n.name)
+                if symtab.builtins != 0 and symtab.find_in(symtab.builtins, n.name) != 0
+                    error(n, "builtin function cannot be redefined")
                 params(n.a)
                 return_types(n.b)
                 register_params(n.a)

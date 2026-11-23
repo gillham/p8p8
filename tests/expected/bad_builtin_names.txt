@@ -1,0 +1,2 @@
+tests/bad_builtin_names.p8:3:5: error: builtin function cannot be redefined
+tests/bad_builtin_names.p8:5:5: error: builtin function cannot be redefined
