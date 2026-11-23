@@ -39,7 +39,8 @@ The command is `p8c`.
   `-target coco3` build a Color Computer program (a DECB file for `LOADM`
   and `EXEC`) with lwasm of lwtools, and `-target sim6809` one for a bare
   6809 in usim09batch.  Text goes straight into the screen's memory, the
-  keys are the ROM's.  Floats, files, `asmsub` and `extsub` are not there
+  keys are the ROM's.  A pass over the assembly takes out what the
+  generator's simple way leaves.  Floats, files, `asmsub` and `extsub` are not there
   yet, and the Color Computer 3 is used as a Color Computer 2 (32 columns).
   The test programs print what they print on the host, in usim09batch and
   in XRoar; nothing was run on a real machine.

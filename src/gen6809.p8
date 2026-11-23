@@ -28,6 +28,7 @@
 %import mem
 %import out
 %import target
+%import peep6809
 
 gen6809 {
     %option ignore_unused
@@ -440,6 +441,23 @@ gen6809 {
         if cells == 0
             cells = buf.new(65536)
         buf.clear(cells)
+        ; (the memory-mapped variables, for the pass over the assembly: their values may
+        ; change by themselves)
+        if peep6809.volatile == 0
+            peep6809.volatile = buf.new(1024)
+        buf.clear(peep6809.volatile)
+        buf.add_byte(peep6809.volatile, '\n')
+        ^^ir.Var mv = p.vars
+        while mv != 0 {
+            if mv.kind == ir.V_MEMVAR {
+                ^^buf.Buf keep_o = o
+                o = peep6809.volatile
+                name(mv.name)
+                nl()
+                o = keep_o
+            }
+            mv = mv.next
+        }
         part = 0
         reg_used = mem.alloc(70000)
         long k
@@ -482,6 +500,9 @@ gen6809 {
         o = output
         head()
         buf.add_bytes(o, body.data, body.len)
+        ; (every branch was written in its short form: those that do not reach
+        ; become the long one)
+        peep6809.branches(o)
         ; (where the program starts, for a format that says so: a DECB file)
         line("end  p8_start")
     }
@@ -493,7 +514,6 @@ gen6809 {
         put(prog.name)
         nl()
         raw("; written by p8p8's 6809 code generator, for lwasm")
-        line("pragma  autobranchlength")
         put("    org  ")
         putn(target.number("load_address", $0e00))
         nl()
@@ -571,6 +591,7 @@ gen6809 {
         put("; ---- ")
         put(s.name)
         nl()
+        long from = o.len
         part++
         this_sub = s
         this_index = index_of(s.name)
@@ -617,6 +638,10 @@ gen6809 {
         nl()
         this_sub = 0
         this_index = -1
+        if optimize {
+            peep6809.run(o, from)
+            still_named(from)
+        }
         register_cells()
         if carry_cell {
             buf.add_str(cells, "p8c_")
@@ -712,6 +737,33 @@ gen6809 {
             nl()
             line("lsra")
             carry_loaded = true
+        }
+    }
+
+    ; After the pass over the assembly: only the IR registers whose places the lines from
+    ; position from on still name get one.
+    sub still_named(long from) {
+        uword r
+        for r in 1 to ir.regcount
+            reg_used[r] = 0
+        long p = from
+        long last = o.len - 6
+        while p < last {
+            if o.data[p] == 'p' and o.data[p + 1] == '8' and o.data[p + 2] == 'r' and o.data[p + 3] == '_' {
+                p += 4
+                while p < o.len and o.data[p] >= '0' and o.data[p] <= '9'
+                    p++
+                p++
+                long n = 0
+                while p < o.len and o.data[p] >= '0' and o.data[p] <= '9' {
+                    n = n * 10 + (o.data[p] - '0')
+                    p++
+                }
+                if n >= 1 and n <= ir.regcount
+                    reg_used[n] = 1
+            }
+            else
+                p++
         }
     }
 
@@ -2649,8 +2701,9 @@ gen6809 {
         if need_mul
             lines("; D = D * X (the low 16 bits)\np8rt_mul16:\npshs  x,d\nlda  1,s\nldb  3,s\nmul\npshs  d\nlda  2,s\nldb  5,s\nmul\naddb  ,s\nstb  ,s\nlda  3,s\nldb  4,s\nmul\naddb  ,s\nstb  ,s\npuls  d\nleas  4,s\nrts")
         if need_div {
-            lines("; D = D / X, X = the remainder (unsigned; a division by 0 gives $ffff)\np8rt_div16:\npshs  x,d\nldd  #0\nldx  #16\np8rt_div16_bit:\nlsl  1,s\nrol  ,s\nrolb\nrola\nbcs  p8rt_div16_fits\ncmpd  2,s")
-            lines("blo  p8rt_div16_less\np8rt_div16_fits:\nsubd  2,s\ninc  1,s\np8rt_div16_less:\nleax  -1,x\nbne  p8rt_div16_bit\ntfr  d,x\npuls  d\nleas  2,s\nrts")
+            lines("; D = D / X, X = the remainder (unsigned; a division by 0 gives $ffff)\np8rt_div16:\npshs  x,d\ntst  2,s\nbne  p8rt_div16_wide\ntst  3,s\nbeq  p8rt_div16_wide\ntsta\nbne  p8rt_div16_wide")
+            lines("; (both below 256: eight steps, the rest in A)\nlda  #8\nsta  ,s\nclra\np8rt_div16_bit8:\nlslb\nrola\ncmpa  3,s\nblo  p8rt_div16_less8\nsuba  3,s\nincb\np8rt_div16_less8:\ndec  ,s\nbne  p8rt_div16_bit8\nstb  1,s\ntfr  a,b\nclra\ntfr  d,x\npuls  d\nleas  2,s\nrts")
+            lines("p8rt_div16_wide:\nldd  #0\nldx  #16\np8rt_div16_bit:\nlsl  1,s\nrol  ,s\nrolb\nrola\nbcs  p8rt_div16_fits\ncmpd  2,s\nblo  p8rt_div16_less\np8rt_div16_fits:\nsubd  2,s\ninc  1,s\np8rt_div16_less:\nleax  -1,x\nbne  p8rt_div16_bit\ntfr  d,x\npuls  d\nleas  2,s\nrts")
         }
         if need_divs {
             lines("; D = D / X, X = the remainder (signed: towards zero, the remainder with the dividend's sign)\np8rt_divs16:\npshs  x,d\nclr  ,-s\nldd  1,s\nbpl  p8rt_divs16_a\ncoma\ncomb\naddd  #1\nstd  1,s\nlda  #3")

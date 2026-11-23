@@ -1052,7 +1052,8 @@ addresses: an indexed load is `ldx #array`, the index added with `abx` (a
 byte, which that instruction takes as unsigned) or `leax d,x`, and a load
 through a pointer is `ldx` and an offset in the instruction.  Shifts, `inc`,
 `dec`, `neg`, `com` and `clr` work on memory itself.  A long is two words.
-There is no pass over the assembly yet, so the code is correct and large.
+What that leaves of needless traffic a pass over the assembly takes out
+(below).
 
 The 6809 has the high byte of a word first.  The generator names a place by
 the number of a byte counted from the low end and the width that is wanted
@@ -1065,9 +1066,12 @@ conformance programs shows that, and `tests/m6809/functions.out` is what a
 registers (`cx16.r0L`, at the made-up address of `r0`) is the second of its
 two bytes here.
 
-Branches are written in their short form and lwasm chooses (`pragma
-autobranchlength`): a branch forward is the long form unless the assembler
-can see that the short one reaches.  The IR's carry is handled as on the
+Branches are written in their short form, and at the end
+`peep6809.branches` makes those long whose label is not within 24
+instructions with nothing but instructions between (an instruction is at
+most five bytes, so that is in reach).  lwasm's own choice (`pragma
+autobranchlength`) takes the long form for every branch forward.  A branch
+in `%asm` is left as it is written.  The IR's carry is handled as on the
 Z80: after a compare the 6809's is the other way round than the IR's, and a
 subroutine where a reader does not come straight after what set it keeps the
 flag in a byte of its own.  Loads and stores leave the carry alone.  The
@@ -1103,6 +1107,26 @@ when interrupts are off, where it never would).  `textio` for both Color
 Computers is one module in the shared library (`shared_coco_textio`).  The
 program loads at $0e00, over Disk BASIC's graphics pages and program text.
 `coco3` is the same machine for now: 32 columns.
+
+`src/peep6809.p8` goes over each subroutine's lines (not with `-noopt`).
+It follows what A, B, D and X hold of the register places, of constants
+and of the program's variables, and drops a load of what is there already,
+or makes it a move between D and X; a test of a byte that was just loaded
+or stored goes too.  Where a place was given the value of a constant, a
+variable or another place, what reads the place reads that instead.  Then
+every store to a place goes that nothing reads, or that is written over
+before anything can read it; then a load whose register is loaded again,
+and `std P`, `ldd Q`, `addd P` becomes `addd Q`.  A call and a return are a
+jump.  A load also sets the flags for the sign and for zero, so one is
+dropped only where nothing can read them, or where the line before left the
+same.  What is known of variables is forgotten at every write to memory
+that is not a place (it may be through a pointer) and at every call and
+label; a memory-mapped variable is not followed, and a place that stands
+for a variable is read as the variable once, so the program reads its
+variables as often as it did.  The test programs are about a quarter
+smaller for it (the conformance program `functions`: 5626 bytes with
+`-noopt`, 4121 without, both as Color Computer files; `-noopt` also passes
+no parameters in registers).
 
 `make m6809cmp` builds the test programs for the host and for `sim6809` and
 compares what they print: 62 the same, none different; 9 need floats.

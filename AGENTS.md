@@ -62,7 +62,7 @@ Things that have bitten here:
 | `src/gen6502.p8`, `peep6502.p8` | the 6502/65C02 code generator and its peephole passes |
 | `src/gen68k.p8` | the 68000 code generator |
 | `src/genz80.p8`, `peepz80.p8` | the Z80 code generator and the pass over its assembly |
-| `src/gen6809.p8` | the 6809 code generator |
+| `src/gen6809.p8`, `peep6809.p8` | the 6809 code generator and the pass over its assembly |
 | `src/gen68k.p8` | the 68000 code generator (qemu68k and the Amigas; new) |
 | `src/llvmgen.p8` | LLVM IR for the host |
 | `src/target.p8`, `triple.p8`, `importer.p8`, `main.p8` | target files, triple profiles of llvm32, module lookup, the driver |
