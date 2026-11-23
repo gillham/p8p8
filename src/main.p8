@@ -867,6 +867,7 @@ main {
             ; (for the front end a 6809 machine is what a Z80 machine is: the language of
             ; llvm16, assembly of its own in %asm)
             importer.z80 = is_z80 or is_m6809
+            importer.m6809 = is_m6809
             if is_z80 or is_m6809 {
                 importer.family = "llvm16"
                 importer.triple_library = target.text("library_platform")

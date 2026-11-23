@@ -1095,8 +1095,25 @@ and the end restores it: on the Color Computer the program returns to
 BASIC with `rts` from wherever `sys.exit` was called.
 
 `%asm` is written into the program as it stands, and names variables as on
-the Z80 (`_txt__plot__col`).  Not there yet: floats (the instruction is an
-error that says so), `asmsub` and `extsub`, files, a command line.
+the Z80 (`_txt__plot__col`).
+
+An `asmsub` and an `extsub` at an address name the 6809's own registers: A
+and B for a byte, D (which is A and B), X, Y and U for a word, `Pc` for the
+carry, and the library's virtual registers.  The checker knows them on a
+6809 machine (`m6809_registers`; `importer.m6809`), and the IR has slots for
+them (40 to 45).  A call puts the carry first (no load after it changes
+it), then what goes through memory, then the registers, and `jsr`s the name
+or the address.  The values come back from the registers; a carry that is
+a value is rotated into B here, and the two instructions with which the IR
+would do that are skipped (its load of 0 would be a `clr`, which clears
+the carry).  A flag that is returned for a branch stays through the stores
+of the other values (`pshs cc`).  An `asmsub`'s text is written as it
+stands under its name; one declared `inline` gets the `rts` it does not
+have and is called like the others.  `tests/m6809/asmsub.p8` runs them;
+`tests/bad_m6809.p8` is what the checker refuses.
+
+Not there yet: floats (the instruction is an error that says so), files, a
+command line.
 
 The Color Computer's console is the target file's: a character goes into
 the screen's memory at the address BASIC keeps as its cursor's ($88), in the

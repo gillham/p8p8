@@ -1,0 +1,5 @@
+tests/bad_m6809.p8:4:17: error: Syntax error: invalid cpu register (the 6809 has A, B, D, X, Y and U)
+tests/bad_m6809.p8:10:17: error: a parameter in A or B should be (u)byte or bool
+tests/bad_m6809.p8:10:5: error: a return value in D, X, Y or U should be (u)word, str or a pointer
+tests/bad_m6809.p8:16:5: error: a register is used multiple times in the parameters
+tests/bad_m6809.p8:16:5: error: Syntax error: invalid cpu register (the 6809 has A, B, D, X, Y and U)

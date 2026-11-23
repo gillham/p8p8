@@ -8,9 +8,11 @@
   assembly for lwasm of lwtools.  `-target coco2` and `-target coco3` build
   a Color Computer program (a DECB file for `LOADM` and `EXEC`, loaded at
   $0e00) whose text goes straight into the screen's memory; `-target
-  sim6809` builds one for a bare 6809 in usim09batch.  Not there yet:
-  floats, files, `asmsub`, `extsub`, and the
-  Color Computer 3's own screens (it is used as a Color Computer 2).
+  sim6809` builds one for a bare 6809 in usim09batch.  `asmsub` and
+  `extsub` name the 6809's registers (`A`, `B`, `D`, `X`, `Y`, `U`, and
+  `Pc`).  A pass over the assembly makes the programs about a quarter
+  smaller.  Not there yet: floats, files, and the Color Computer 3's own
+  screens (it is used as a Color Computer 2).
   `make m6809cmp` and `make cococmp` compare the test programs with the
   host, in usim09batch and in XRoar.
 

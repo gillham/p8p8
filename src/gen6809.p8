@@ -70,6 +70,7 @@ gen6809 {
     bool carry_cell = false         ; this subroutine keeps the IR's carry in a place of its own (see carry_scan)
     bool carry_loaded = false       ; the instruction's carry was just taken from there
     bool entry_pending = false      ; the subroutine's first label is still to come
+    ubyte skip_next = 0             ; so many instructions that follow are done already (a call that gave the carry)
     bool wide_error = false         ; the error about a register used wider than it is was said
     bool[32] need_rt                ; the routines of the system calls (the RT_ numbers)
     const ubyte RT_MOVE = 0
@@ -580,8 +581,21 @@ gen6809 {
         if s.is_external
             return
         if s.is_asm and s.asmtext != 0 and not s.asm_is_ir {
-            ; assembly for another machine is of no use here
-            error("a subroutine in assembly (asmsub) cannot be used on the 6809 yet", s.name)
+            ; A subroutine in assembly (asmsub), as it stands: it takes what it is given in
+            ; the 6809's registers, as its declaration says, and returns by itself.  One
+            ; that is declared inline has no return of its own; it is called like the
+            ; others here.
+            put("; ---- ")
+            put(s.name)
+            nl()
+            label(s.name)
+            raw(";%asm")
+            buf.add_bytes(o, s.asmtext, s.asmlen)
+            nl()
+            raw(";%end")
+            if s.is_inline
+                line("rts")
+            nl()
             return
         }
         if not irparse.expand(s) {
@@ -824,9 +838,13 @@ gen6809 {
             return
         ^^ir.Instr i = c.first
         while i != 0 {
-            instruction(i)
-            if carry_cell and carry_setter(i.op)
-                carry_save(i.op)
+            if skip_next != 0
+                skip_next--
+            else {
+                instruction(i)
+                if carry_cell and carry_setter(i.op)
+                    carry_save(i.op)
+            }
             previous = i
             i = i.next
         }
@@ -2060,10 +2078,151 @@ gen6809 {
 
     ; A call: the arguments into the subroutine's parameters, by their names; a result
     ; comes back in B, D, or X and D.
+    ; the load of a register that an asmsub or extsub takes an argument in, by the slot
+    ; of the IR (40 A, 41 B, 42 D, 43 X, 44 Y, 45 U), and the store of one that it
+    ; returns a value in; 0 for another slot
+    sub slot_load(ubyte number) -> str {
+        when number {
+            40 -> return "lda"
+            41 -> return "ldb"
+            42 -> return "ldd"
+            43 -> return "ldx"
+            44 -> return "ldy"
+            45 -> return "ldu"
+        }
+        return 0
+    }
+
+    sub slot_store(ubyte number) -> str {
+        when number {
+            40 -> return "sta"
+            41 -> return "stb"
+            42 -> return "std"
+            43 -> return "stx"
+            44 -> return "sty"
+            45 -> return "stu"
+        }
+        return 0
+    }
+
+    ; A call of a subroutine in assembly (asmsub) or of a routine at an address (extsub):
+    ; the arguments in the 6809's registers, in the carry, or in the library's virtual
+    ; registers, as the declaration says; the values it returns from there.
+    sub asm_call(^^ir.Instr i, bool by_address) {
+        ; the carry first: no load after it changes it
+        ^^ir.Arg a = i.args
+        while a != 0 {
+            if a.slot == ir.SLOT_FLAGS {
+                op_arg("lda", a, 0, 1)
+                line("lsra")
+            }
+            else if a.slot > ir.SLOT_FLAGS and a.slot != 255 {
+                error("only the carry can be an argument of a routine in assembly", i.sym)
+                return
+            }
+            a = a.next
+        }
+        ; then what goes into memory (through D), then the registers
+        a = i.args
+        while a != 0 {
+            if a.slot == 255 {
+                ubyte size = size_of(a.type)
+                if a.name == 0 or (size != 1 and size != 2) {
+                    error("an argument of this call cannot be passed on the 6809 yet", i.sym)
+                    return
+                }
+                if size == 2 {
+                    op_arg("ldd", a, 0, 2)
+                    op("std")
+                }
+                else {
+                    op_arg("ldb", a, 0, 1)
+                    op("stb")
+                }
+                name(a.name)
+                nl()
+            }
+            a = a.next
+        }
+        a = i.args
+        while a != 0 {
+            if a.slot < ir.SLOT_FLAGS {
+                ^^ubyte load = slot_load(a.slot)
+                if load == 0 {
+                    error("a register of another machine in the declaration of a routine in assembly", i.sym)
+                    return
+                }
+                if a.slot <= 41
+                    op_arg(load, a, 0, 1)
+                else
+                    op_arg(load, a, 0, 2)
+            }
+            a = a.next
+        }
+        op("jsr")
+        if by_address
+            put(i.sym)
+        else
+            name(i.sym)
+        nl()
+        ; the values: a flag is left for the branch that follows, so the stores of the
+        ; other values must not disturb it
+        bool flag = false
+        ^^ir.Arg r = i.results
+        while r != 0 {
+            if r.slot > ir.SLOT_FLAGS and r.slot != 255
+                flag = true
+            r = r.next
+        }
+        ; (the registers first: a store leaves the carry alone, and taking the carry
+        ; below needs B)
+        r = i.results
+        while r != 0 {
+            if r.slot < ir.SLOT_FLAGS and r.reg != 0 {
+                ^^ubyte store = slot_store(r.slot)
+                if store == 0 {
+                    error("a register of another machine in the declaration of a routine in assembly", i.sym)
+                    return
+                }
+                if flag
+                    line("pshs  cc")
+                if r.slot <= 41
+                    op_cell(store, r.reg, 0, 1)
+                else
+                    op_cell(store, r.reg, 0, 2)
+                if flag
+                    line("puls  cc")
+            }
+            r = r.next
+        }
+        r = i.results
+        while r != 0 {
+            if r.slot == ir.SLOT_FLAGS and r.reg != 0 {
+                ; the carry as a value: the IR's next two instructions would rotate it
+                ; into a zero, which is done here (a load of 0 as "clr" would lose it)
+                line("ldb  #0")
+                line("rolb")
+                op_cell("stb", r.reg, 0, 1)
+                if i.next != 0 and i.next.op == ir.OP_LOAD and i.next.r1 == r.reg and i.next.next != 0
+                        and i.next.next.op == ir.OP_ROXL and i.next.next.r1 == r.reg
+                    skip_next = 2
+            }
+            r = r.next
+        }
+    }
+
     sub call_instruction(^^ir.Instr i) {
         ^^ir.Sub callee = sub_named(i.sym)
-        if callee != 0 and callee.is_external {
-            error("a routine outside the program (extsub) cannot be called on the 6809 yet", i.sym)
+        if callee == 0 and i.sym != 0 and (i.sym[0] == '$' or (i.sym[0] >= '0' and i.sym[0] <= '9')) {
+            asm_call(i, true)
+            return
+        }
+        if callee != 0 and callee.is_asm and not callee.asm_is_ir {
+            if callee.is_external {
+                error("a routine without an address (extsub of a C library) cannot be called on the 6809", i.sym)
+                return
+            }
+            asm_call(i, false)
             return
         }
         ; (a call that can come back into this subroutine: its variables are kept on

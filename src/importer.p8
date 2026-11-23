@@ -35,6 +35,7 @@ importer {
     ubyte srcdir_count = 0
     ^^ubyte libdir = ".prog8-reference/compiler/res/prog8lib"
     ^^ubyte target = "llvm64"
+    bool m6809 = false              ; the target is a 6809 machine (z80 is set for it too: what the two share)
     bool z80 = false                ; the target is a Z80 machine
     ^^ubyte family = "llvm64"       ; the target whose language rules apply: the target itself, or llvm16 for a Z80 machine
     ^^ubyte triple = 0              ; -triple: a platform profile of an llvm target, or 0 for its default

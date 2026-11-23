@@ -28,9 +28,15 @@ same=0; differ=0; unbuilt=0; skipped=0
 for f in "$@"; do
     name=$(basename "$f" .p8)
     rm -f "$work/host/$name" "$work/m6809/$name.hex" "$work/m6809/$name.bin"
+    onhost=yes
     if ! "$p8c" -lib "$lib" -target llvm64 -o "$work/host/$name" "$f" > "$work/host.err" 2>&1; then
-        skipped=$((skipped + 1))
-        continue
+        # (a program for the 6809 alone, with assembly: what it must print is beside it)
+        if [ ! -f "${f%.p8}.out" ]; then
+            skipped=$((skipped + 1))
+            continue
+        fi
+        onhost=no
+        cp "${f%.p8}.out" "$work/host/$name.out"
     fi
     if [ "$machine" = coco2 ]; then
         "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco2" -target "$here/m6809/xroar-coco2.properties" -out "$work/m6809" "$f" > "$work/m6809.err" 2>&1
@@ -44,8 +50,12 @@ for f in "$@"; do
         echo "not built yet: $f: $(grep -v warning "$work/m6809.err" | head -1 | cut -c1-110)"
         continue
     fi
-    (cd "$work/host" && timeout 10 "./$name" < /dev/null > "$name.out" 2>&1)
-    if [ $? -ge 124 ]; then
+    ran=0
+    if [ "$onhost" = yes ]; then
+        (cd "$work/host" && timeout 10 "./$name" < /dev/null > "$name.out" 2>&1)
+        ran=$?
+    fi
+    if [ $ran -ge 124 ]; then
         skipped=$((skipped + 1))    # (it does not end on the host, or it is for a machine's memory)
         continue
     fi

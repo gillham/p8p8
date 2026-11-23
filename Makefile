@@ -340,6 +340,8 @@ test:	$(TESTBIN) $(P8P8)
 	@$(P8P8) -lib lib -target coco2 -asm -out $(OUT) tests/programs/divmix.p8
 	@grep -q '^    org  3584$$' $(OUT)/divmix.asm
 	@grep -q '^    jsr  \[\$$a000\]$$' $(OUT)/divmix.asm || grep -q '^    stx  \$$88$$' $(OUT)/divmix.asm
+	@echo "test bad_m6809 (the 6809's registers in the declaration of a routine in assembly)"
+	@$(P8P8) -lib lib -target sim6809 -check tests/bad_m6809.p8 2>&1 | diff -u tests/expected/bad_m6809.txt -
 	@echo "test accname (a variable named a in an unprefixed block: no operand a for the accumulator)"
 	@for t in cx16 c64 mega65; do \
 		$(P8P8) -lib lib -target $$t -asm -out $(OUT) tests/accname.p8 2> /dev/null || exit 1; \
@@ -544,12 +546,12 @@ z80cmp:	$(P8P8)
 # make m6809cmp: the 6809 code generator against the host: the programs built for the
 # sim6809 target and run in usim09batch (needs lwasm of lwtools, and usim09batch).
 m6809cmp:	$(P8P8)
-	@tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
+	@tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/m6809/*.p8)
 
 # make cococmp: the same for the Color Computer 2, run in XRoar without a window (it needs
 # the machine's ROMs where XRoar looks for them); a few seconds for each program.
 cococmp:	$(P8P8)
-	@M6809CMP_MACHINE=coco2 tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
+	@M6809CMP_MACHINE=coco2 tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/m6809/*.p8)
 
 # make trs80cmp: the same against the host for the TRS-80 Model I, run in trs80gp (TRS80GP
 # names it), which opens a window for each program.

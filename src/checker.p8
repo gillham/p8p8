@@ -1828,9 +1828,102 @@ checker {
         return bits
     }
 
+    ; The 6809's registers, as an asmsub or extsub names them: A and B hold a byte, D
+    ; (which is A and B), X, Y and U a word.  A bit for each, or 0 for another name.
+    sub m6809_bits(^^ubyte r) -> ubyte {
+        if r[0] == 0 or r[1] != 0
+            return 0
+        when r[0] & $df {
+            'A' -> return 1
+            'B' -> return 2
+            'D' -> return 3
+            'X' -> return 4
+            'Y' -> return 8
+            'U' -> return 16
+        }
+        return 0
+    }
+
+    ; a register name on a 6809 machine: one of its registers, a status flag (Pc, Pz...)
+    ; or a virtual register (R0...); says so when it is none, and gives the bits
+    sub m6809_register(^^ast.Node at, ^^ubyte r, uword t, str what) -> ubyte {
+        ubyte bits = m6809_bits(r)
+        if bits == 0 {
+            if (r[0] & $df) != 'P' and (r[0] & $df) != 'R'
+                error(at, "Syntax error: invalid cpu register (the 6809 has A, B, D, X, Y and U)")
+            return 0
+        }
+        if t != 0 {
+            long size = types.size_of(t)
+            if bits <= 2 and size != 1 {
+                begin_message(what)
+                buf.add_str(parser.scratch, " in A or B should be (u)byte or bool")
+                error_scratch(at)
+            }
+            else if bits > 2 and size != 2 and t != types.T_STR {
+                begin_message(what)
+                buf.add_str(parser.scratch, " in D, X, Y or U should be (u)word, str or a pointer")
+                error_scratch(at)
+            }
+        }
+        return bits
+    }
+
+    sub m6809_registers(^^ast.Node n) {
+        ubyte used = 0
+        bool twice = false
+        ^^ast.Node q = n.a
+        while q != 0 {
+            if q.b != 0 and q.b.name != 0 {
+                uword pt = 0
+                if q.a != 0
+                    pt = q.a.type
+                ubyte bits = m6809_register(q, q.b.name, pt, "a parameter")
+                if (used & bits) != 0
+                    twice = true
+                used |= bits
+            }
+            q = q.next
+        }
+        if twice
+            error(n, "a register is used multiple times in the parameters")
+        used = 0
+        twice = false
+        ^^ast.Node r = n.b
+        while r != 0 {
+            if r.b != 0 and r.b.kind == ast.N_IDENT and r.b.name != 0 and r.op != token.T_KW_VOID {
+                ubyte rbits = m6809_register(n, r.b.name, typer.return_type(r), "a return value")
+                if (used & rbits) != 0
+                    twice = true
+                used |= rbits
+            }
+            r = r.next
+        }
+        if twice
+            error(n, "a register is used multiple times in the return values")
+        ; the clobber list: with the asmsub, or on the first return type of an extsub
+        ^^ast.Node clob = n.d
+        if n.kind == ast.N_EXTSUB {
+            clob = 0
+            if n.b != 0
+                clob = n.b.d
+        }
+        while clob != 0 {
+            if clob.kind == ast.N_IDENT and clob.name != 0 and m6809_bits(clob.name) == 0 {
+                error(n, "Syntax error: invalid cpu register (the 6809 has A, B, D, X, Y and U)")
+                break
+            }
+            clob = clob.next
+        }
+    }
+
     ; The registers of an asmsub's or extsub's return values: none used twice, none in
     ; the clobber list, each of the size of its value.
     sub register_returns(^^ast.Node n) {
+        if importer.m6809 {
+            m6809_registers(n)
+            return
+        }
         ubyte used = 0
         bool twice = false
         bool wrong = false
@@ -1898,7 +1991,8 @@ checker {
             ; (A, X and Y, one by one; D0-D7 and A0-A6 of the 68000)
             bool m68k_register = cl.name != 0 and cl.name[1] >= '0' and cl.name[2] == 0
                     and ((cl.name[0] == 'D' and cl.name[1] <= '7') or (cl.name[0] == 'A' and cl.name[1] <= '6'))
-            if cl.kind == ast.N_IDENT and cl.name != 0 and not m68k_register and (cl.name[1] != 0 or cpu_bits(cl.name) == 0) {
+            if cl.kind == ast.N_IDENT and cl.name != 0 and not m68k_register and (cl.name[1] != 0 or cpu_bits(cl.name) == 0)
+                    and not (importer.m6809 and m6809_bits(cl.name) != 0) {
                 error(n, "Syntax error: invalid cpu register")
                 break
             }
@@ -1916,6 +2010,8 @@ checker {
     ; The registers of an asmsub's or extsub's parameters: none used twice (AY takes A
     ; and Y), and each of the size of its parameter.
     sub register_params(^^ast.Node p) {
+        if importer.m6809
+            return                  ; (register_returns looks at both there)
         bool used_a = false
         bool used_x = false
         bool used_y = false

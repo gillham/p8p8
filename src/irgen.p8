@@ -6382,6 +6382,17 @@ irgen {
     sub register_slot(^^ubyte r) -> ubyte {
         if r == 0
             return 255
+        if importer.m6809 and r[0] != 0 and r[1] == 0 {
+            ; the 6809's own: A 40, B 41, D 42, X 43, Y 44, U 45
+            when r[0] & $df {
+                'A' -> return 40
+                'B' -> return 41
+                'D' -> return 42
+                'X' -> return 43
+                'Y' -> return 44
+                'U' -> return 45
+            }
+        }
         if strings.compare(r, "A") == 0
             return 0
         if strings.compare(r, "X") == 0
@@ -6476,7 +6487,8 @@ irgen {
                 regname = p.b.name
             ubyte slot = register_slot(regname)
             ^^ir.Arg arg = 0
-            if slot <= 2 and pt != ir.T_FLOAT {
+            ; (a constant for a register of its own: the 6502's A, X, Y; any of the 6809's)
+            if (slot <= 2 or (slot >= 40 and slot <= 45)) and pt != ir.T_FLOAT {
                 ok, cv = typer.const_eval(a)
                 if ok and a.kind != ast.N_ADDROF and a.kind != ast.N_CALL {
                     arg = ir.new_arg(0, 0, pt)
