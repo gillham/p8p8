@@ -339,6 +339,8 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^    end  p8_start$$' $(OUT)/divmix.asm
 	@$(P8P8) -lib lib -target coco2 -asm -out $(OUT) tests/programs/divmix.p8
 	@grep -q '^    org  3584$$' $(OUT)/divmix.asm
+	@grep -q '^p8_memory_end:  equ  32256$$' $(OUT)/divmix.asm
+	@grep -q '^    ifgt  \*-p8_memory_end$$' $(OUT)/divmix.asm
 	@$(P8P8) -lib lib -target llvm16 -triple mc6809-coco -address 0x2500 -asm -out $(OUT) tests/programs/divmix.p8
 	@grep -q '^    org  9472$$' $(OUT)/divmix.asm
 	@grep -q '^    jsr  \[\$$a000\]$$' $(OUT)/divmix.asm || grep -q '^    stx  \$$88$$' $(OUT)/divmix.asm

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- The 6809 machines' target files say where the program's memory ends
+  (`memory_end`: `$7e00` on the Color Computers and the Dragons, below
+  BASIC's stack), and a program that with its variables does not end before
+  it is an error of the assembler, where it was a program that overwrote
+  the stack or, with the ROMs out, the upper memory.
+
 ## 0.5.0
 
 ### Added

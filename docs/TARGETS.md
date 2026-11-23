@@ -185,6 +185,7 @@ program does in XRoar.  The keys it reads:
 | `output_format` | lwasm's format: `decb` (a file for `LOADM`, the default), `dragon` (a DragonDOS binary), `ihex`, `srec`, `raw` |
 | `startup_code` | the first instructions, when the machine needs any |
 | `stack_size` | the program gets a stack of its own of this many bytes; without it the stack is the one it was called on |
+| `memory_end` | the first address that is not the program's: the assembler stops with an error when the program and its variables (and that stack) do not end before it. A program that `%address` or `-address` put above it is not checked |
 | `exit_code` | how the program ends; `sys.exit` comes here too, with the status in B.  The stack pointer is what it was at the start, so `rts` goes back to who called the program |
 | `exit_hook` | lines before the end |
 | `console_out` | a routine: the character in A to the console |

@@ -4067,6 +4067,24 @@ gen6809 {
             nl()
             raw("p8_stack_top:")
         }
+        ; the program and its variables must end where the target says its memory ends
+        ; (memory_end: the first address that is not the program's); a program that
+        ; %address or -address put above it is not checked
+        long limit = target.number("memory_end", 0)
+        if limit > 0 {
+            put("p8_memory_end:  equ  ")
+            putn(limit)
+            nl()
+            raw("    iflt  p8_start-p8_memory_end")
+            raw("    ifgt  *-p8_memory_end")
+            put("    error  \"the program is too long: it and its variables must end before $")
+            ubyte hd
+            for hd in 0 to 3
+                buf.add_byte(o, buf.hex_digit(lsb(limit >> ((3 - hd) * 4)) & 15))
+            raw(" (memory_end of the target)\"")
+            raw("    endc")
+            raw("    endc")
+        }
         if target.text("tail_code") != 0
             target_lines("tail_code")
     }
