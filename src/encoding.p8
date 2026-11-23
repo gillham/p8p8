@@ -80,7 +80,7 @@ encoding {
     sub set_target(^^ubyte name) {
         target_default = E_ISO
         newline_to_cr = true
-        if target.loaded and not target.z80() {
+        if target.loaded and not target.z80() and not target.m6809() {
             ; a machine with a configuration file says it itself
             ^^ubyte en = target.text("encoding")
             if en != 0 {

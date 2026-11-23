@@ -35,6 +35,14 @@ The command is `p8c`.
   command line and the I/O ports are there; a clock and `asmsub` are not.
   The test programs print what they print on the host, in tnylpo and
   trs80gp, and an editor of 30 KB runs on the Model 4.
+- For the 6809 there is a first code generator: `-target coco2` and
+  `-target coco3` build a Color Computer program (a DECB file for `LOADM`
+  and `EXEC`) with lwasm of lwtools, and `-target sim6809` one for a bare
+  6809 in usim09batch.  Text goes straight into the screen's memory, the
+  keys are the ROM's.  Floats, files, `asmsub` and `extsub` are not there
+  yet, and the Color Computer 3 is used as a Color Computer 2 (32 columns).
+  The test programs print what they print on the host, in usim09batch and
+  in XRoar; nothing was run on a real machine.
 - For the host it writes LLVM IR and builds a native executable with clang.
   That is how p8p8 compiles itself.
 
@@ -258,7 +266,7 @@ Options p8p8 has that the reference compiler does not:
 | `-cpu 6502\|65c02\|65816\|45gs02` | the CPU a 6502 machine's program is written for, in place of the target's |
 | `-triple <name>` | the platform of an llvm32 program: a profile in the library's `triples/` (WebAssembly, 32-bit ARM and RISC-V Linux) |
 | `-noopt` | the own code generator without its optimizations |
-| `-asm` | write the assembly of p8p8's code generator (`name.asm`) and stop: no assembler or linker is run, and none needs to be installed.  For the 6502 family, the 68000 and the Z80 |
+| `-asm` | write the assembly of p8p8's code generator (`name.asm`) and stop: no assembler or linker is run, and none needs to be installed.  For the 6502 family, the 68000, the Z80 and the 6809 |
 | `-verbose` | print the commands that are run and the assembler's summary |
 | `-noimage` | on a machine whose program file is the image of a whole cartridge (the GameTank: a 2 MB `.gtr`): write the program alone (a `.bin`) |
 | `-nooverlays` | take no notice of `%overlay`: the program is built in one piece, as on a machine without overlays |
@@ -330,6 +338,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make z80cmp`, `make z80ref` | programs built for CP/M print in tnylpo what they print on the host, and what `prog8c-llvm`'s CP/M build prints |
 | `make trs80cmp`, `make trs80cmp3`, `make trs80cmp4` | the same programs on a TRS-80 Model I, III and 4 in trs80gp (`TRS80GP` names the emulator), against the host |
 | `make z80sys`, `make trs80sys`, `make trs80dos`, `make trs80screen` | on the Z80 machines: the command line and files, the DOS still working after a program has ended, and the screen routines |
+| `make m6809cmp`, `make cococmp` | programs built for a bare 6809 print in usim09batch, and built for the Color Computer print in XRoar (without a window; `COCO_MACHINE=coco3` for its Color Computer 3), what they print on the host |
 | `make z80bench` | the time and size of a benchmark for CP/M, against `prog8c-llvm`'s build |
 | `make irroundtrip` | a program built from the IR file that `p8c -ir` wrote is the same bytes as from its source |
 | `tools/benchmega65.sh` | loops of long, word and byte arithmetic on the MEGA65 as 6502 code and as 45GS02 code |

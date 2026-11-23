@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	m6809cmp cococmp z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -333,6 +333,13 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^txt\.vcol  *\.fill  1$$' $(OUT)/fixedblock.asm
 	@$(P8P8) -lib lib -target gametank -varshigh 1 -asm -out $(OUT) tests/fixedblock.p8
 	@grep -q '^  \* = \$$1e00$$' $(OUT)/fixedblock.asm
+	@echo "test m6809 (the 6809 code generator writes its assembly: no assembler is needed for that)"
+	@$(P8P8) -lib lib -target sim6809 -asm -out $(OUT) tests/programs/divmix.p8
+	@grep -q '^    jsr  p8rt_div16$$' $(OUT)/divmix.asm
+	@grep -q '^    end  p8_start$$' $(OUT)/divmix.asm
+	@$(P8P8) -lib lib -target coco2 -asm -out $(OUT) tests/programs/divmix.p8
+	@grep -q '^    org  3584$$' $(OUT)/divmix.asm
+	@grep -q '^    jsr  \[\$$a000\]$$' $(OUT)/divmix.asm || grep -q '^    stx  \$$88$$' $(OUT)/divmix.asm
 	@echo "test accname (a variable named a in an unprefixed block: no operand a for the accumulator)"
 	@for t in cx16 c64 mega65; do \
 		$(P8P8) -lib lib -target $$t -asm -out $(OUT) tests/accname.p8 2> /dev/null || exit 1; \
@@ -533,6 +540,16 @@ overlaycheck:	$(P8P8)
 # What it cannot build yet is counted, not a failure.
 z80cmp:	$(P8P8)
 	@tests/z80cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
+
+# make m6809cmp: the 6809 code generator against the host: the programs built for the
+# sim6809 target and run in usim09batch (needs lwasm of lwtools, and usim09batch).
+m6809cmp:	$(P8P8)
+	@tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
+
+# make cococmp: the same for the Color Computer 2, run in XRoar without a window (it needs
+# the machine's ROMs where XRoar looks for them); a few seconds for each program.
+cococmp:	$(P8P8)
+	@M6809CMP_MACHINE=coco2 tests/m6809cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
 
 # make trs80cmp: the same against the host for the TRS-80 Model I, run in trs80gp (TRS80GP
 # names it), which opens a window for each program.

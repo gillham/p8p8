@@ -1031,6 +1031,87 @@ address that prog8c-llvm gets wrong for CP/M).  The
 library's virtual registers r0-r15, which it puts at addresses from $ff0000
 for the back end to place, are 32 bytes of the program's own.
 
+## The 6809
+
+A beginning (`src/gen6809.p8`), put together as the Z80 generator is.  A
+6809 machine is a target with `cpu = 6809` in its target file: `sim6809` (a
+bare 6809 as usim09batch simulates it, the machine of the tests), `coco2`
+and `coco3` (the Color Computers).  The generator writes assembly for lwasm
+of lwtools, which makes the program in the format the target names: an
+Intel hex file for the simulator, a DECB file for `LOADM` on the Color
+Computer.  For the front end and the IR such a machine follows llvm16's
+rules, as a Z80 machine does (`importer.z80` is set for both), and its
+library is `lib/targets/m6809`, llvm16's modules: Prog8, with `%ir` blocks
+for what the machine has to do.
+
+Every IR register has a place in memory (`p8r_S_N`, as wide as its type).
+An instruction takes its first operand from there into B (a byte) or D (a
+word), works with the second one straight from memory or as an immediate
+(`addd`, `cmpd`, `andb` take either), and puts the result back.  X holds
+addresses: an indexed load is `ldx #array`, the index added with `abx` (a
+byte, which that instruction takes as unsigned) or `leax d,x`, and a load
+through a pointer is `ldx` and an offset in the instruction.  Shifts, `inc`,
+`dec`, `neg`, `com` and `clr` work on memory itself.  A long is two words.
+There is no pass over the assembly yet, so the code is correct and large.
+
+The 6809 has the high byte of a word first.  The generator names a place by
+the number of a byte counted from the low end and the width that is wanted
+(`cell(r, k, w)`, `op_mem`), and the offset follows from the size of the
+whole; nothing else in it knows the byte order.  The front end and the IR
+do not depend on it (the 68000 is the same way round), but a program can
+see it: a word that is poked and its bytes peeked.  One line of the
+conformance programs shows that, and `tests/m6809/functions.out` is what a
+6809 must print there.  The low byte of one of the library's virtual
+registers (`cx16.r0L`, at the made-up address of `r0`) is the second of its
+two bytes here.
+
+Branches are written in their short form and lwasm chooses (`pragma
+autobranchlength`): a branch forward is the long form unless the assembler
+can see that the short one reaches.  The IR's carry is handled as on the
+Z80: after a compare the 6809's is the other way round than the IR's, and a
+subroutine where a reader does not come straight after what set it keeps the
+flag in a byte of its own.  Loads and stores leave the carry alone.  The
+signed compares are the CPU's own branches (`bgt`, `blt`, `bge`, `ble`); a
+signed long compare decides by the high words unless they are the same.
+
+A call stores its arguments in the subroutine's parameter variables; up to
+three stay in registers (from the last parameter back: the first byte in B,
+the first word in X, the next in U), and such a subroutine has a second way
+in, `p8e_name`, where they are stored.  A result is in B, D, or X and D (a
+long, D the low half): a byte is the low half of a word, so a call through
+a pointer needs nothing special.  Recursion is handled as on the Z80: a
+call that can come back into the calling subroutine saves its variables and
+register places on the stack around it.
+
+The multiplication of bytes is the CPU's `mul`; of words, three of them.
+Division, the long routines, the square root and the routines of the system
+calls (`p8rt_...`) are written into the program when it uses them.  Clamping
+a byte or a word is inline.  The first instructions keep the stack pointer,
+and the end restores it: on the Color Computer the program returns to
+BASIC with `rts` from wherever `sys.exit` was called.
+
+`%asm` is written into the program as it stands, and names variables as on
+the Z80 (`_txt__plot__col`).  Not there yet: floats (the instruction is an
+error that says so), `asmsub` and `extsub`, files, a command line.
+
+The Color Computer's console is the target file's: a character goes into
+the screen's memory at the address BASIC keeps as its cursor's ($88), in the
+screen's own codes, so BASIC goes on where the program stopped; the keys are
+the ROM's POLCAT through its vector; the clock is Extended BASIC's TIMER,
+read until two reads agree, and a wait is `sync` until it changes (none
+when interrupts are off, where it never would).  `textio` for both Color
+Computers is one module in the shared library (`shared_coco_textio`).  The
+program loads at $0e00, over Disk BASIC's graphics pages and program text.
+`coco3` is the same machine for now: 32 columns.
+
+`make m6809cmp` builds the test programs for the host and for `sim6809` and
+compares what they print: 62 the same, none different; 9 need floats.
+`make cococmp` does it for the Color Computer in XRoar, which runs without a
+window as fast as the host can (`tests/cocorun.sh`): the tests' variant of
+the target ends at a fixed address, where XRoar writes a snapshot and
+stops, and what the program printed is read out of that.  62 the same on
+XRoar's Color Computer 2 and on its 3.
+
 ## Machines and the library
 
 Nothing about a particular machine is in the compiler.  A 6502 machine is a

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- A code generator for the 6809 (`src/gen6809.p8`), a beginning: it writes
+  assembly for lwasm of lwtools.  `-target coco2` and `-target coco3` build
+  a Color Computer program (a DECB file for `LOADM` and `EXEC`, loaded at
+  $0e00) whose text goes straight into the screen's memory; `-target
+  sim6809` builds one for a bare 6809 in usim09batch.  Not there yet:
+  floats, files, `asmsub`, `extsub`, a pass over the assembly, and the
+  Color Computer 3's own screens (it is used as a Color Computer 2).
+  `make m6809cmp` and `make cococmp` compare the test programs with the
+  host, in usim09batch and in XRoar.
+
+### Library
+
+- `targets/m6809`, the library of the 6809 machines (llvm16's modules, and
+  the Color Computer's `textio`), and the targets `coco2`, `coco3` and
+  `sim6809`.
+
 ## 0.4.0
 
 ### Added

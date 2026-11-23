@@ -167,6 +167,37 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 | `library` | the directory with the target's modules, as for any target |
 | `library_platform` | a subdirectory of `library` that is searched before it (p8p8) |
 
+### A 6809 machine
+
+`cpu = 6809` makes the target a 6809 machine: p8p8's 6809 code generator
+writes the program (assembly for lwasm of lwtools).  `coco2`, `coco3` and
+`sim6809` are such targets.  The routines are lines of assembly that end by
+returning, as for a Z80 machine; a line that ends with a colon is a label.
+`tests/m6809/xroar-coco2.properties` is a target file made from `coco2`
+(`base`): its program ends at a fixed address, where XRoar is told to stop,
+and keeps what it prints in memory, which is how the tests see what a
+program does in XRoar.  The keys it reads:
+
+| Key | Meaning |
+|-----|---------|
+| `load_address` | where the program begins (`$0e00` for the Color Computer) |
+| `output_extension` | of the program file (`.bin`, `.hex`) |
+| `output_format` | lwasm's format: `decb` (a file for `LOADM`, the default), `ihex`, `srec`, `raw` |
+| `startup_code` | the first instructions, when the machine needs any |
+| `stack_size` | the program gets a stack of its own of this many bytes; without it the stack is the one it was called on |
+| `exit_code` | how the program ends; `sys.exit` comes here too, with the status in B.  The stack pointer is what it was at the start, so `rts` goes back to who called the program |
+| `exit_hook` | lines before the end |
+| `console_out` | a routine: the character in A to the console |
+| `key_poll` | a routine: A = a key, or 0 when none is waiting |
+| `char_in` | a routine: A = a character that is waited for (not shown) |
+| `console_tap` | lines that see every character first, with it in A |
+| `machine_cells` | lines that are always part of the program |
+| `wait_jiffy` | a routine that takes a 60th of a second, for `sys.wait` (without it there is no wait) |
+| `ticks` | a routine: D = the clock in 60ths of a second (without it `sys.ticks()` is 0) |
+| `tail_code` | lines after everything else (the simulator's reset vector) |
+| `run_command` | what `-run` runs, with `{file}` for the program |
+| `library` | the directory with the modules; the target's own directory is searched before it |
+
 ## What the zero page lists do
 
 Scalar variables go to the free zero page locations: those with `@zp` or
