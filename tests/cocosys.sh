@@ -5,10 +5,12 @@
 # prints is compared with tests/cocosys/expected.txt; then decb reads the disk: its
 # directory, and the files' bytes.  Then tests/cocosys/upper.p8: the upper 32 KB as data
 # (the highram module), on a Color Computer 2 with 64 KB and with 32 KB and on XRoar's
-# Dragon 64 and Dragon 32.
+# Dragon 64 and Dragon 32.  Then tests/cocosys/lists.p8 (the place in a file, lists of
+# files, a second drive) and tests/cocosys/blocks.p8 (the Color Computer 3's memory
+# beyond its 64 KB), each with an expected file of its own.
 #
-# Usage: tests/cocosys.sh <p8c>      (needs lwasm, XRoar with the Color Computer 2's and
-#                                     Disk BASIC's ROMs, and decb of toolshed)
+# Usage: tests/cocosys.sh <p8c>      (needs lwasm, XRoar with the Color Computers', the
+#                                     Dragons' and Disk BASIC's ROMs, and decb of toolshed)
 p8c=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 here=$(cd "$(dirname "$0")" && pwd)
 lib=$here/../lib
@@ -61,7 +63,16 @@ diff -u "$here/cocosys/expected.txt" "$work/printed.txt" || exit 1
         decb dir "$work/u.dsk," | grep -v '^Directory' | grep -v '^$' | tr -s ' '
     done
 } > "$work/lists.txt" 2>&1
-if diff -u "$here/cocosys/expected_lists.txt" "$work/lists.txt"; then
+diff -u "$here/cocosys/expected_lists.txt" "$work/lists.txt" || exit 1
+# tests/cocosys/blocks.p8: the Color Computer 3's memory beyond its 64 KB as data (the
+# coco3 target's highram), with 128 KB and with 512 KB
+{
+    mkdir "$work/blocks"
+    "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco3" -target "$here/m6809/xroar-coco3.properties" -out "$work/blocks" "$here/cocosys/blocks.p8" > "$work/blocks.log" 2>&1 &&
+        COCO_MACHINE=coco3 COCO_OPTIONS="-ram 128" "$here/cocorun.sh" "$work/blocks/blocks.bin" &&
+        COCO_MACHINE=coco3 COCO_OPTIONS="-ram 512" "$here/cocorun.sh" "$work/blocks/blocks.bin"
+} > "$work/blocks.txt" 2>&1
+if diff -u "$here/cocosys/expected_blocks.txt" "$work/blocks.txt"; then
     echo "files on the Color Computer: as expected"
 else
     exit 1

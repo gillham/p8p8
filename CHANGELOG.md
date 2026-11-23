@@ -14,6 +14,11 @@
   with `list_filename`, `list_filetype` and `list_blocks`, all of them or
   those that match a pattern with `*` and `?`, on any drive (`"*.BAS:1"`).
 - `strings.pattern_match` and `pattern_match_nocase` on the 6809 machines.
+- A `highram` module for `coco3`: the Color Computer 3's memory beyond its
+  64 KB as data, with long addresses and the routines of the other
+  machines' module (`get`, `put`, `getbyte`, `setbyte`, `fill`, `move`,
+  and `size()`): 384 KB of a 512 KB machine, 48 KB of one with 128 KB
+  (there it is BASIC's high resolution graphics memory).
 
 ## 0.5.0
 

@@ -577,7 +577,7 @@ coco3screen:	$(P8P8)
 	@tests/coco3screen.sh $(P8P8)
 
 # make cocosys: files on the Color Computer (diskio), in XRoar with a disk image that
-# toolshed's decb makes and reads back
+# toolshed's decb makes and reads back, and the memory modules (highram)
 cocosys:	$(P8P8)
 	@tests/cocosys.sh $(P8P8)
 

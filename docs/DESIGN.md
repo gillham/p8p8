@@ -1197,6 +1197,20 @@ there and reads it back, and looks that the lower half did not change with
 it.  `make cocosys` runs it with 64 KB and with 32 KB, and on XRoar's
 Dragon 64 and Dragon 32.
 
+The Color Computer 3 has a `highram` module of its own (`coco3/highram.p8`),
+with the same routines over a long address: its memory is blocks of 8 KB,
+eight of them in the processor's 64 KB at a time by the registers at $ffa0,
+and BASIC, which runs from RAM there, has blocks $38 to $3f.  The module
+takes blocks $00 to $2f of a 512 KB machine (384 KB) and, with 128 KB,
+blocks $30 to $35 (48 KB), which are BASIC's high resolution graphics
+screen and what belongs to it.  It finds out which by writing to block $00
+and looking whether block $30 changed (with 128 KB a block's number counts
+four bits).  A routine puts the blocks it needs at $a000 and $c000 for the
+moment, with interrupts off, and BASIC's back; a copy or a move goes in
+pieces that end where a block does, a move downwards from the ends.  `make
+cocosys` runs `tests/cocosys/blocks.p8` in XRoar with 128 KB and with
+512 KB.
+
 `coco2ram` is the other way to use that memory: the program runs with the
 ROMs switched out.  It came from porting the user's editor: with its simple
 text store the program is 25 KB and has no room for text below the ROMs, and

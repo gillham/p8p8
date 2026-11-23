@@ -50,7 +50,8 @@ The command is `p8c`.
   The upper 32 KB of a 64 KB machine are memory for data (the `highram`
   module), or, with `-target coco2ram`, the program runs with the ROMs
   switched out and has that memory as its own, its calls into the ROM
-  switching them in for the moment.
+  switching them in for the moment.  On the Color Computer 3 `highram` is
+  the memory beyond its 64 KB: 384 KB of a 512 KB machine, 48 KB with 128 KB.
   `-target dragon32` and `-target dragon64` are the Dragons, with the same
   screen and floats (the ROM's, at the Dragon's addresses) and no `diskio`.
 - For the host it writes LLVM IR and builds a native executable with clang.
