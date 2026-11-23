@@ -77,6 +77,7 @@ peep6809 {
     const ubyte E_X = 7             ; X changes
     const ubyte E_MEMORY = 8        ; its memory operand changes
     const ubyte E_TEST = 9          ; tst of a memory operand
+    const ubyte E_CALL = 10         ; a call: the registers are not known after it, the variables neither
 
     ; what A, B, D and X hold: an operand's text in src (length 0: not known)
     long[4] held_at
@@ -249,13 +250,33 @@ peep6809 {
             eq_place_len[e] = 0
     }
 
-    ; memory that is no place was written: what is known of variables may be wrong now
+    ; Memory that is no place was written: what is known of variables may be wrong now.
+    ; A store to a variable by its name (the operand found) changes that variable and no
+    ; other; any other write may be through a pointer and can have changed every one.
     sub memory_written() {
+        bool named = is_variable(operand_at, operand_len)
         ubyte r
         for r in 0 to 3 {
-            if held_len[r] != 0 and src.data[held_at[r]] == '_'
+            if held_len[r] != 0 and src.data[held_at[r]] == '_' and (not named or same_base(held_at[r], held_len[r], operand_at, operand_len))
                 held_len[r] = 0
         }
+        ubyte e
+        for e in 0 to EQUALS - 1 {
+            if eq_place_len[e] != 0 and src.data[eq_other_at[e]] == '_'
+                    and (not named or same_base(eq_other_at[e], eq_other_len[e], operand_at, operand_len))
+                eq_place_len[e] = 0
+        }
+    }
+
+    ; A call: the registers hold something else after it, and any variable may; but a
+    ; place is the subroutine's own (one that can be called again from inside is saved
+    ; around the call), so what a place is known to hold of a constant or of another
+    ; place stays.
+    sub called() {
+        held_len[R_A] = 0
+        held_len[R_B] = 0
+        held_len[R_D] = 0
+        held_len[R_X] = 0
         ubyte e
         for e in 0 to EQUALS - 1 {
             if eq_place_len[e] != 0 and src.data[eq_other_at[e]] == '_'
@@ -356,6 +377,8 @@ peep6809 {
             return E_NONE
         if is(k, "tst")
             return E_TEST
+        if is(k, "jsr") or is(k, "bsr")
+            return E_CALL
         ; a conditional branch (not bra, bsr, brn)
         if t[0] == 'b' and m == 3 and not is(k, "bra") and not is(k, "bsr") and not is(k, "brn")
             return E_NONE
@@ -405,17 +428,22 @@ peep6809 {
     ; ---- one subroutine ----
 
     sub run(^^buf.Buf text, long from) {
+        ; (twice: what the first round takes out lets the second see more)
+        repeat 2 {
+            split(text, from)
+            loads()
+            join(from)
+            split(text, from)
+            sums()
+            join(from)
+            split(text, from)
+            stores()
+            join(from)
+            split(text, from)
+            twice()
+            join(from)
+        }
         split(text, from)
-        loads()
-        join(from)
-        split(text, from)
-        sums()
-        join(from)
-        split(text, from)
-        stores()
-        join(from)
-        split(text, from)
-        twice()
         calls()
         join(from)
     }
@@ -492,6 +520,7 @@ peep6809 {
             }
             when what {
                 E_UNKNOWN -> forget()
+                E_CALL -> called()
                 E_LOAD -> {
                     r = register_of(k)
                     if r == 255
@@ -666,6 +695,18 @@ peep6809 {
         return operand_len > 4 and buf.bytes_equal(src.data + operand_at, "p8e_", 4)
     }
 
+    ; is the operand of line k one that goes through a register (",x", "d,x", "[...]")?
+    sub through_register(long k) -> bool {
+        operand(k)
+        long q = operand_at
+        while q < operand_at + operand_len {
+            if src.data[q] == ',' or src.data[q] == '['
+                return true
+            q++
+        }
+        return false
+    }
+
     ; does line k read the carry?
     sub reads_carry(long k) -> bool {
         return is(k, "rolb") or is(k, "rola") or is(k, "rorb") or is(k, "rora") or is(k, "rol") or is(k, "ror")
@@ -714,7 +755,8 @@ peep6809 {
             }
             ; a load, and then the same register is loaded again (after a load of D, one
             ; of A or B: the generator never takes the other half from what was there)
-            else if second >= 0 and plain_load(k) and ((is(k, "ldd") and (is(second, "ldd") or is(second, "ldb") or is(second, "lda")))
+            ; (not when the second load goes through the register that the first loaded)
+            else if second >= 0 and plain_load(k) and not through_register(second) and ((is(k, "ldd") and (is(second, "ldd") or is(second, "ldb") or is(second, "lda")))
                     or (is(k, "ldb") and (is(second, "ldb") or is(second, "ldd")))
                     or (is(k, "lda") and (is(second, "lda") or is(second, "ldd"))) or (is(k, "ldx") and is(second, "ldx")))
                 kinds[k] = K_GONE

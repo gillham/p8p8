@@ -1240,7 +1240,11 @@ The user's game (its Color Computer build, which was written for
 prog8c-llvm's 6809 profile) is the real program this was measured on: it
 builds, loads with LOADM from a disk image, shows its title screen and
 starts a level on Enter in XRoar.  12,662 bytes when it first built; 10,931
-after the above; prog8c-llvm's build is 10,090.
+after the above; 10,155 with the pass run twice over each subroutine (what
+the first round takes out lets the second see more), with what a place is
+known to hold of a constant or another place kept through a call (the
+places are the subroutine's own), and with a store to a variable by its name
+forgetting that variable only.  prog8c-llvm's build is 10,090.
 
 The test programs are about a quarter
 smaller for the pass (the conformance program `functions`: 5626 bytes with
