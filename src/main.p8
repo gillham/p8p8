@@ -1650,6 +1650,59 @@ main {
         write_output(name, extension, cb)
     }
 
+    ; A DECB file of a program with code above the ROMs' address (gen6809, "Code in
+    ; that memory"): LOADM can only load what is below, so the records for the memory
+    ; above are taken out and put after the record that ends the file, where LOADM
+    ; does not look: each as its length, its address and its bytes, and a length of 0
+    ; last.  The program's first instructions read them from there.
+    sub decb_upper(^^ubyte name, ^^ubyte extension) {
+        ^^buf.Buf pathb = buf.new(256)
+        if outdir != 0 {
+            buf.add_str(pathb, outdir)
+            buf.add_byte(pathb, '/')
+        }
+        buf.add_str(pathb, name)
+        buf.add_str(pathb, extension)
+        buf.add_byte(pathb, 0)
+        ^^ubyte image
+        long size
+        image, size = file_bytes(pathb.data)
+        if image == 0 {
+            out.err()
+            out.puts("can't read ")
+            out.puts(pathb.data)
+            out.nl()
+            out.exit(1)
+        }
+        long above = target.number("rom_start", $8000)
+        ^^buf.Buf low = buf.new(size + 16)
+        ^^buf.Buf high = buf.new(size + 16)
+        long at = 0
+        while at + 5 <= size and image[at] == 0 {
+            long n = (image[at + 1] as long) * 256 + image[at + 2]
+            long address = (image[at + 3] as long) * 256 + image[at + 4]
+            if address >= above {
+                if n != 0
+                    buf.add_bytes(high, image + at + 1, n + 4)
+            }
+            else
+                buf.add_bytes(low, image + at, n + 5)
+            at += n + 5
+        }
+        if at + 5 > size {
+            out.err()
+            out.puts("error: the assembler's file is not a DECB file with an end: ")
+            out.puts(pathb.data)
+            out.nl()
+            out.exit(1)
+        }
+        buf.add_bytes(low, image + at, 5)
+        buf.add_bytes(low, high.data, high.len)
+        repeat 4
+            buf.add_byte(low, 0)
+        write_output(name, extension, low)
+    }
+
     sub add_output(^^ubyte name, ^^ubyte extension) {
         buf.add_byte(cmd, '"')
         if outdir != 0 {
@@ -2455,6 +2508,32 @@ main {
             ^^ubyte mfmt = target.text("output_format")
             if mfmt == 0
                 mfmt = "decb"
+            if gen6809.piece_count != 0 {
+                ; A target with memory above for code (gen6809, "Code in that memory"):
+                ; the program is assembled once without a file, for the places of its
+                ; parts; when it is too long for the memory below, the assembly is
+                ; written again with some of its blocks above.
+                buf.add_str(cmd, "lwasm --6809 --format=raw --no-output --define=p8_measure=1 --symbol-dump=")
+                add_output(name, ".sym")
+                buf.add_byte(cmd, ' ')
+                add_output(name, ".asm")
+                run_cmd("measuring the program")
+                buf.clear(parser.scratch)
+                if outdir != 0 {
+                    buf.add_str(parser.scratch, outdir)
+                    buf.add_byte(parser.scratch, '/')
+                }
+                buf.add_str(parser.scratch, name)
+                buf.add_str(parser.scratch, ".sym")
+                buf.add_byte(parser.scratch, 0)
+                ^^ubyte symbols
+                long symsize
+                symbols, symsize = file_bytes(parser.scratch.data)
+                io_platform.delete_file(parser.scratch.data)
+                if symbols != 0 and gen6809.place(symbols, symsize)
+                    write_output(name, ".asm", gen6809.out_buf)
+                buf.clear(cmd)
+            }
             buf.add_str(cmd, "lwasm --6809 --format=")
             buf.add_str(cmd, mfmt)
             buf.add_str(cmd, " -o ")
@@ -2463,6 +2542,8 @@ main {
             add_output(name, ".asm")
             run_cmd("assembling the program")
             built_ext = mext
+            if gen6809.has_high
+                decb_upper(name, mext)
             if opt_run {
                 ^^ubyte mrun = target.text("run_command")
                 if mrun == 0 {

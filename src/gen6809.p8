@@ -51,6 +51,26 @@ gen6809 {
     ^^buf.Buf upper_cells = 0
     long upper_start = 0            ; 0: none
     long upper_left = 0             ; bytes that are still free there
+    ; Code in that memory (the target file's high_code_end, on a machine whose ROMs
+    ; the program switches out): a program that is too long for the memory below has
+    ; some of its blocks' code above, after the variables there.  Which: main.p8 has
+    ; the program assembled once to measure it (measure_labels, place), and then the
+    ; assembly is put together again (compose).  A block is a piece that can move
+    ; unless the target keeps it below (lower_blocks); the first instructions, the
+    ; routines of the code generator, the calls into the ROM and all variables with
+    ; values stay below.  The file is one that LOADM loads the lower part of; the
+    ; program's first instructions (the target's high_loader) read the rest.
+    const ubyte PIECES = 200
+    long[PIECES] piece_from         ; in body
+    long[PIECES] piece_to
+    long[PIECES] piece_size         ; as measured
+    bool[PIECES] piece_high
+    ubyte piece_count = 0
+    bool has_high = false           ; a piece is above
+    long high_end = 0               ; the target's high_code_end; 0: none
+    long upper_end_from = 0         ; in body: where p8_upper_end is defined
+    long upper_end_to = 0
+    ^^buf.Buf out_buf = 0           ; the assembly, as generate was given it
     ^^ir.Instr previous = 0         ; the instruction before the one being written, in its chunk
     bool need_mul = false
     bool need_div = false
@@ -494,6 +514,12 @@ gen6809 {
         buf.clear(upper_cells)
         upper_start = 0
         upper_left = 0
+        out_buf = output
+        piece_count = 0
+        has_high = false
+        high_end = 0
+        if target.text("rom_out") != 0 and target.text("rom_in") != 0 and target.text("high_loader") != 0
+            high_end = target.number("high_code_end", 0)
         if target.text("rom_out") != 0 and target.text("rom_in") != 0 and target.number("upper_variables", 0) > 0 {
             upper_start = target.number("upper_variables", 0)
             upper_left = target.number("upper_variables_end", $10000) - upper_start
@@ -554,6 +580,14 @@ gen6809 {
         ^^ir.Block bl = prog.blocks
         while bl != 0 {
             ^^ir.Chunk c = bl.chunks
+            bool movable = high_end != 0 and piece_count < PIECES and not lower_block(bl.name)
+            if movable {
+                piece_from[piece_count] = body.len
+                piece_high[piece_count] = false
+                put("p8m")
+                putn(piece_count)
+                raw("s:")
+            }
             part++
             while c != 0 {
                 chunk(c)
@@ -565,18 +599,154 @@ gen6809 {
                 subroutine(s)
                 s = s.next
             }
+            if movable {
+                put("p8m")
+                putn(piece_count)
+                raw("e:")
+                piece_to[piece_count] = body.len
+                piece_count++
+            }
             bl = bl.next
         }
         runtime()
         variables()
-        o = output
+        compose()
+    }
+
+    ; The assembly from its parts: the first lines, the code and the variables, with
+    ; the pieces that are above (piece_high) after the variables of the upper memory.
+    sub compose() {
+        o = out_buf
+        buf.clear(o)
         head()
-        buf.add_bytes(o, body.data, body.len)
+        long at = 0
+        ubyte k
+        if has_high {
+            for k in 0 to piece_count - 1 {
+                if piece_high[k] {
+                    buf.add_bytes(o, body.data + at, piece_from[k] - at)
+                    at = piece_to[k]
+                }
+            }
+        }
+        buf.add_bytes(o, body.data + at, upper_end_from - at)
+        if has_high {
+            raw("; ---- the code above (the program's first instructions load it)")
+            if upper_start == 0 {
+                put("    org  ")
+                putn(target.number("rom_start", $8000))
+                nl()
+            }
+            for k in 0 to piece_count - 1 {
+                if piece_high[k]
+                    buf.add_bytes(o, body.data + piece_from[k], piece_to[k] - piece_from[k])
+            }
+            raw("p8_upper_end:")
+            put("    ifgt  *-")
+            putn(high_end)
+            nl()
+            put("    error  \"the program is too long: its code in the upper memory must end before $")
+            ubyte hd
+            for hd in 0 to 3
+                buf.add_byte(o, buf.hex_digit(lsb(high_end >> ((3 - hd) * 4)) & 15))
+            raw(" (high_code_end of the target)\"")
+            raw("    endc")
+        }
+        else
+            buf.add_bytes(o, body.data + upper_end_from, upper_end_to - upper_end_from)
+        buf.add_bytes(o, body.data + upper_end_to, body.len - upper_end_to)
         ; (every branch was written in its short form: those that do not reach
         ; become the long one)
         peep6809.branches(o)
         ; (where the program starts, for a format that says so: a DECB file)
         line("end  p8_start")
+    }
+
+    ; the value of a name in the assembler's list of symbols ("name EQU $1234"), or -1
+    sub measured(^^ubyte list, long size, str sym) -> long {
+        long n = buf.cstr_len(sym)
+        long k = 0
+        while k + n + 6 < size {
+            if (k == 0 or list[k - 1] == '\n') and buf.bytes_equal(list + k, sym, n) and list[k + n] == ' ' {
+                long q = k + n
+                while q < size and list[q] != '$' and list[q] != '\n'
+                    q++
+                if q < size and list[q] == '$' {
+                    long value = 0
+                    q++
+                    repeat {
+                        ubyte c = list[q] | 32
+                        if list[q] >= '0' and list[q] <= '9'
+                            value = value * 16 + (list[q] - '0')
+                        else if c >= 'a' and c <= 'f'
+                            value = value * 16 + (c - 'a' + 10)
+                        else
+                            break
+                        q++
+                    }
+                    return value
+                }
+            }
+            k++
+        }
+        return -1
+    }
+
+    ; Which pieces go above, from the symbols of the program assembled with all of it
+    ; below: none when it fits there.  Else the smallest piece that is enough by
+    ; itself, or the largest again and again until the rest fits, each as long as
+    ; there is room above.  Gives true when the assembly was put together anew.
+    sub place(^^ubyte list, long size) -> bool {
+        if piece_count == 0
+            return false
+        long low_end = measured(list, size, "p8_low_end")
+        long room = high_end - measured(list, size, "p8_upper_end")
+        long need = low_end - target.number("memory_end", 0)
+        if low_end < 0 or need <= 0
+            return false
+        ubyte k
+        for k in 0 to piece_count - 1 {
+            buf.clear(nb)
+            o = nb
+            put("p8m")
+            putn(k)
+            buf.add_byte(nb, 's')
+            buf.add_byte(nb, 0)
+            long first = measured(list, size, nb.data)
+            nb.data[nb.len - 2] = 'e'
+            piece_size[k] = measured(list, size, nb.data) - first
+            if first < 0
+                piece_size[k] = 0
+        }
+        while need > 0 {
+            ubyte best = 0
+            bool found = false
+            for k in 0 to piece_count - 1 {
+                if not piece_high[k] and piece_size[k] > 0 and piece_size[k] <= room {
+                    if not found {
+                        best = k
+                        found = true
+                    }
+                    else if piece_size[best] >= need {
+                        ; (enough by itself: a smaller one that is enough too)
+                        if piece_size[k] >= need and piece_size[k] < piece_size[best]
+                            best = k
+                    }
+                    else if piece_size[k] > piece_size[best]
+                        best = k
+                }
+            }
+            if not found
+                break
+            piece_high[best] = true
+            has_high = true
+            need -= piece_size[best]
+            room -= piece_size[best]
+        }
+        if not has_high
+            return false
+        compose()
+        return true
     }
 
     ; the value of one of the program's options ("loadAddress"), or 0
@@ -619,9 +789,32 @@ gen6809 {
         putn(begins)
         nl()
         raw("p8_start:")
+        ; (the code above is read from the program's file first: see compose)
+        ; (they are before the machine's own, or where those have the line
+        ; ";high_loader")
+        ^^ubyte first = target.text("startup_code")
+        long marker = -1
+        if first != 0 {
+            long fk = 0
+            while first[fk] != 0 {
+                if buf.bytes_equal(first + fk, ";high_loader\n", 13)
+                    marker = fk
+                fk++
+            }
+        }
+        if has_high and marker < 0
+            target_lines("high_loader")
         ; (the machine's first instructions, when it needs any: where the stack is)
-        if target.text("startup_code") != 0
-            target_lines("startup_code")
+        if first != 0 {
+            if marker < 0
+                target_lines("startup_code")
+            else {
+                text_lines(first, marker)
+                if has_high
+                    target_lines("high_loader")
+                text_lines(first + marker + 13, buf.cstr_len(first + marker + 13))
+            }
+        }
         ; (the stack the program was called on, for the way back from anywhere)
         line("sts  p8_entry_s")
         if target.number("stack_size", 0) > 0
@@ -640,7 +833,7 @@ gen6809 {
         if upper_start != 0 {
             line("ldx  #p8_upper_start")
             raw("p8_clear_upper:")
-            line("cmpx  #p8_upper_end")
+            line("cmpx  #p8_upper_vars_end")
             line("beq  p8_cleared_upper")
             line("clr  ,x+")
             line("bra  p8_clear_upper")
@@ -673,17 +866,21 @@ gen6809 {
             error("the target file lacks a key that a 6809 machine needs", key)
             return
         }
+        text_lines(text, buf.cstr_len(text))
+    }
+
+    sub text_lines(^^ubyte text, long length) {
         long k = 0
-        while text[k] != 0 {
+        while k < length {
             ; (a label, a line that ends with a colon, stands at the margin)
             long stop = k
-            while text[stop] != 0 and text[stop] != '\n'
+            while stop < length and text[stop] != '\n'
                 stop++
             if stop == k or text[stop - 1] != ':'
                 put("    ")
             code_line(text + k, stop - k)
             k = stop
-            if text[k] == '\n'
+            if k < length and text[k] == '\n'
                 k++
         }
     }
@@ -4098,6 +4295,11 @@ gen6809 {
             put("p8_memory_end:  equ  ")
             putn(limit)
             nl()
+            ; (assembled to measure it, a program may be too long: see place)
+            if high_end != 0 {
+                raw("p8_low_end:  equ  *")
+                raw("    ifndef  p8_measure")
+            }
             raw("    iflt  p8_start-p8_memory_end")
             raw("    ifgt  *-p8_memory_end")
             put("    error  \"the program is too long: it and its variables must end before $")
@@ -4107,6 +4309,8 @@ gen6809 {
             raw(" (memory_end of the target)\"")
             raw("    endc")
             raw("    endc")
+            if high_end != 0
+                raw("    endc")
         }
         ; the variables in the program's upper memory (see upper_cells)
         if upper_start != 0 {
@@ -4116,15 +4320,21 @@ gen6809 {
             raw("p8_upper_start:")
             buf.add_bytes(o, upper_cells.data, upper_cells.len)
             bss_variables(true)
+            raw("p8_upper_vars_end:")
+            upper_end_from = o.len
             raw("p8_upper_end:")
         }
         else if target.text("rom_out") != 0 {
+            upper_end_from = o.len
             put("p8_upper_end:  equ  ")
             putn(target.number("rom_start", $8000))
             nl()
         }
-        else
+        else {
+            upper_end_from = o.len
             raw("p8_upper_end:  equ  p8_bss_end")
+        }
+        upper_end_to = o.len
         if target.text("tail_code") != 0
             target_lines("tail_code")
     }

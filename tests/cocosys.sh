@@ -78,7 +78,19 @@ diff -u "$here/cocosys/expected_lists.txt" "$work/lists.txt" || exit 1
         COCO_MACHINE=coco3 COCO_OPTIONS="-ram 128" "$here/cocorun.sh" "$work/own/ownblocks.bin" &&
         COCO_MACHINE=coco3 COCO_OPTIONS="-ram 512" "$here/cocorun.sh" "$work/own/ownblocks.bin"
 } > "$work/blocks.txt" 2>&1
-if diff -u "$here/cocosys/expected_blocks.txt" "$work/blocks.txt"; then
+diff -u "$here/cocosys/expected_blocks.txt" "$work/blocks.txt" || exit 1
+# tests/cocosys/bigcode.p8: a program too long for the memory below $8000, on the
+# coco3ram target: some of its code is above, and it loads that itself from its file
+# (so it is run from a disk), with 128 KB and with 512 KB.  And that a program which
+# fits has none of that.
+{
+    mkdir "$work/big"
+    "$p8c" -lib "$lib" -srcdirs "$lib/targets/coco3ram" -target "$here/m6809/xroar-coco3ram.properties" -out "$work/big" "$here/cocosys/bigcode.p8" > "$work/big.log" 2>&1 &&
+        COCO_FROM_DISK=1 COCO_MACHINE=coco3 COCO_OPTIONS="-ram 128" "$here/cocorun.sh" "$work/big/bigcode.bin" &&
+        COCO_FROM_DISK=1 COCO_MACHINE=coco3 COCO_OPTIONS="-ram 512" "$here/cocorun.sh" "$work/big/bigcode.bin"
+    grep -c 'p8l_done:' "$work/big/bigcode.asm" "$work/own/ownblocks.asm" | sed 's|.*/||'
+} > "$work/big.txt" 2>&1
+if diff -u "$here/cocosys/expected_bigcode.txt" "$work/big.txt"; then
     echo "files on the Color Computer: as expected"
 else
     exit 1

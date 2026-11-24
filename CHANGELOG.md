@@ -28,6 +28,17 @@
   the program in the user's editor; `sys.upperstart()` is where the memory
   after them begins.
 
+- Programs of up to about 56 KB on `-target coco3ram`: when a program is
+  too long for the memory below $8000, p8c puts the code of some of its
+  blocks in the program's memory above (the library's modules that change
+  the memory blocks, the variables with values and the code generator's own
+  routines stay below).  LOADM cannot load that part, so it is at the end
+  of the program's file and the program's first instructions read it with
+  Disk BASIC's sector routine: such a program is started from a disk
+  (`LOADM"NAME":EXEC`), not loaded into an emulator's memory directly.  A
+  program that fits is built as before.  Target keys `high_code_end` and
+  `high_loader`.
+
 - `-varshigh 0` with `-target coco2ram`: the same for the Color Computer 2,
   where it is the program's choice (without it the memory from $8000 on is
   the program's as before).

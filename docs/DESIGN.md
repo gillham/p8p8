@@ -1279,6 +1279,57 @@ its test build, which ended above the limit at $7ec1, at $7992.  `make coco3ramc
 programs the same as on the host, on the 80 column screen; `make cocosys`
 runs `tests/cocosys/ownblocks.p8`.
 
+Code goes into that memory too on `coco3ram` when the program is too long
+for the memory below (`high_code_end`, `high_loader` in the target file).
+Two things had to be solved: which code, and how it gets there.
+
+Which: a block of the program is a piece that can move, unless the target
+keeps it below (`lower_blocks` again: the modules whose assembly changes
+the memory blocks).  The first instructions with the interrupt routine, the
+generator's own routines, the instructions around the calls into the ROM
+and every variable with a value stay below, so what BASIC's routines are
+given the address of is still where they see it, and a call into the ROM
+from code above goes through instructions below.  The generator cannot
+know the sizes, so `main.p8` has lwasm assemble the program once without
+a file (`--no-output --symbol-dump`, with `p8_measure` defined, which
+leaves the check of `memory_end` out): every piece has a label at its
+start and its end.  When all of it ends before `memory_end`, that is the
+program.  Else `gen6809.place` chooses pieces until the rest fits: the
+smallest that is enough by itself, or else the largest, again and again,
+each only if there is room above.  `compose` then writes the assembly
+again from the same parts (the generator keeps them: the first lines, the
+code with the pieces' places, the variables), with the chosen pieces after
+the variables of the upper memory, and `p8_upper_end`, what
+`sys.upperstart()` gives, after them.  A piece's size does not depend on
+where it is: every call is a `jsr` of an address, and the branches were
+made long or short from the lines between.
+
+How it gets there: LOADM cannot load above $8000, where BASIC itself is
+while it runs.  The first idea was records in the file that write the
+block register, so that LOADM would load the upper part through a block
+put at $4000.  LOADM reads every byte back after storing it (`sta ,x`,
+`cmpa ,x+`, "IO ERROR" when they differ), and the two upper bits of a
+block register are not defined when read: an emulator gives 0, a real
+machine was reported to give bit 6 set.  So a file that works in the
+emulator could fail on the machine, and that way was dropped.  Instead
+`main.decb_upper` takes the records for addresses from `rom_start` on out
+of lwasm's file and puts them after the record that ends it, where LOADM
+does not look, each as a length, an address and its bytes, and a length of
+0 last.  The program's first instructions (`high_loader`, 330 bytes of
+assembly in the target file, written only when a piece is above) read
+them: the name and the drive are the ones Disk BASIC used last ($094c,
+$eb), which are the program's own right after LOADM; they read the
+directory and the allocation table with DSKCON, walk the records LOADM
+read (only the sectors with a record's first bytes are read), and store
+each byte of what follows through block register $ffa2 with interrupts
+off.  A drive error or a file that is not found ends in BASIC's error
+routine as "IO ERROR", before anything of BASIC's is changed.  It follows
+that such a program is started from its file on a disk; a program that
+fits is the file it always was.  `tests/cocosys/bigcode.p8` is 39 KB,
+with two of its blocks above; `make cocosys` runs it from a disk with 128
+KB and 512 KB (`COCO_FROM_DISK` of `tests/cocorun.sh`).  Only in XRoar so
+far.
+
 A target file's `base` may itself have a `base` (up to four deep, each
 beside the one that names it): the tests' variant of `coco2ram` is made
 from `coco2ram`, which is made from `coco2`.

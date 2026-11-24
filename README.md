@@ -54,6 +54,9 @@ The command is `p8c`.
   the memory beyond its 64 KB: 384 KB of a 512 KB machine, 48 KB with 128 KB;
   `-target coco3ram` is `coco2ram` for that machine (memory blocks of the
   program's own where BASIC is, 32 KB, with most of its variables there).
+  A program that is too long for the memory below has part of its code
+  there too, and loads that itself from its file on the disk
+  (`LOADM"NAME":EXEC`), so it can be about 56 KB.
   `-varshigh 0` does that with the variables on `coco2ram`.
   `-target dragon32` and `-target dragon64` are the Dragons, with the same
   screen and floats (the ROM's, at the Dragon's addresses) and no `diskio`.
