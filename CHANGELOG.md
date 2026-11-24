@@ -39,6 +39,12 @@
   program that fits is built as before.  Target keys `high_code_end` and
   `high_loader`.
 
+- `sys.ticks()` on `-target trs80m4`: a count of 60ths of a second, kept by
+  an interrupt task of the DOS in a small resident module (P8TICKS), the
+  same one that the LLVM branch of Prog8 installs.  It was always 0, so a
+  program that waited for the clock to move never went on (the user's
+  editor never saved its text for recovery).
+
 - `-varshigh 0` with `-target coco2ram`: the same for the Color Computer 2,
   where it is the program's choice (without it the memory from $8000 on is
   the program's as before).
@@ -48,6 +54,15 @@
 - The Color Computer 3's `textio` and `highram` are in the shared
   directory (`shared_coco3_textio`, `shared_coco3_highram`) and put back
   the memory blocks they found, not BASIC's by number.
+
+### Fixed
+
+- `diskio.rename` on `-target trs80m4` uses the DOS's own call (@RENAM).
+  It copied the file to the new name and deleted the old one, which fails
+  when the disk has no room for the copy: on LS-DOS's system disk, where
+  one small new file takes the last free space, a file could be written
+  but not renamed.  The Model I and III DOSes have no such call in common
+  and still copy.
 
 ## 0.5.0
 

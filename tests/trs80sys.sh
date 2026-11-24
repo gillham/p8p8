@@ -2,7 +2,8 @@
 # The system calls of the TRS-80 targets beyond the console: the command line and the
 # directory (tests/trs80sys/args.p8) and files (tests/trs80sys/files.p8), run in trs80gp
 # on the Model I and III with TRSDOS, the Model III with LDOS and the Model 4.  What
-# they print is compared with tests/trs80sys/expected.txt.
+# they print is compared with tests/trs80sys/expected.txt.  On the Model 4 also the
+# clock (tests/trs80sys/clock.p8, expected_m4.txt).
 # (The Model I with LDOS is left out: trs80gp's boot disk for it has no room for a file.)
 #
 # Usage: tests/trs80sys.sh <p8c>      (needs z88dk and trs80gp: Z88DK, TRS80GP)
@@ -28,6 +29,17 @@ for machine in "-m1" "-m3" "-m3 -ld" "-m4"; do
         echo "ok: system calls on the TRS-80 ($machine)"
     else
         echo "WRONG on $machine:"; head -12 "$work/diff.txt"; bad=1
+    fi
+    # the Model 4 has a clock (tests/trs80sys/clock.p8)
+    if [ "$machine" = -m4 ]; then
+        "$p8c" -lib "$lib" -srcdirs "$lib/targets/$target" -target "$here/z80/$variant.properties" \
+                -out "$work/o" "$here/trs80sys/clock.p8" > "$work/o/clock.log" 2>&1 &&
+            TRS80_MODEL="$machine" "$here/trs80run.sh" "$work/o/clock.cmd" | tr -d '\r' > "$work/clock.txt"
+        if diff -u "$here/trs80sys/expected_m4.txt" "$work/clock.txt" > "$work/diff.txt"; then
+            echo "ok: the clock on the TRS-80 ($machine)"
+        else
+            echo "WRONG on $machine (the clock):"; head -12 "$work/diff.txt"; bad=1
+        fi
     fi
 done
 exit $bad
