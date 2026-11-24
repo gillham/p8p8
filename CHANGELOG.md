@@ -4,6 +4,13 @@
 
 ### Added
 
+- `-map` writes the program's map, `name.p8map`: the address and the bytes
+  of every block, subroutine and variable, in one text format for the 6502
+  family, the Z80, the 6809 and the 68000.  `p8size` (`tools/p8size.py`,
+  installed beside `p8c` when there is a `python3`) reports from it: the
+  memory map, the largest blocks, subroutines and variables, the cost of
+  each source file, what changed between two builds, and an exit status
+  for a Makefile when less than a given number of bytes is left.
 - The 6809 machines' target files say where the program's memory ends
   (`memory_end`: `$7e00` on the Color Computers and the Dragons, below
   BASIC's stack), and a program that with its variables does not end before

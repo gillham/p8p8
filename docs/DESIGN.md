@@ -1441,6 +1441,84 @@ reference compiler's standard library as it comes, and beside it the
 machines and modules that are added and a few modules with bug fixes that
 take the place of upstream's.  See [TARGETS.md](TARGETS.md).
 
+## The program's map
+
+`-map` writes `name.p8map` beside a program that one of p8p8's code
+generators built: where every block, subroutine and variable is and how many
+bytes it takes, in one form for every CPU (`src/sizemap.p8`).  It is for
+tools; `tools/p8size.py` is the one that comes with p8p8.
+
+The compiler does not know the addresses: the assembler does.  So each
+assembler is asked for its list of symbols, and a reader for each puts them
+in one table:
+
+| Assembler | Its list | What the reader leaves out |
+|---|---|---|
+| 64tass | the label list (`--vice-labels`), which every build writes | |
+| lwasm | `--symbol-dump` | the names that the assembly defines with `equ` (the dump does not tell a constant from a place) |
+| z80asm, zcc | the map (`-m`) | what it calls `const` |
+| vasm | the symbols at the end of the listing (`-L`), with their sections | expressions (`E:`) |
+
+From there on it is the same work for all of them.  A name says what it is:
+`p8b_block.p8s_sub.p8v_variable` in scopes for 64tass and vasm,
+`_block__sub__variable` for the other two.  A label inside a routine is no
+entry of its own (`p8l_`, `p8_label_gen_`, a third scope in a library block
+that is written in assembly, `p8<block>_...` after a routine of that block
+on the Z80 and the 6809).  What is left is put in the order of its
+addresses, and the bytes of each are the distance to the next: so a
+subroutine has the tables and strings that follow it, and every byte of the
+program belongs to exactly one entry.  Names that only end something
+(`prog8_program_end`, `p8_bss_end`) are not entries, which keeps a gap
+between two parts of the memory from being counted.  For the 6502 the
+generator writes two labels more when `-map` is given, around the variables
+(`p8map_vars`, `p8map_vars_end`): they may be in memory of their own
+(`-varshigh`), where nothing else says where they end.
+
+What only the compiler knows is added: the target, the source file of each
+block, where the program must end and how much is left, and the 6502's
+variables in the zero page, which have no label of their own.
+
+Lines of the map of `tests/mapcheck/sizes.p8`, built for the X16:
+
+```
+p8map 1
+program sizes
+target cx16
+cpu 65c02
+region image 0801 0aa7
+region vars 0aa7 0b56
+limit 9f00
+free 37802
+zp 002b 2 main counter
+module main sizes.p8
+code 0801 22 (runtime) prog8_program_start
+code 082e 37 main start
+code 0853 48 main start.inner
+data 0a9b 6 main primes
+var 0ab5 100 main table
+```
+
+- `region NAME START END`: `image` is the program's bytes, `vars` the
+  variables without a value; `uppervars` and `upper` are the variables and
+  the code above $8000 on `coco3ram`.  `END` is the first address after it.
+- `relocatable` (the 68000): addresses are offsets in the section of the
+  entry's kind, and the regions are `image`, `data` and `vars`.
+- `limit` and `free`: the first address the program may not reach, and the
+  bytes left before it.
+- `code`, `data`, `var`, `zp`, then address, bytes, block and name.  The name
+  is a subroutine (an inner one as `outer.inner`), a variable
+  (`sub.variable`), or `-` for what is the block's own.  `data` is a variable
+  with a value where the assembler's names show it (`p8v_`, the 68000's data
+  section); elsewhere it is counted with the code.
+
+`make mapcheck` builds test programs for all four CPUs (with the variables
+in high memory, a program in two parts on `coco3ram`, one linked with
+z88dk) and has `p8size --check` say of each map that its entries fill each
+region to the byte with nothing of the wrong kind in it.
+
+Not there: a program with overlays (its parts are assembled apart, at the
+same addresses), and the targets that `prog8c-llvm` or clang build.
+
 ## How it is tested
 
 p8p8 has a reference to be compared with, and nearly every test is such a

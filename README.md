@@ -289,9 +289,39 @@ Options p8p8 has that the reference compiler does not:
 | `-nooverlays` | take no notice of `%overlay`: the program is built in one piece, as on a machine without overlays |
 | `-overlayinfo` | after a 6502 program is built: every block (and the larger subroutines of the ones that stay) with its bytes and whether it could go into an overlay, or why not |
 | `-meminfo` | after a 6502 program is built: what it takes of main memory and of each overlay, and what is left (`-verbose` prints this too) |
+| `-map` | after a program is built by one of p8p8's code generators (6502 family, Z80, 6809, 68000): its map, `name.p8map`, with the address and the bytes of every block, subroutine and variable.  `p8size` reads it (see below) |
 | `-libpath` | print the library directory that is used |
 | `-report <dir>` | write a report of this run into the new directory `<dir>` (see below); `-reportnosource` leaves the program's sources out of it |
 
+
+## Where a program's bytes go: `p8size`
+
+`p8c -map` writes a map beside the program, and `p8size` (`tools/p8size.py`,
+a Python script; `make install` puts it beside `p8c` when there is a
+`python3`) reports from it.  The map is the same for every CPU, so the
+reports are too.
+
+```
+p8c -target cx16 -map main.p8
+p8size main.p8map                    # the memory map, the blocks, the 25 largest subroutines
+p8size main.p8map --block main       # only the subroutines of one block
+p8size main.p8map --vars             # the largest variables
+p8size main.p8map --modules          # per source file: what a library costs
+p8size old.p8map new.p8map           # what changed between two builds
+p8size main.p8map --map --min-free 128   # for a Makefile: exit 1 when less room is left
+p8size main.p8map --json             # everything, for a script
+```
+
+A subroutine's bytes are its code and what follows it up to the next one
+(tables, strings it alone uses); the block `(runtime)` has what belongs to no
+block: the startup code, the code generator's own routines and, for a Z80
+program that is linked with z88dk, that library's.  `p8size` also reads a
+64tass listing (`-asmlist`, `name.list`), which the reference compiler
+writes too; the names in it are less exact.  No map is written for a
+program with overlays.
+
+The map is a text file with a line for each thing; its format is in
+[docs/DESIGN.md](docs/DESIGN.md), "The program's map".
 
 ## When something goes wrong
 
@@ -361,6 +391,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make coco3ramcmp` | the same programs for `coco3ram`, on the 80 column screen |
 | `make dragoncmp` | the same programs for the `dragon32` target on XRoar's Dragon 32 and Dragon 64 |
 | `make cocosys` | files on the Color Computer, in XRoar with a disk image that toolshed's `decb` makes and reads back |
+| `make mapcheck` | the maps of `-map` for every CPU: `p8size --check` says of each whether its entries fill the program to the byte |
 | `make z80bench` | the time and size of a benchmark for CP/M, against `prog8c-llvm`'s build |
 | `make irroundtrip` | a program built from the IR file that `p8c -ir` wrote is the same bytes as from its source |
 | `tools/benchmega65.sh` | loops of long, word and byte arithmetic on the MEGA65 as 6502 code and as 45GS02 code |

@@ -49,6 +49,7 @@ gen6502 {
     long load_address = $0801
     ^^ubyte break_instruction = 0       ; -breakinstr brk|stp
     long memtop = 0
+    bool map_labels = false         ; -map: names for where the variables begin and end (sizemap)
     bool launcher_basic = true
     bool no_sysinit = false
     bool vars_golden = false        ; -varsgolden: uninitialized variables in the target's golden ram
@@ -9295,21 +9296,29 @@ gen6502 {
             put("  * = ")
             puthex(vars_start)
             nl()
+            if map_labels
+                raw("p8map_vars:")
             raw("  .dsection BSS_NOCLEAR")
             raw("prog8_bss_section_start:")
             raw("  .dsection BSS")
             raw("  .dsection BSS_SLABS")
+            if map_labels
+                raw("p8map_vars_end:")
             put("  .cerror * > ")
             puthex(vars_end)
             raw(", \"too many variables/data for BSS section\"")
             raw("prog8_bss_section_size = * - prog8_bss_section_start")
         }
         else {
+            if map_labels
+                raw("p8map_vars:")
             raw("  .dsection BSS_NOCLEAR")
             raw("prog8_bss_section_start:")
             raw("  .dsection BSS")
             raw("prog8_bss_section_size = * - prog8_bss_section_start")
             raw("  .dsection BSS_SLABS")
+            if map_labels
+                raw("p8map_vars_end:")
             raw("prog8_program_end:")
         }
         raw("")

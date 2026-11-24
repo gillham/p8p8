@@ -205,6 +205,8 @@ Options are upstream's where both have them, with one dash or two.
   `prog8c-llvm`'s back end, for the 6502 and the 68000 machines.
 - `-cpu 6502|65c02|65816` is p8p8's: the CPU to write 6502 code for, in
   place of the one the target's file names.
+- `-map` is p8p8's: after the build, the program's map (`name.p8map`),
+  which `p8size` reports from.  Nothing changes without it.
 - `-Xcompile` is there for llvm32 only.
 - `-triple` for llvm32 reads the LLVM branch's profile files, but only the
   keys of the hosted 32-bit platforms ([TARGETS.md](TARGETS.md)); for llvm64
@@ -308,6 +310,10 @@ overlap; one block stays inside a 64 KB bank.
 - A target file can have blocks at an address placed out of line
   (`fixed_blocks_apart`; the GameTank's does), where `prog8c` has the rest
   of the program follow such a block.
+- `-map` and `p8size`: a map of the built program in one format for every
+  CPU (the address and bytes of each block, subroutine and variable), and a
+  tool that says from it where the program's size goes, per block,
+  subroutine, variable or source file, and what changed between two builds.
 - It is written in Prog8 and compiles itself; it is built from its own
   earlier output with clang alone, on macOS, Linux and Windows.
 - It starts at once: there is no Java virtual machine to start.

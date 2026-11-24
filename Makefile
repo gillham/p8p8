@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -189,6 +189,11 @@ install: $(P8P8)
 	$(MD) $(PREFIX)/lib/p8p8/runtime
 	cp runtime/windows-console.c runtime/hosted-keys.c runtime/mos-c64-support.c $(PREFIX)/lib/p8p8/runtime/
 	@echo "installed $(PREFIX)/bin/p8c and $(PREFIX)/lib/p8p8"
+	@# p8size (tools/p8size.py, a Python script that reads the maps of p8c -map): only
+	@# where there is a python3 to run it; the compiler itself needs none
+	@if command -v python3 > /dev/null 2>&1; then \
+		cp tools/p8size.py $(PREFIX)/bin/p8size && chmod +x $(PREFIX)/bin/p8size && echo "installed $(PREFIX)/bin/p8size"; \
+	else echo "p8size not installed: no python3"; fi
 
 # make dist: an archive of the compiler for this machine, to unpack anywhere and use:
 # dist/p8p8-<version>-<system>-<cpu>.tar.gz, with bin/p8c and lib/p8p8 in it as make
@@ -597,6 +602,13 @@ coco3screen:	$(P8P8)
 # toolshed's decb makes and reads back, and the memory modules (highram)
 cocosys:	$(P8P8)
 	@tests/cocosys.sh $(P8P8)
+
+# make mapcheck: the program's map (-map) for every CPU: test programs are built for a
+# number of targets, and tools/p8size.py says of each map whether its entries fill the
+# program's regions to the byte.  (No emulator; a target whose assembler is missing is
+# left out.)
+mapcheck:	$(P8P8)
+	@tests/mapcheck.sh $(P8P8)
 
 # make trs80cmp: the same against the host for the TRS-80 Model I, run in trs80gp (TRS80GP
 # names it), which opens a window for each program.

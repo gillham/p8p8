@@ -35,6 +35,7 @@
 %import warn
 %import triple
 %import irread
+%import sizemap
 %zeropage basicsafe
 
 main {
@@ -285,6 +286,10 @@ main {
             }
             else if strings.compare(arg, "-asmlist") == 0
                 opt_asmlist = true
+            else if strings.compare(arg, "-map") == 0 {
+                opt_map = true
+                gen6502.map_labels = true
+            }
             else if strings.compare(arg, "-varsgolden") == 0
                 gen6502.vars_golden = true
             else if strings.compare(arg, "-encoding") == 0 and value != 0 {
@@ -763,6 +768,8 @@ main {
         out.nl()
         out.puts("  -asmlist       the assembler writes a listing (name.list)")
         out.nl()
+        out.puts("  -map           (p8p8) after the build, name.p8map: where every block, subroutine and variable is and its size")
+        out.nl()
         out.puts("  -keepunused    keep subroutines and variables that nothing refers to")
         out.nl()
         out.puts("  -encoding E    the encoding of strings and characters without a prefix (iso, petscii, sc, ...) in place of the target's")
@@ -1110,6 +1117,8 @@ main {
     bool opt_warnshadow = false     ; -warnshadow: the assembler's warnings about symbols that hide others
     bool opt_overlayinfo = false    ; -overlayinfo: after a 6502 program is built, what of it could go into an overlay
     bool opt_noimage = false        ; -noimage: the program file as it is, not in the image of a cartridge
+    bool opt_map = false            ; -map: after the build, the program's map (sizemap)
+    ^^ir.Program map_prog = 0       ; the program that was built, for its map
     bool opt_meminfo = false        ; -meminfo: after a 6502 program is built, how much memory it takes and leaves
     bool opt_verbose = false        ; -verbose: say what is run, and let the assembler print its summary
 
@@ -1180,6 +1189,7 @@ main {
         if not opt_keepunused
             irprune.run(p)
         ^^buf.Buf b = buf.new(65536)
+        map_prog = p
         if opt_asm and not is_z80 and not is_m6809 and (is_llvm or not opt_own) {
             out.err()
             out.puts("error: -asm: p8p8 writes no assembly for this target (it has a code generator for the 6502 family, the 68000, the Z80 and the 6809)\n")
@@ -2536,6 +2546,10 @@ main {
             }
             buf.add_str(cmd, "lwasm --6809 --format=")
             buf.add_str(cmd, mfmt)
+            if opt_map {
+                buf.add_str(cmd, " --symbol-dump=")
+                add_output(name, ".sym")
+            }
             buf.add_str(cmd, " -o ")
             add_output(name, mext)
             buf.add_byte(cmd, ' ')
@@ -2544,6 +2558,8 @@ main {
             built_ext = mext
             if gen6809.has_high
                 decb_upper(name, mext)
+            if opt_map
+                map_6809(name)
             if opt_run {
                 ^^ubyte mrun = target.text("run_command")
                 if mrun == 0 {
@@ -2604,6 +2620,8 @@ main {
                     buf.add_byte(cmd, ' ')
                     buf.add_bytes(cmd, xlink.data, xlink.len)
                 }
+                if opt_map
+                    buf.add_str(cmd, " -m")
                 buf.add_str(cmd, " -o ")
                 add_output(name, zmade)
                 buf.add_byte(cmd, ' ')
@@ -2621,7 +2639,10 @@ main {
                 run_cmd("linking the program with z88dk")
             }
             else {
-                buf.add_str(cmd, "\"${Z88DK:+$Z88DK/bin/}z88dk-z80asm\" -b -o=")
+                buf.add_str(cmd, "\"${Z88DK:+$Z88DK/bin/}z88dk-z80asm\" -b ")
+                if opt_map
+                    buf.add_str(cmd, "-m ")
+                buf.add_str(cmd, "-o=")
                 add_output(name, zmade)
                 buf.add_byte(cmd, ' ')
                 add_output(name, ".asm")
@@ -2642,6 +2663,8 @@ main {
                 io_platform.delete_file(cmd.data)
             }
             built_ext = zext
+            if opt_map
+                map_z80(name)
             if opt_run {
                 ^^ubyte zrun = target.text("run_command")
                 if zrun == 0 {
@@ -2682,19 +2705,25 @@ main {
                 else
                     buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Fhunkexe -opt-speed -ldots -spaces -nosym -quiet -o ")
                 add_output(name, "")
+                map_68k_option(name)
                 buf.add_byte(cmd, ' ')
                 add_output(name, ".asm")
                 run_cmd("assembling the program")
                 built_ext = ""
+                if opt_map
+                    map_68k(name)
                 if opt_run
                     run_68k(name)
                 return
             }
             buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Felf -opt-speed -ldots -spaces -quiet -o ")
             add_output(name, ".o")
+            map_68k_option(name)
             buf.add_byte(cmd, ' ')
             add_output(name, ".asm")
             run_cmd("assembling the program")
+            if opt_map
+                map_68k(name)
             buf.clear(cmd)
             buf.add_str(cmd, "vlink -b elf32m68k -n -T \"")
             buf.add_str(cmd, lib_root)
@@ -2773,6 +2802,10 @@ main {
                 if gen6502.breakpoints != 0
                     breakpoint_list(name)
                 banked_calls_file(name)
+                if opt_map {
+                    out.puts("note: -map: no map is written for a program with overlays")
+                    out.nl()
+                }
                 return
             }
             buf.add_str(cmd, " --output ")
@@ -2894,6 +2927,8 @@ main {
             built_ext = plain_image(name, extension)
         if opt_own and not is_llvm and (opt_meminfo or opt_verbose)
             memory_report(name)
+        if opt_own and not is_llvm and opt_map
+            map_6502(name)
         if opt_own and not is_llvm and opt_overlayinfo
             overlay_info(name)
         if opt_own and not is_llvm and gen6502.breakpoints != 0
@@ -2962,6 +2997,160 @@ main {
         if is_llvm and run_args != 0
             buf.add_bytes(cmd, run_args.data, run_args.len)
         run_cmd("running the program")
+    }
+
+    ; ---- the program's map (-map; sizemap) ----
+    ; The assembler's list of symbols is read, and with what the compiler knows of
+    ; the program (its target, the files of its blocks, where its memory ends) the
+    ; map is written beside the program: name.p8map.
+
+    sub map_file(^^ubyte name, str extension, bool remove) -> ^^ubyte, long {
+        buf.clear(parser.scratch)
+        if outdir != 0 {
+            buf.add_str(parser.scratch, outdir)
+            buf.add_byte(parser.scratch, '/')
+        }
+        buf.add_str(parser.scratch, name)
+        buf.add_str(parser.scratch, extension)
+        buf.add_byte(parser.scratch, 0)
+        ^^ubyte data
+        long size
+        data, size = file_bytes(parser.scratch.data)
+        if data == 0 {
+            out.err()
+            out.puts("-map: cannot read the assembler's symbols, ")
+            out.puts(parser.scratch.data)
+            out.nl()
+            out.exit(1)
+        }
+        if remove
+            io_platform.delete_file(parser.scratch.data)
+        return data, size
+    }
+
+    sub map_head(^^ubyte name, str cpu) {
+        sizemap.put("p8map 1\n")
+        sizemap.head("program", name)
+        sizemap.head("target", importer.target)
+        sizemap.head("cpu", cpu)
+    }
+
+    sub map_end(^^ubyte name) {
+        if map_prog != 0
+            sizemap.modules(map_prog)
+        sizemap.entries()
+        write_output(name, ".p8map", sizemap.o)
+    }
+
+    sub map_6502(^^ubyte name) {
+        ^^ubyte data
+        long size
+        data, size = map_file(name, ".vice-mon-list", false)
+        sizemap.read_vice(data, size)
+        if gen6502.c45
+            map_head(name, "45gs02")
+        else if gen6502.c816
+            map_head(name, "65816")
+        else if gen6502.c02
+            map_head(name, "65c02")
+        else
+            map_head(name, "6502")
+        long first = sizemap.value("prog8_program_start")
+        long last = sizemap.value("prog8_program_end")
+        long vars_from = sizemap.value("p8map_vars")
+        long vars_to = sizemap.value("p8map_vars_end")
+        sizemap.vars(vars_from, vars_to)
+        if vars_from >= first and vars_from < last
+            sizemap.region("image", first, vars_from)       ; (the variables are at its end)
+        else
+            sizemap.region("image", first, last)
+        sizemap.region("vars", vars_from, vars_to)
+        if gen6502.memtop > 0 and last >= 0 {
+            sizemap.limit(gen6502.memtop)
+            sizemap.number("free", gen6502.memtop - last)
+        }
+        ^^ir.Var v = gen6502.prog.vars
+        while v != 0 {
+            if v.zpaddr != 0
+                sizemap.entry("zp", v.name, v.zpaddr, gen6502.var_size(v))
+            v = v.next
+        }
+        map_end(name)
+    }
+
+    sub map_6809(^^ubyte name) {
+        ^^ubyte data
+        long size
+        data, size = map_file(name, ".sym", true)
+        sizemap.read_lwasm(data, size)
+        map_head(name, "6809")
+        long first = sizemap.value("p8_start")
+        long vars_from = sizemap.value("p8_bss_start")
+        long vars_to = sizemap.value("p8_stack_top")
+        if vars_to < 0
+            vars_to = sizemap.value("p8_bss_end")
+        sizemap.vars(vars_from, vars_to)
+        sizemap.vars(sizemap.value("p8_upper_start"), sizemap.value("p8_upper_vars_end"))
+        sizemap.region("image", first, vars_from)
+        sizemap.region("vars", vars_from, vars_to)
+        if sizemap.value("p8_upper_start") >= 0 {
+            sizemap.region("uppervars", sizemap.value("p8_upper_start"), sizemap.value("p8_upper_vars_end"))
+            if gen6809.has_high
+                sizemap.region("upper", sizemap.value("p8_upper_vars_end"), sizemap.value("p8_upper_end"))
+        }
+        long limit = target.number("memory_end", 0)
+        if limit > 0 and first >= 0 and first < limit and vars_to >= 0 {
+            sizemap.limit(limit)
+            sizemap.number("free", limit - vars_to)
+        }
+        ; (the names that are only other names for a value, from the assembly itself)
+        ^^ubyte text
+        long length
+        text, length = map_file(name, ".asm", false)
+        sizemap.drop_equates(text, length)
+        map_end(name)
+    }
+
+    sub map_z80(^^ubyte name) {
+        ^^ubyte data
+        long size
+        data, size = map_file(name, ".map", true)
+        sizemap.read_z80asm(data, size)
+        map_head(name, "z80")
+        long vars_from = sizemap.value("p8_bss_start")
+        long vars_to = sizemap.value("p8_bss_end")
+        sizemap.vars(vars_from, vars_to)
+        sizemap.region("image", sizemap.value("__head"), vars_from)
+        sizemap.region("vars", vars_from, vars_to)
+        map_end(name)
+    }
+
+    ; vasm's listing has its symbols: the option for it
+    sub map_68k_option(^^ubyte name) {
+        if opt_map {
+            buf.add_str(cmd, " -Lnf -L ")
+            add_output(name, ".lst")
+        }
+    }
+
+    sub map_68k(^^ubyte name) {
+        ^^ubyte data
+        long size
+        data, size = map_file(name, ".lst", true)
+        sizemap.read_vasm(data, size)
+        map_head(name, "68000")
+        sizemap.put("relocatable\n")
+        ubyte sn
+        for sn in 0 to 15 {
+            if sizemap.sect_end[sn] > 0 {
+                when sizemap.sect_kind[sn] {
+                    sizemap.K_VAR -> sizemap.region("vars", 0, sizemap.sect_end[sn])
+                    sizemap.K_DATA -> sizemap.region("data", 0, sizemap.sect_end[sn])
+                    else -> sizemap.region("image", 0, sizemap.sect_end[sn])
+                }
+            }
+        }
+        map_end(name)
     }
 
     sub write_output(^^ubyte name, str extension, ^^buf.Buf b) {
