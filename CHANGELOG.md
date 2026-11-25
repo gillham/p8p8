@@ -4,6 +4,16 @@
 
 ### Added
 
+- The Apple II as a target (`-target appleii`): the II Plus with `-cpu 6502`,
+  the IIe, IIc and IIgs.  `textio` on the 40 column screen through the
+  monitor's routines (line input with its editing, the cursor, inverse
+  text, the screen's memory read and written by row), keys without
+  waiting, `sys.wait`.  The program is a binary file for `$2000` with
+  DOS 3.3's four bytes before it.  No floats, `diskio` or graphics yet.
+  `-run` starts it in bobbin, and `make a2cmp` compares the test programs
+  there with the reference compiler's builds.
+- A 6502 machine's target file can say what `-run` runs (`run_command`,
+  with `{file}` for the program), as the Z80 and 6809 machines' files do.
 - `-map` writes the program's map, `name.p8map`: the address and the bytes
   of every block, subroutine and variable, in one text format for the 6502
   family, the Z80, the 6809 and the 68000.  `p8size` (`tools/p8size.py`,

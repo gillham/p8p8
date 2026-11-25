@@ -123,6 +123,7 @@ serves both.
 | `exit_code` | lines after the startup code: routines the library jumps to at the end |
 | `reset_address` | what is pushed as the return address of the program when the zero page is not kept (default `sys.reset_system`) |
 | `jsrfar_routine` | the routine for a call into another bank (default `<name>.x16jsrfar`) |
+| `run_command` | what `-run` runs, with `{file}` for the program (`appleii`: bobbin).  Without it `-run` knows the C64 (`x64sc`) and the Commander X16 (`x16emu`) |
 
 ### A target file made from another
 
@@ -161,7 +162,7 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 | `command_line` | a routine: HL = the command line, a text that ends with 0 (without it there are no arguments).  With it the program has a word `p8_entry_hl`, for what the first instructions are given, and 82 bytes at `p8_line` to copy a line to |
 | `run_command` | what `-run` runs, with `{file}` for the program (p8p8) |
 | `zcc_platform` | z88dk's platform for a program with floats, which `zcc` links (`+cpm`) |
-| `library` | for a Z80 machine the target's own directory is searched before it: `trs80` has its own `textio.p8` and takes the rest from `../llvm16` |
+| `library` | for a Z80 machine the target's own directory is searched before it: `trs80` has its own `textio.p8` and takes the rest from `../z80` |
 | `zcc_init` | lines for the start of zcc's own first instructions (the TRS-80: an empty command line, since zcc's code writes into the one it is given) |
 | `float_source` | a C file that is linked with such a program, from the target's directory (`../z80/z80-float.c`: the one the Z80 machines share) |
 | `library` | the directory with the target's modules, as for any target |

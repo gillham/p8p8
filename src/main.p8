@@ -2960,6 +2960,26 @@ main {
             run_cmd("running the program")
             return
         }
+        if not is_llvm {
+            ; a 6502 machine whose target file says what runs it (run_command, with {file}
+            ; for the program)
+            ^^ubyte srun = target.text("run_command")
+            if srun != 0 {
+                long sk = 0
+                while srun[sk] != 0 {
+                    if buf.bytes_equal(srun + sk, "{file}", 6) {
+                        add_output(name, extension)
+                        sk += 6
+                    }
+                    else {
+                        buf.add_byte(cmd, srun[sk])
+                        sk++
+                    }
+                }
+                run_cmd("running the program")
+                return
+            }
+        }
         if mos_c64 or strings.compare(importer.target, "c64") == 0
             buf.add_str(cmd, "x64sc -autostart ")
         else if mos

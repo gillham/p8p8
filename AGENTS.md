@@ -93,6 +93,7 @@ Which suite after which change (see the Makefile for all of them):
 | the 45GS02 code (`-target mega65`) | `make emucmp65` (needs xmega65; 6502 code against 45GS02 code on the MEGA65) |
 | assembly by hand with long addresses | `make farcheck` (x16emu, xscpu64, xmega65) |
 | what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |
+| the Apple II's library (`lib/targets/appleii`) | `make a2cmp` (bobbin) |
 | labels or layout of any code generator's output, `sizemap.p8`, `p8size.py` | `make mapcheck` |
 
 The comparison suites build each program with the reference compiler and
