@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run an Apple II binary in bobbin (tty interface, in a pty), type keys, and show
-the text screen from a RAM dump.  usage: a2screen.py prog.bin seconds [keys [seconds]]..."""
+the text screen from a RAM dump.  Each dump types Control-C twice, and bobbin
+passes the first one on to the program as a key.  usage: a2screen.py prog.bin seconds [keys [seconds]]..."""
 import os, pty, sys, time, select, tempfile
 prog = sys.argv[1]
 steps = sys.argv[2:]
