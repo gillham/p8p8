@@ -12,6 +12,17 @@
   DOS 3.3's four bytes before it.  No floats, `diskio` or graphics yet.
   `-run` starts it in bobbin, and `make a2cmp` compares the test programs
   there with the reference compiler's builds.
+- The Atari 8-bit computers as a target that is finished enough to use
+  (`-target atari`, the 800XL and the others with 48 KB or more): `textio`
+  through the OS's screen editor and keyboard (line input with its editing,
+  the cursor, inverse text, the screen's memory read and written as
+  characters), keys without waiting, the BREAK key, the OS's clock
+  (`cbm.TIME_LO`, `cbm.RDTIM`, `sys.wait`, `sys.waitvsync`).  The `.xex`
+  has its run address, so DOS starts it.  No floats, `diskio` or graphics
+  yet.  `-run` starts it in atari800, and `make ataricmp` compares the test
+  programs there with the reference compiler's builds.
+- A target file can give lines for the assembler after the whole program
+  (`asm_end`; the Atari's run address is written with it).
 - A 6502 machine's target file can say what `-run` runs (`run_command`,
   with `{file}` for the program), as the Z80 and 6809 machines' files do.
 - `-map` writes the program's map, `name.p8map`: the address and the bytes

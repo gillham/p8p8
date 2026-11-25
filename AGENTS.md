@@ -94,6 +94,7 @@ Which suite after which change (see the Makefile for all of them):
 | assembly by hand with long addresses | `make farcheck` (x16emu, xscpu64, xmega65) |
 | what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |
 | the Apple II's library (`lib/targets/appleii`) | `make a2cmp` (bobbin) |
+| the Atari's library (`lib/targets/atari`) | `make ataricmp` (atari800) |
 | labels or layout of any code generator's output, `sizemap.p8`, `p8size.py` | `make mapcheck` |
 
 The comparison suites build each program with the reference compiler and

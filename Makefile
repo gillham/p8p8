@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	a2cmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -563,6 +563,15 @@ a2cmp:	$(P8P8)
 	@tests/a2cmp.sh $(P8P8) tests/hello.p8 $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/a2/*.p8) \
 		$(wildcard .prog8-reference/compiler/test/arithmetic/*.p8 .prog8-reference/compiler/test/comparisons/*.p8)
 	@tests/a2cmp.sh -screen $(P8P8) | diff -u tests/expected/a2screen.txt - && echo "Apple II screen: as expected"
+
+# make ataricmp: the Atari target: the programs built for it by the reference compiler
+# and by p8p8, both run in atari800 (no window) until they end, and the text screens
+# they leave compared; then the text screen's routines (tests/atari/screen.p8) against
+# what they should give
+ataricmp:	$(P8P8)
+	@tests/ataricmp.sh $(P8P8) tests/hello.p8 $(wildcard tests/programs/*.p8 tests/conformance/*.p8) \
+		$(wildcard .prog8-reference/compiler/test/arithmetic/*.p8 .prog8-reference/compiler/test/comparisons/*.p8)
+	@tests/ataricmp.sh -screen $(P8P8) tests/atari/screen.p8 | diff -u tests/expected/atariscreen.txt - && echo "Atari screen: as expected"
 
 # make z80cmp: the Z80 code generator (new): the test programs built for the host and for
 # CP/M on the Z80 (the cpm target), run in tnylpo, their output compared.

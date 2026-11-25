@@ -123,7 +123,8 @@ serves both.
 | `exit_code` | lines after the startup code: routines the library jumps to at the end |
 | `reset_address` | what is pushed as the return address of the program when the zero page is not kept (default `sys.reset_system`) |
 | `jsrfar_routine` | the routine for a call into another bank (default `<name>.x16jsrfar`) |
-| `run_command` | what `-run` runs, with `{file}` for the program (`appleii`: bobbin).  Without it `-run` knows the C64 (`x64sc`) and the Commander X16 (`x16emu`) |
+| `asm_end` | lines for the assembler after the whole program (`atari`: one more part of the `.xex`, which puts the program's start in `RUNAD`, where DOS starts what it has loaded) |
+| `run_command` | what `-run` runs, with `{file}` for the program (`appleii`: bobbin; `atari`: atari800).  Without it `-run` knows the C64 (`x64sc`) and the Commander X16 (`x16emu`) |
 
 ### A target file made from another
 

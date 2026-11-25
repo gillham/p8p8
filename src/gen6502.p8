@@ -9344,6 +9344,13 @@ gen6502 {
             raw(", \" is where the program is (it ends at \", prog8_program_end, \")\"")
             ak++
         }
+        ; the machine's own last lines (asm_end: the Atari's run address, a part of
+        ; the file of its own)
+        ^^ubyte last_lines = target.text("asm_end")
+        if last_lines != 0 {
+            raw("")
+            raw(last_lines)
+        }
     }
 
     sub bss_var(^^ir.Var v) {
