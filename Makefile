@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	stcmp stscreen stargs a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	stcmp stscreen stargs stfloat amigafloat500 a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -513,9 +513,20 @@ coppercmp:	$(P8P8)
 
 # the Atari ST (the atarist target): the programs as GEMDOS programs in Hatari, against
 # the host.  ST_TOS names a TOS image; without it Hatari runs its EmuTOS.
-STTESTS=tests/hello.p8 $(wildcard tests/programs/*.p8) $(CONFTESTS) $(patsubst %.out,%.p8,$(wildcard tests/atarist/*.out))
+STTESTS=tests/hello.p8 $(wildcard tests/programs/*.p8) $(CONFTESTS) $(wildcard $(patsubst %.out,%.p8,$(wildcard tests/atarist/*.out)))
 stcmp:	$(P8P8)
 	@tests/stcmp.sh $(P8P8) $(STTESTS)
+
+# make stfloat: the 68000 machines' float routines against Python's arithmetic, in Hatari
+stfloat:
+	@tests/softfloat/run.sh
+
+# make amigafloat500: the programs with floats on the Amiga 500 (p8p8's float routines:
+# upstream builds them for an FPU), in vamos, against the host.  Not floatrange (its
+# numbers stand against each other) and fromtests_floats (it pokes at an address)
+FLOATTESTS=$(shell grep -l '^%import floats' tests/programs/*.p8 tests/conformance/*.p8)
+amigafloat500:	$(P8P8)
+	@STCMP_TARGET=amiga500 tests/stcmp.sh $(P8P8) $(filter-out %/floatrange.p8 %/fromtests_floats.p8,$(FLOATTESTS))
 
 # make stargs: an ST program's command line (tests/atarist/args.sh)
 stargs:	$(P8P8)

@@ -31,7 +31,8 @@ if [ -n "$ST_PARENT" ]; then
 else
     printf 'b GemdosOpcode = 0x4c :trace :file %s\nb GemdosOpcode = 0 :trace :file %s\n' "$work/quit.ini" "$work/quit.ini" > "$work/debug.ini"
 fi
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -s KILL "${ST_TIME:-30}" "${P8P8_HATARI:-hatari}" \
+# (in a subshell: the shell's note of a run that the time limit ended is not wanted)
+(SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -s KILL "${ST_TIME:-30}" "${P8P8_HATARI:-hatari}" \
     --machine st --memsize 4 --monitor rgb ${ST_TOS:+--tos "$ST_TOS"} --fast-boot true \
     --harddrive "$work/c" --sound off --fast-forward true --confirm-quit false \
-    --conout 2 --log-level fatal ${ST_TRACE:+--trace cpu_exception --trace-file "$ST_TRACE"} --parse "$work/debug.ini" "$@" --auto 'C:\P.TOS' 2> "$work/err" < /dev/null
+    --conout 2 --log-level fatal ${ST_TRACE:+--trace cpu_exception --trace-file "$ST_TRACE"} --parse "$work/debug.ini" "$@" --auto 'C:\P.TOS' 2> "$work/err" < /dev/null) 2> /dev/null

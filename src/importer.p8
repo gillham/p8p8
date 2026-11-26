@@ -42,6 +42,7 @@ importer {
     ^^ubyte triple = 0              ; -triple: a platform profile of an llvm target, or 0 for its default
     ^^ubyte common_library = 0      ; modules that come before those of libdir itself (a library in parts), or 0
     ^^ubyte target_library = 0      ; the target's library directory when its configuration names one (else libdir/target)
+    bool soft_floats = false        ; a 68000 machine without an FPU: "floats" is the file floats_soft.p8
     ^^ubyte own_library = 0         ; the target's own directory when its configuration names another library: searched before that one
     ^^ubyte triple_library = 0      ; that profile's library subdirectory of the target's, searched first
     ^^buf.Buf path = 0
@@ -366,6 +367,9 @@ importer {
         buf.add_str(path, dir)
         buf.add_byte(path, '/')
         buf.add_str(path, name)
+        ; (the floats module for a 68000 machine without an FPU has another file)
+        if soft_floats and strings.compare(name, "floats") == 0
+            buf.add_str(path, "_soft")
         buf.add_str(path, ".p8")
         if io_platform.file_size(path.data) < 0
             return 0

@@ -908,9 +908,9 @@ main {
             ; (for the front end a 6809 machine is what a Z80 machine is: the language of
             ; llvm16, assembly of its own in %asm)
             is_i8086 = target.i8086()
-            if opt_floats and not is_i8086 {
+            if opt_floats and not is_i8086 and not is_m68k {
                 out.err()
-                out.puts("error: -floats: this target has one kind of float arithmetic (the option is for the 8086 machines)\n")
+                out.puts("error: -floats: this target has one kind of float arithmetic (the option is for the 8086 and 68000 machines)\n")
                 out.exit(1)
             }
             importer.z80 = is_z80 or is_m6809 or is_i8086
@@ -939,6 +939,28 @@ main {
             ; (there is no other way to build one from here yet)
             if is_m68k
                 opt_own = opt_codegen == 1 or (opt_codegen == 0 and opt_build)
+            gen68k.soft = false
+            importer.soft_floats = false
+            if is_m68k and opt_own {
+                ; floats without an FPU (p8p8's own routines) where the machine has a 68000,
+                ; which cannot have one; -floats soft or hard says it for the others
+                bool soft68k = strings.compare(tname, "amiga500") == 0 or strings.compare(tname, "atarist") == 0
+                if opt_floats {
+                    if gen8086.floats_option == 2 {
+                        out.err()
+                        out.puts("error: -floats auto: not there for the 68000 machines yet (soft or hard)\n")
+                        out.exit(1)
+                    }
+                    soft68k = gen8086.floats_option == 1
+                }
+                if not soft68k and strings.compare(tname, "atarist") == 0 {
+                    out.err()
+                    out.puts("error: -floats hard: an Atari ST's 68000 cannot have an FPU\n")
+                    out.exit(1)
+                }
+                gen68k.soft = soft68k
+                importer.soft_floats = soft68k
+            }
             if not target.loaded and (opt_ir or opt_build or not explicit_mode) and not buf.bytes_equal(tname, "llvm", 4)
                     and strings.compare(tname, "virtual") != 0 and not buf.bytes_equal(tname, "amiga", 5)
                     and strings.compare(tname, "qemu68k") != 0 and strings.compare(tname, "atarist") != 0 {

@@ -52,6 +52,8 @@ gen68k {
     bool cpu68000 = false           ; no 68020 instructions: the Amiga 500
     bool uses_fpu = false           ; the program has floating point: the assembler is told that there is an FPU
     bool amiga = false              ; AmigaOS: library calls, a hunk file, the system's stack
+    bool soft = false               ; floats without an FPU: a float in a data register is its 32 bits, the
+                                    ; arithmetic is calls of the library's routines (m68k_softfloat.asm)
     bool tos = false                ; the Atari ST: a GEMDOS program, the stack is the library's to set
     long memtop = $00100000
 
@@ -1303,6 +1305,15 @@ gen68k {
                 else if a.type == ir.T_FLOAT {
                     if a.reg == 0
                         error("a floating point number as an argument is not supported yet", i.sym)
+                    else if soft {
+                        put("    move.l  ")
+                        frg(a.reg)
+                        comma()
+                        put(i.sym)
+                        putc('.')
+                        put(a.name)
+                        nl()
+                    }
                     else {
                         fload(a.reg)
                         put("    fmove.s  fp0,")
@@ -1358,7 +1369,15 @@ gen68k {
         }
         a = i.args
         while a != 0 {
-            if a.slot >= 25 and a.slot <= 32 {
+            if a.slot >= 25 and a.slot <= 32 and soft {
+                ; (without an FPU the float "registers" FP0 to FP7 are cells of memory)
+                put("    move.l  ")
+                frg(a.reg)
+                comma()
+                soft_fp(a.slot)
+                nl()
+            }
+            else if a.slot >= 25 and a.slot <= 32 {
                 put("    fmove.x  ")
                 frg(a.reg)
                 put(",fp")
@@ -1394,7 +1413,17 @@ gen68k {
         ^^ir.Arg r = i.results
         while r != 0 {
             if r.reg != 0 {
-                if r.type == ir.T_FLOAT {
+                if r.type == ir.T_FLOAT and soft {
+                    put("    move.l  ")
+                    if r.slot >= 25 and r.slot <= 32
+                        soft_fp(r.slot)
+                    else
+                        put("d0")
+                    comma()
+                    frg(r.reg)
+                    nl()
+                }
+                else if r.type == ir.T_FLOAT {
                     put("    fmove.x  fp")
                     if r.slot >= 25 and r.slot <= 32
                         putn(r.slot - 25)
@@ -1645,8 +1674,329 @@ gen68k {
         return 0
     }
 
+    ; ---- floating point without an FPU ----
+    ; A float register's cell holds the float's 32 bits; d0 and d1 are the operands of
+    ; the routines, which keep the other registers.
+
+    ; the bits of a number as a 32-bit float, rounded to the nearest
+    float scratch_float
+    sub float_bits(float value) -> long {
+        scratch_float = value
+        uquad bits = peekq(&scratch_float) as uquad
+        long sign = ((bits >> 63) & 1) as long
+        long exponent = ((bits >> 52) & $7ff) as long
+        long high = ((bits >> 29) & $7fffff) as long        ; the top 23 bits of the fraction
+        long rest = (bits & $1fffffff) as long
+        long result = 0
+        if exponent == $7ff {
+            result = $7f800000
+            if high != 0 or rest != 0
+                result = $7fc00000
+        }
+        else if exponent != 0 {
+            high |= $800000
+            if rest > $10000000 or (rest == $10000000 and (high & 1) != 0)
+                high++
+            exponent = exponent - 1023 + 127
+            if high == $1000000 {
+                high = $800000
+                exponent++
+            }
+            if exponent >= 255
+                result = $7f800000
+            else if exponent > 0
+                result = (exponent << 23) | (high & $7fffff)
+        }
+        if sign != 0
+            result |= $80000000
+        return result
+    }
+
+    ; the cell that stands for one of the FPU's registers (slots 25 to 32) where there is
+    ; no FPU: a float that travels in FP0 is there.  A subroutine's one float result
+    ; is in d0 as well.
+    sub soft_fp(ubyte slot) {
+        put("p8f_fp+")
+        putn((slot - 25) * 4)
+    }
+
+    sub sload(uword r, str dreg) {
+        put("    move.l  ")
+        frg(r)
+        comma()
+        raw(dreg)
+    }
+
+    sub sstore(uword r) {
+        put("    move.l  d0,")
+        frg(r)
+        nl()
+    }
+
+    sub simm(float value, str dreg) {
+        put("    move.l  #")
+        puthex(float_bits(value))
+        comma()
+        raw(dreg)
+    }
+
+    sub smem(^^ir.Instr i, str dreg) {
+        put("    move.l  ")
+        memop(i)
+        comma()
+        raw(dreg)
+    }
+
+    sub smem_store(^^ir.Instr i) {
+        put("    move.l  d0,")
+        memop(i)
+        nl()
+    }
+
+    ; the routine for add, sub, mul, div in their three forms; 0 for another instruction
+    sub soft_operation(ubyte opcode) -> ^^ubyte {
+        when opcode {
+            ir.OP_ADDR, ir.OP_ADD, ir.OP_ADDM -> return "jsr  p8f_add"
+            ir.OP_SUBR, ir.OP_SUB, ir.OP_SUBM -> return "jsr  p8f_sub"
+            ir.OP_MULR, ir.OP_MUL, ir.OP_MULM, ir.OP_MULSR, ir.OP_MULS, ir.OP_MULSM -> return "jsr  p8f_mul"
+            ir.OP_DIVR, ir.OP_DIV, ir.OP_DIVM, ir.OP_DIVSR, ir.OP_DIVS, ir.OP_DIVSM -> return "jsr  p8f_div"
+        }
+        return 0
+    }
+
+    sub soft_instruction(^^ir.Instr i) {
+        ^^ubyte routine = soft_operation(i.op)
+        when i.op {
+            ir.OP_LOAD -> {
+                put("    move.l  #")
+                puthex(float_bits(i.fvalue))
+                comma()
+                frg(i.r1)
+                nl()
+            }
+            ; (the moves go from memory to memory: d0 and d1 may still hold the other
+            ;  results of a call)
+            ir.OP_LOADM -> {
+                put("    move.l  ")
+                memop(i)
+                comma()
+                frg(i.r1)
+                nl()
+            }
+            ir.OP_LOADX -> {
+                index_setup(i)
+                put("    move.l  ")
+                memop(i)
+                comma()
+                frg(i.r1)
+                nl()
+            }
+            ir.OP_LOADI -> {
+                pointer_a0(i.r2)
+                put("    move.l  ")
+                putn(i.offset)
+                put("(a0),")
+                frg(i.r1)
+                nl()
+            }
+            ir.OP_LOADR -> {
+                put("    move.l  ")
+                frg(i.r2)
+                comma()
+                frg(i.r1)
+                nl()
+            }
+            ir.OP_STOREM -> {
+                put("    move.l  ")
+                frg(i.r1)
+                comma()
+                memop(i)
+                nl()
+            }
+            ir.OP_STOREX -> {
+                index_setup(i)
+                put("    move.l  ")
+                frg(i.r1)
+                comma()
+                memop(i)
+                nl()
+            }
+            ir.OP_STOREI -> {
+                pointer_a0(i.r2)
+                put("    move.l  ")
+                frg(i.r1)
+                comma()
+                putn(i.offset)
+                raw("(a0)")
+            }
+            ir.OP_STOREIM -> {
+                simm(i.fvalue, "d0")
+                smem_store(i)
+            }
+            ir.OP_ADDR, ir.OP_SUBR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_DIVSR -> {
+                sload(i.r1, "d0")
+                sload(i.r2, "d1")
+                ins(routine)
+                sstore(i.r1)
+            }
+            ir.OP_ADD, ir.OP_SUB, ir.OP_MUL, ir.OP_MULS, ir.OP_DIV, ir.OP_DIVS -> {
+                sload(i.r1, "d0")
+                simm(i.fvalue, "d1")
+                ins(routine)
+                sstore(i.r1)
+            }
+            ir.OP_ADDM, ir.OP_SUBM, ir.OP_MULM, ir.OP_MULSM, ir.OP_DIVM, ir.OP_DIVSM -> {
+                smem(i, "d0")
+                sload(i.r1, "d1")
+                ins(routine)
+                smem_store(i)
+            }
+            ir.OP_NEG -> {
+                sload(i.r1, "d0")
+                ins("bchg  #31,d0")
+                sstore(i.r1)
+            }
+            ir.OP_NEGM -> {
+                smem(i, "d0")
+                ins("bchg  #31,d0")
+                smem_store(i)
+            }
+            ir.OP_INC, ir.OP_DEC -> {
+                sload(i.r1, "d0")
+                ins("move.l  #$3f800000,d1")
+                if i.op == ir.OP_INC
+                    ins("jsr  p8f_add")
+                else
+                    ins("jsr  p8f_sub")
+                sstore(i.r1)
+            }
+            ir.OP_INCM, ir.OP_DECM -> {
+                smem(i, "d0")
+                ins("move.l  #$3f800000,d1")
+                if i.op == ir.OP_INCM
+                    ins("jsr  p8f_add")
+                else
+                    ins("jsr  p8f_sub")
+                smem_store(i)
+            }
+            ir.OP_SQRT -> {
+                sload(i.r2, "d0")
+                ins("jsr  p8f_sqrt")
+                sstore(i.r1)
+            }
+            ir.OP_FABS -> {
+                sload(i.r2, "d0")
+                ins("bclr  #31,d0")
+                sstore(i.r1)
+            }
+            ir.OP_SGN -> {
+                sload(i.r2, "d0")
+                ins("jsr  p8f_sgn")
+                store_d0(i.r1, ir.T_BYTE)
+            }
+            ir.OP_FFROMUB -> {
+                load_zx(i.r2, ir.T_BYTE, "d0")
+                ins("jsr  p8f_fromsl")
+                sstore(i.r1)
+            }
+            ir.OP_FFROMSB -> {
+                load_sx(i.r2, ir.T_BYTE, "d0")
+                ins("jsr  p8f_fromsl")
+                sstore(i.r1)
+            }
+            ir.OP_FFROMUW -> {
+                load_zx(i.r2, ir.T_WORD, "d0")
+                ins("jsr  p8f_fromsl")
+                sstore(i.r1)
+            }
+            ir.OP_FFROMSW -> {
+                load_sx(i.r2, ir.T_WORD, "d0")
+                ins("jsr  p8f_fromsl")
+                sstore(i.r1)
+            }
+            ir.OP_FFROMSL -> {
+                put("    move.l  ")
+                rg(i.r2, ir.T_LONG)
+                raw(",d0")
+                ins("jsr  p8f_fromsl")
+                sstore(i.r1)
+            }
+            ir.OP_FTOUB, ir.OP_FTOSB -> {
+                sload(i.r2, "d0")
+                ins("jsr  p8f_tosl")
+                store_d0(i.r1, ir.T_BYTE)
+            }
+            ir.OP_FTOUW, ir.OP_FTOSW -> {
+                sload(i.r2, "d0")
+                ins("jsr  p8f_tosl")
+                store_d0(i.r1, ir.T_WORD)
+            }
+            ir.OP_FTOSL -> {
+                sload(i.r2, "d0")
+                ins("jsr  p8f_tosl")
+                store_d0(i.r1, ir.T_LONG)
+            }
+            ir.OP_FCOMP -> {
+                sload(i.r2, "d0")
+                sload(i.r3, "d1")
+                ins("jsr  p8f_cmp")
+                store_d0(i.r1, ir.T_BYTE)
+            }
+            ir.OP_RETURNR -> {
+                sload(i.r1, "d0")
+                ins("move.l  d0,p8f_fp")
+                leave()
+                ins("rts")
+            }
+            ir.OP_RETURNI -> {
+                simm(i.fvalue, "d0")
+                ins("move.l  d0,p8f_fp")
+                leave()
+                ins("rts")
+            }
+            ir.OP_PUSH -> {
+                put("    move.l  ")
+                frg(i.r1)
+                raw(",-(sp)")
+            }
+            ir.OP_POP -> {
+                put("    move.l  (sp)+,")
+                frg(i.r1)
+                nl()
+            }
+            ir.OP_LOADHR -> {
+                if i.slot < 25 or i.slot > 32
+                    error("a float in this hardware register is not supported", 0)
+                else {
+                    put("    move.l  ")
+                    soft_fp(i.slot)
+                    comma()
+                    frg(i.r1)
+                    nl()
+                }
+            }
+            ir.OP_STOREHR -> {
+                if i.slot < 25 or i.slot > 32
+                    error("a float in this hardware register is not supported", 0)
+                else {
+                    put("    move.l  ")
+                    frg(i.r1)
+                    comma()
+                    soft_fp(i.slot)
+                    nl()
+                }
+            }
+            else -> error("floating point instruction not supported without an FPU", ir.opcode_names[i.op])
+        }
+    }
+
     sub float_instruction(^^ir.Instr i) {
-        uses_fpu = true
+        if soft and i.op != ir.OP_STOREZM and i.op != ir.OP_STOREZX and i.op != ir.OP_STOREZI {
+            soft_instruction(i)
+            return
+        }
+        if not soft
+            uses_fpu = true
         ^^ubyte fop = float_operation(i.op)
         long l1
         long l2
@@ -3758,7 +4108,7 @@ gen68k {
         ^^ir.Block cb = p.blocks
         while cb != 0 {
             ; (the floats library's own assembly has the FPU's instructions)
-            if strings.compare(cb.name, "floats") == 0
+            if strings.compare(cb.name, "floats") == 0 and not soft
                 uses_fpu = true
             if cb.chipram and amiga
                 any_chip = true

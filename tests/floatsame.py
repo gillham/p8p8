@@ -5,7 +5,7 @@
 # they agree to seven digits (or both are within 2e-7 of each other), any other two when
 # they are equal.  The exit status is 0 when the outputs are the same in this sense.
 #
-# Usage: tests/floatsame.py <the host's output> <the machine's output>
+# Usage: tests/floatsame.py <the host's output> <the machine's output> [looseness]
 import re
 import sys
 
@@ -20,6 +20,11 @@ def number(word):
     except ValueError:
         return None
 
+# (a third argument: that many times less exact, for a machine that prints six digits
+# after the point and cuts the rest off)
+loose = 1.0
+if len(sys.argv) > 3:
+    loose = float(sys.argv[3])
 a = words(sys.argv[1])
 b = words(sys.argv[2])
 if len(a) != len(b):
@@ -30,6 +35,6 @@ for x, y in zip(a, b):
     p, q = number(x), number(y)
     if p is None or q is None:
         sys.exit(1)
-    if abs(p - q) > 2e-7 and abs(p - q) > 1e-7 * max(abs(p), abs(q)):
+    if abs(p - q) > 2e-7 * loose and abs(p - q) > 1e-7 * loose * max(abs(p), abs(q)):
         sys.exit(1)
 sys.exit(0)

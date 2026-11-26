@@ -205,8 +205,8 @@ Options are upstream's where both have them, with one dash or two.
   `prog8c-llvm`'s back end, for the 6502 and the 68000 machines.
 - `-cpu 6502|65c02|65816` is p8p8's: the CPU to write 6502 code for, in
   place of the one the target's file names.
-- `-floats auto|hard|soft` is p8p8's: on an 8086 machine, which float
-  arithmetic the program has (see the README's options).
+- `-floats auto|hard|soft` is p8p8's: on an 8086 or a 68000 machine, which
+  float arithmetic the program has (see the README's options).
 - `-map` is p8p8's: after the build, the program's map (`name.p8map`),
   which `p8size` reports from.  Nothing changes without it.
 - `-Xcompile` is there for llvm32 only.
@@ -299,6 +299,13 @@ overlap; one block stays inside a 64 KB bank.
   cartridge (`image_size`, `image_ext`).  The GameTank's does: `p8c` writes
   a 2 MB `name.gtr` with the program at its end, where `prog8c` writes the
   16 KB `name.bin`.  `-noimage` gives that file.
+- On the Amiga 500 and the Atari ST floats are p8p8's own routines, with no
+  FPU: upstream builds a program with floats for the Amiga 500 as one for a
+  68020 with an FPU, which a 500 cannot run (`-floats hard` builds that).
+  The functions of `floats` are right to six or seven digits, every step
+  being rounded to a single, and a float among several results, or one
+  that an `asmsub` takes in `FP0`, is in a cell of memory (`p8f_fp`), not in
+  a register.
 - On the Color Computers a float is the ROM BASIC's (five bytes, about nine
   digits) and prints as BASIC prints it; `floats.round` takes a half up.
   `sim6809` has no floats.

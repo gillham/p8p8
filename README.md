@@ -32,7 +32,12 @@ The command is `p8c`.
   assembly.  `-target atarist` is p8p8's own: the Atari ST, a GEMDOS program
   (`.tos`) with its text on the VT-52 console (40 or 80 columns and 16, 4 or
   2 colours, as the screen's mode has them), files through GEMDOS
-  (`diskio`) and the command line.  No floats there yet, no GEM.
+  (`diskio`) and the command line.  No GEM yet.  A 68000 cannot have an
+  FPU, so on the Atari ST and the Amiga 500 floats are p8p8's own routines
+  (singles, right to six or seven digits); `-floats soft` builds that way
+  for the Amiga 1200 and qemu68k too, where the default is the FPU's
+  instructions, and `-floats hard` on the Amiga 500 is what upstream
+  builds there (a program for a 68020 with an FPU).
 - For the Z80 there is a code generator too: `-target cpm`, `-target trs80`
   (the TRS-80 Model I and III) and `-target trs80m4` (the Model 4) build a
   CP/M program and TRS-80 command files with z88dk (its assembler; for a
@@ -316,7 +321,7 @@ Options p8p8 has that the reference compiler does not:
 | `-nooverlays` | take no notice of `%overlay`: the program is built in one piece, as on a machine without overlays |
 | `-overlayinfo` | after a 6502 program is built: every block (and the larger subroutines of the ones that stay) with its bytes and whether it could go into an overlay, or why not |
 | `-meminfo` | after a 6502 program is built: what it takes of main memory and of each overlay, and what is left (`-verbose` prints this too) |
-| `-floats auto\|hard\|soft` | on an 8086 machine (`dos`, `dosexe`): the float arithmetic with the 8087's instructions alone (`hard`), without them (`soft`), or both, with the program looking for an 8087 when it starts (`auto`, which the targets have without the option).  An error on another target.  p8p8's own |
+| `-floats auto\|hard\|soft` | on an 8086 machine (`dos`, `dosexe`): the float arithmetic with the 8087's instructions alone (`hard`), without them (`soft`), or both, with the program looking for an 8087 when it starts (`auto`, which the targets have without the option).  On a 68000 machine: `soft` is p8p8's float routines, which need no FPU (what `amiga500` and `atarist` have without the option), `hard` the FPU's instructions (what `amiga1200` and `qemu68k` have; on `amiga500` a program for a 68020 with an FPU, as upstream builds it; an error on `atarist`); no `auto` there yet.  An error on another target.  p8p8's own |
 | `-map` | after a program is built by one of p8p8's code generators (6502 family, Z80, 6809, 68000, 8086): its map, `name.p8map`, with the address and the bytes of every block, subroutine and variable.  `p8size` reads it (see below) |
 | `-libpath` | print the library directory that is used |
 | `-report <dir>` | write a report of this run into the new directory `<dir>` (see below); `-reportnosource` leaves the program's sources out of it |
@@ -438,6 +443,7 @@ suites need 64tass, x16emu and VICE as well.
 | `tools/benchmega65.sh` | loops of long, word and byte arithmetic on the MEGA65 as 6502 code and as 45GS02 code |
 | `make qemucmpir` | the same programs built from p8p8's IR by `prog8c-llvm`'s 68000 back end (`-codegen upstream`) |
 | `make qemucmp`, `make amigacmp`, `make amigacmp500` | programs built for qemu68k, the Amiga 1200 and the Amiga 500 by both compilers print the same in QEMU and in vamos |
+| `make stfloat`, `make amigafloat500` | the 68000 machines' float routines: some 17000 operations with random operands against Python's arithmetic, bit for bit, in Hatari; and the programs with floats built for the Amiga 500 print in vamos what they print on the host, to six digits |
 | `make stcmp`, `make stscreen`, `make stargs` | the Atari ST: programs built for `atarist` print in Hatari what they print on the host (`ST_TOS` names a TOS image, without it Hatari's EmuTOS runs; a program that Hatari's 68000 stops for a word at an odd address is counted apart), and the text screen in the three resolutions, read back from the screen's memory; `diskio` (a test of its own among the programs) and the command line |
 | `tools/bench68k.sh` | how long small benchmarks take on an Amiga 500 in Copperline, from both compilers |
 | `tools/bench65.sh` | the same benchmarks on a Commander X16 (`x16emu -c816`), from the reference compiler and from p8p8 for the 65C02 and the 65816 |

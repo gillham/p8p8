@@ -37,7 +37,14 @@
   Hatari, under a TOS image or its EmuTOS.  `diskio` is on GEMDOS's file
   handles, with longs for sizes and addresses (more than 64 KB in a file
   or in one read), and `sys.argc()`/`sys.argv()` have the command line.
-  No floats or GEM yet.
+  No GEM yet.
+- Floats for the 68000 machines that have no FPU: the Amiga 500 and the
+  Atari ST build programs with floats now, with routines of p8p8's own
+  (IEEE singles; add, subtract, multiply and divide rounded as an FPU
+  rounds a single; the functions of `floats` right to six or seven
+  digits).  `-floats soft` builds that way for `amiga1200` and `qemu68k`
+  too; `-floats hard` on `amiga500` is the program for a 68020 with an FPU
+  that it was before, and that upstream builds.
 
 ### Fixed
 

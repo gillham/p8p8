@@ -342,9 +342,25 @@ without an operating system), the Amiga 1200 and the Amiga 500.
   library's assembly text uses.  vasm writes the hunk file itself.
 - The Amiga 500 has a 68000, which multiplies and divides words only: for
   longs the code calls the routines of the library's `m68k_prog8_longmath`
-  (they use utility.library where there is one).  A program with floats is
-  assembled for a 68020 with an FPU there too, as the reference compiler
-  does it: the floats library needs both.
+  (they use utility.library where there is one).
+- Floats without an FPU (`gen68k.soft`: the default for `amiga500` and
+  `atarist`, whose 68000 cannot have one; `-floats soft` elsewhere).  A
+  float is the same IEEE single in memory.  A float register's cell holds
+  its 32 bits, and every operation is a call of a routine of
+  `lib/common/m68k_softfloat.asm` with the operands in d0 and d1 and the
+  result in d0 (add, subtract, multiply, divide, compare, sign, to and from
+  a long, square root; rounded to nearest even, no denormals).  Moves go
+  from memory to memory, so that d0 and d1 can still hold a call's other
+  results.  Where the IR names an FPU register (an asmsub's `@FP0`, the
+  floats among several results) the float is in a cell of `p8f_fp`; a
+  subroutine's one float result is in d0 as well.  A constant is its bits,
+  which the generator works out from the compiler's double.  `%import
+  floats` reads `floats_soft.p8` then (`importer.soft_floats`), where the
+  functions are Prog8 on that arithmetic: series after bringing the
+  argument into a small range, with the constants of the range in two
+  parts so that large arguments keep their digits.  With `-floats hard`
+  on the Amiga 500 a program with floats is assembled for a 68020 with an
+  FPU, as the reference compiler does it.
 - The Atari ST (`atarist`, a target of p8p8's own) is the Amiga 500's 68000
   with another system: vasm's `-Ftos` writes the GEMDOS program with its
   relocations, so the code is what it is for the Amiga, absolute addresses
