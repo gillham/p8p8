@@ -28,6 +28,16 @@
   (`library = ../appleii`) has its own directory searched first, as the
   other CPUs' have: `prodos` has only its `diskio` there.
 
+### Fixed
+
+- Apple II, DOS 3.3: writing a file with `diskio` left the rest of a track
+  (15 sectors) marked as used each time, so a disk filled up from writing
+  one small file again and again.  A new file was opened twice, and the
+  second time DOS forgot the track it had set aside.
+- Apple II, DOS 3.3: a program that printed something and was started with
+  `BRUN` did not get back to BASIC when it ended.  DOS's note of the stack
+  pointer is now put back as the program found it.
+
 ## 0.6.0
 
 ### Added

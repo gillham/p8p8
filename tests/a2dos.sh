@@ -17,5 +17,6 @@ cp "$A2DOS33" "$work/disk.do" && chmod u+w "$work/disk.do" || exit 1
 "$p8c" -lib "$lib" -target appleii -out "$work" "$here/a2dos/files.p8" > "$work/err" 2>&1 || { cat "$work/err"; exit 1; }
 python3 "$here/../tools/a2put.py" "$work/disk.do" "$work/files.bin" P8FILES || exit 1
 # (bobbin shows nothing of what is printed before the first line that is typed)
-printf 'BRUN P8FILES\n' | (cd "$work" && timeout 300 bobbin --simple --turbo --max-runtime 1800 --disk disk.do 2>&1) |
+# (the line after the program: DOS and BASIC go on when the program has returned)
+printf 'BRUN P8FILES\nPRINT 3+4\n' | (cd "$work" && timeout 300 bobbin --simple --turbo --max-runtime 1800 --disk disk.do 2>&1) |
     sed -e 's/ *$//' -e '/^$/d' -e '/^bobbin:/d'

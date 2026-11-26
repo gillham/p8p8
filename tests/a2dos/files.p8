@@ -5,6 +5,8 @@
 %import textio
 %import diskio
 %import strings
+; (BASIC goes on after it: tests/a2dos.sh types a line there)
+%zeropage basicsafe
 
 main {
     ubyte[256] buffer
@@ -125,5 +127,44 @@ main {
         txt.spc()
         txt.print_ub(diskio.list_filenames(n("*.DAT"), names, 64))
         txt.nl()
+
+        ; writing a file again and again takes no more of the disk than the file
+        ; (DOS gives a new file a whole track, and its close gives back the rest)
+        diskio.file_type = diskio.TEXT
+        ubyte round
+        uword first = 0
+        for round in 1 to 4 {
+            if diskio.f_open_w(n("again.txt")) {
+                void diskio.f_write("x\n", 2)
+                diskio.f_close_w()
+            }
+            if round == 1
+                first = free_sectors()
+        }
+        txt.print_bool(first != 0)
+        txt.spc()
+        txt.print_bool(free_sectors() == first)
+        diskio.delete(n("again.txt"))
+        txt.spc()
+        txt.print_uw(free_sectors() - first)
+        txt.nl()
+    }
+
+    sub free_sectors() -> uword {
+        ; -- as the disk's table of contents has them (track 17, sector 0: four bytes
+        ;    for each track from $38, a bit for each free sector in the first two)
+        if diskio.rwts_read(17, 0)
+            return 0
+        uword free = 0
+        ubyte track
+        for track in 0 to 34 {
+            uword bits = peekw(diskio.sector + $38 + track * 4)
+            while bits != 0 {
+                if bits & 1 != 0
+                    free++
+                bits >>= 1
+            }
+        }
+        return free
     }
 }
