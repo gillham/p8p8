@@ -328,6 +328,7 @@ p8size main.p8map --vars             # the largest variables
 p8size main.p8map --modules          # per source file: what a library costs
 p8size old.p8map new.p8map           # what changed between two builds
 p8size main.p8map --map --min-free 128   # for a Makefile: exit 1 when less room is left
+p8size main.p8map --map --memtop 0xfc00  # the room up to an address of your own, not the target's
 p8size main.p8map --json             # everything, for a script
 ```
 
@@ -338,6 +339,12 @@ program that is linked with z88dk, that library's.  `p8size` also reads a
 64tass listing (`-asmlist`, `name.list`), which the reference compiler
 writes too; the names in it are less exact.  No map is written for a
 program with overlays.
+
+"free" is the room up to where the target says the program must end
+(`memory_end` in its file).  A program that uses memory beyond that by
+itself, as an editor does for its text, gives the address it really goes up
+to with `--memtop` (`0xfc00` or `'$fc00'`), and `--min-free` then counts
+from there.
 
 The map is a text file with a line for each thing; its format is in
 [docs/DESIGN.md](docs/DESIGN.md), "The program's map".
