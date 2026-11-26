@@ -1429,6 +1429,82 @@ the target ends at a fixed address, where XRoar writes a snapshot and
 stops, and what the program printed is read out of that.  62 the same on
 XRoar's Color Computer 2 and on its 3.
 
+## The 8086
+
+A beginning (`src/gen8086.p8`), put together as the 6809 generator is.  An
+8086 machine is a target with `cpu = 8086` in its target file: `dos`, an
+MS-DOS `.COM` program.  The generator writes assembly for nasm (`cpu 8086`,
+so nothing of a later processor gets in), which makes a flat file of it.
+For the front end and the IR such a machine follows llvm16's rules, as the
+Z80 and 6809 machines do (`importer.z80` is set for all three), and its
+library is `lib/targets/i8086`, llvm16's modules.
+
+The program is one segment of 64 KB: code, data and stack share it, every
+address is 16 bits, and no segment register is ever changed.  That is a
+`.COM` file as DOS loads it, at `$0100`, with the stack at the segment's
+end.
+
+Every IR register has a place in memory (`p8r_S_N`, as wide as its type).
+The 8086 works on memory directly, so most IR instructions are one or two
+of its own: `add word [place], 5`, or the second operand through AL or AX
+when it is no constant (`mov ax, [b]` and `add [a], ax`).  `inc`, `dec`,
+`neg`, `not` and the shifts work on the place itself; a shift by more than
+one bit goes through CL, as the 8086 has no other.  BX holds addresses: an
+indexed load is the index in BX, shifted for the element's size, plus the
+array's address, and a load through a pointer is `mov bx, [pointer]` and an
+offset in the instruction.  A long is two words, the low one first, with
+`adc` and `sbb` for the second.  Nothing is kept in a register from one IR
+instruction to the next, so the target's routines and a program's own
+assembly may change them all.
+
+Products are `mul`.  Divisions go through two short routines
+(`p8rt_div16`, `p8rt_divs16`) and not `div` itself, because the 8086 stops
+the program with an interrupt when the divisor is 0 or the quotient does
+not fit (-32768 / -1): the routines give what the other generators give.
+Long products, quotients and square roots are routines over three cells
+(`p8_la`, `p8_lb`, `p8_lc`), as on the 6809.
+
+The carry is the 6809's story again: after a compare the 8086's is the
+other way round than the IR's, a `mov` leaves it alone, and a subroutine
+whose reader of the carry does not follow the setter keeps it in a place of
+its own (`lahf` and `sahf` carry it there and back).  A branch on the
+status after an instruction that left no flags (a `mov`) tests the
+register's place first, as on the Z80.
+
+A conditional jump of the 8086 reaches 127 bytes.  The generator writes
+every one as it is, and `branches` goes over the finished text: each line
+gets the most bytes it can be (`most_bytes`: two for an instruction, two
+more for an address, two more for a constant; data and what is not known
+count as far), and a conditional jump whose label may be further than 126
+of those becomes the opposite jump around a `jmp`.  Every conditional jump
+counts as the five bytes of that form, so one pass is enough.  `loop` and
+`jcxz` have no opposite; the generator only writes them around a few
+instructions.
+
+A call puts its arguments into the subroutine's parameter variables; with
+optimizing on, the last byte parameter comes in AL and the last two word
+parameters in BX and CX, through a second way in (`p8e_name`) that stores
+them.  A result comes back in AL, AX, or DX and AX.  Recursion is the other
+generators': a call that can come back into the subroutine saves its
+variables and register places on the stack around it (`push word [place]`).
+
+The variables without values are not in the file: after the last byte of
+data the assembly goes on with `absolute`, where names only get addresses,
+and the program's first instructions clear that memory.  The last line is
+one that the assembler refuses (`times` with a negative count) when the
+program and its variables go beyond the target's `memory_end`.
+
+`make doscmp` (`tests/doscmp.sh`) builds each test program for the host and
+for `dos` and compares what they print.  DOSBox-X runs without a window
+(SDL's dummy video driver), once for all programs: they are `P001.COM`,
+`P002.COM` ... in one mounted directory, and a batch file runs each with
+its output in a file and writes a mark after it.  A program that does not
+end stops the emulator at the time limit; it is the first one without its
+mark, is counted as different, and the rest is run again.
+
+Not there yet: floats, the 8086's registers in `asmsub` and `extsub`, a
+pass over the assembly, `diskio`, the command line, `.EXE` files.
+
 ## Machines and the library
 
 Nothing about a particular machine is in the compiler.  A 6502 machine is a

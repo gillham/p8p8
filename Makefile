@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	doscmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -338,6 +338,11 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^txt\.vcol  *\.fill  1$$' $(OUT)/fixedblock.asm
 	@$(P8P8) -lib lib -target gametank -varshigh 1 -asm -out $(OUT) tests/fixedblock.p8
 	@grep -q '^  \* = \$$1e00$$' $(OUT)/fixedblock.asm
+	@echo "test i8086 (the 8086 code generator writes its assembly: no assembler is needed for that)"
+	@$(P8P8) -lib lib -target dos -asm -out $(OUT) tests/programs/divmix.p8
+	@grep -q '^    call  p8rt_div16$$' $(OUT)/divmix.asm
+	@grep -q '^    org  256$$' $(OUT)/divmix.asm
+	@grep -q '^    cpu  8086$$' $(OUT)/divmix.asm
 	@echo "test m6809 (the 6809 code generator writes its assembly: no assembler is needed for that)"
 	@$(P8P8) -lib lib -target sim6809 -asm -out $(OUT) tests/programs/divmix.p8
 	@grep -q '^    jsr  p8rt_div16$$' $(OUT)/divmix.asm
@@ -578,6 +583,11 @@ ataricmp:	$(P8P8)
 # What it cannot build yet is counted, not a failure.
 z80cmp:	$(P8P8)
 	@tests/z80cmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8)
+
+# make doscmp: the 8086 code generator against the host: the programs built for the dos
+# target (.COM files) and run in DOSBox-X, without a window (needs nasm and dosbox-x).
+doscmp:	$(P8P8)
+	@tests/doscmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/dos/*.p8)
 
 # make m6809cmp: the 6809 code generator against the host: the programs built for the
 # sim6809 target and run in usim09batch (needs lwasm of lwtools, and usim09batch).

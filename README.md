@@ -48,6 +48,15 @@ The command is `p8c`.
   (`txt.set_width`).
   The test programs print what they print on the host, in usim09batch and
   in XRoar; nothing was run on a real machine.
+- For the 8086 there is a first code generator: `-target dos` builds an
+  MS-DOS program, a `.COM` file (one segment of 64 KB for code, data and
+  stack), with nasm.  It uses nothing that the 8086 and 8088 do not have.
+  Text goes out and keys come in through DOS, so both can be redirected;
+  `sys.inp` and `sys.outp` are the I/O ports.  Not there yet: floats, the
+  8086's registers in `asmsub`, `diskio`, the command line, a `textio` for
+  the screen itself (the one there writes ANSI sequences), `.EXE` files.
+  The test programs without floats print what they print on the host, in
+  DOSBox-X; nothing was run on a real machine.
   The upper 32 KB of a 64 KB machine are memory for data (the `highram`
   module), or, with `-target coco2ram`, the program runs with the ROMs
   switched out and has that memory as its own, its calls into the ROM
@@ -388,6 +397,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make a2cmp` | the Apple II target: the programs built for it by the reference compiler and by `p8c`, both run in bobbin, what they print compared; and the text screen's routines |
 | `make trs80cmp`, `make trs80cmp3`, `make trs80cmp4` | the same programs on a TRS-80 Model I, III and 4 in trs80gp (`TRS80GP` names the emulator), against the host |
 | `make z80sys`, `make trs80sys`, `make trs80dos`, `make trs80screen` | on the Z80 machines: the command line and files, the DOS still working after a program has ended, and the screen routines |
+| `make doscmp` | programs built for MS-DOS (`.COM` files) print in DOSBox-X, without a window, what they print on the host |
 | `make m6809cmp`, `make cococmp` | programs built for a bare 6809 print in usim09batch, and built for the Color Computer print in XRoar (without a window; `COCO_MACHINE=coco3` for its Color Computer 3), what they print on the host |
 | `make coco3cmp`, `make coco3screen` | the `coco3` target on XRoar's Color Computer 3: the test programs on its 32 and its 80 column screen, and what a program leaves in the 80 column screen's memory |
 | `make cocoramcmp` | the same programs for `coco2ram`: the program with the ROMs switched out |

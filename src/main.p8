@@ -21,6 +21,7 @@
 %import gen68k
 %import genz80
 %import gen6809
+%import gen8086
 %import irprune
 %import target
 %import peep6502
@@ -63,6 +64,7 @@ main {
     ^^ubyte opt_target = 0          ; -target: a name, or a .properties file
     bool opt_own = false            ; p8p8's 6502 code generator, not prog8c-llvm's back end
     bool is_m68k = false            ; the target is a 68000 machine
+    bool is_i8086 = false           ; an 8086 machine (cpu = 8086 in its target file): p8p8's own 8086 code generator
     bool is_m6809 = false           ; a 6809 machine (cpu = 6809 in its target file): p8p8's own 6809 code generator
     bool is_z80 = false             ; a Z80 machine (cpu = z80 in its target file): p8p8's own Z80 code generator
     ubyte opt_codegen = 0           ; -codegen: 0 not given, 1 own, 2 upstream
@@ -349,6 +351,7 @@ main {
                 peep6502.enabled = false
                 genz80.optimize = false
                 gen6809.optimize = false
+                gen8086.optimize = false
             }
             else if strings.compare(arg, "-keepunused") == 0
                 opt_keepunused = true
@@ -884,9 +887,10 @@ main {
             is_m6809 = target.m6809()
             ; (for the front end a 6809 machine is what a Z80 machine is: the language of
             ; llvm16, assembly of its own in %asm)
-            importer.z80 = is_z80 or is_m6809
+            is_i8086 = target.i8086()
+            importer.z80 = is_z80 or is_m6809 or is_i8086
             importer.m6809 = is_m6809
-            if is_z80 or is_m6809 {
+            if is_z80 or is_m6809 or is_i8086 {
                 importer.family = "llvm16"
                 importer.triple_library = target.text("library_platform")
             }
@@ -903,7 +907,7 @@ main {
                     opt_ir = true
             }
             opt_own = opt_codegen == 1 or (opt_codegen == 0 and target.loaded and opt_build)
-            if is_z80 or is_m6809
+            if is_z80 or is_m6809 or is_i8086
                 opt_own = false         ; (opt_own is the 6502 and 68000 generators)
             ; a 68000 machine: p8p8's own code generator when a program is asked for
             ; (there is no other way to build one from here yet)
@@ -945,7 +949,7 @@ main {
                 }
                 importer.target_library = tlib
                 ; (a Z80 machine's own modules come before those of the library it shares)
-                if (is_z80 or is_m6809) and target.dir != 0
+                if (is_z80 or is_m6809 or is_i8086) and target.dir != 0
                     importer.own_library = target.dir
             }
             else if layered and target.loaded and target.dir != 0
@@ -1190,9 +1194,9 @@ main {
             irprune.run(p)
         ^^buf.Buf b = buf.new(65536)
         map_prog = p
-        if opt_asm and not is_z80 and not is_m6809 and (is_llvm or not opt_own) {
+        if opt_asm and not is_z80 and not is_m6809 and not is_i8086 and (is_llvm or not opt_own) {
             out.err()
-            out.puts("error: -asm: p8p8 writes no assembly for this target (it has a code generator for the 6502 family, the 68000, the Z80 and the 6809)\n")
+            out.puts("error: -asm: p8p8 writes no assembly for this target (it has a code generator for the 6502 family, the 68000, the Z80, the 6809 and the 8086)\n")
             out.exit(1)
         }
         if opt_build {
@@ -1202,6 +1206,14 @@ main {
                 crumb.at("generating Z80 code")
                 genz80.generate(p, b)
                 if genz80.errors > 0
+                    out.exit(1)
+                write_output(oname, ".asm", b)
+            }
+            else if is_i8086 {
+                buf.clear(b)
+                crumb.at("generating 8086 code")
+                gen8086.generate(p, b)
+                if gen8086.errors > 0
                     out.exit(1)
                 write_output(oname, ".asm", b)
             }
@@ -2507,6 +2519,42 @@ main {
         bool mos_c64 = mos and importer.triple_library != 0
         bool windows = is_llvm and not llvm32 and not mos and importer.triple != 0 and strings.compare(importer.triple, "x86_64-pc-windows-msvc") == 0
         ^^ubyte extension = ""
+        if is_i8086 {
+            ; the assembly that p8p8 wrote: nasm makes the program of it, a flat file
+            ; that is loaded where the target says (a .COM file at $0100).  What -run
+            ; runs is the target's (run_command with {file} for the program).
+            ^^ubyte xext = target.text("output_extension")
+            if xext == 0
+                xext = ".com"
+            buf.add_str(cmd, "nasm -f bin -w-number-deprecated-hex -o ")
+            add_output(name, xext)
+            buf.add_byte(cmd, ' ')
+            add_output(name, ".asm")
+            run_cmd("assembling the program")
+            built_ext = xext
+            if opt_run {
+                ^^ubyte xrun = target.text("run_command")
+                if xrun == 0 {
+                    out.err()
+                    out.puts("error: -run: the target file has no run_command for this machine\n")
+                    out.exit(1)
+                }
+                buf.clear(cmd)
+                long xk = 0
+                while xrun[xk] != 0 {
+                    if buf.bytes_equal(xrun + xk, "{file}", 6) {
+                        add_output(name, xext)
+                        xk += 6
+                    }
+                    else {
+                        buf.add_byte(cmd, xrun[xk])
+                        xk++
+                    }
+                }
+                run_cmd("running the program")
+            }
+            return
+        }
         if is_m6809 {
             ; the assembly that p8p8 wrote: lwasm (lwtools) makes the program of it, in
             ; the format that the target file names (output_format: decb, a file for

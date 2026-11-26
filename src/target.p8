@@ -270,6 +270,12 @@ target {
         return c != 0 and strings.compare(c, "6809") == 0
     }
 
+    ; is the loaded target an 8086 machine?
+    sub i8086() -> bool {
+        ^^ubyte c = get("cpu")
+        return c != 0 and strings.compare(c, "8086") == 0
+    }
+
     ; the value of a key, or 0 when the file does not have it
     sub get(str key) -> ^^ubyte {
         if not loaded

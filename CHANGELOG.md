@@ -4,6 +4,16 @@
 
 ### Added
 
+- A code generator for the 8086 (`src/gen8086.p8`): it writes assembly for
+  nasm, with nothing that the 8086 and 8088 lack.  `-target dos` builds an
+  MS-DOS `.COM` program: one segment of 64 KB.  The console is DOS's (what a
+  program prints and reads can be redirected), `sys.inp` and `sys.outp` are
+  the I/O ports, `sys.wait` counts the screen's vertical retraces and
+  `sys.ticks` comes from the BIOS's timer.  Not yet: floats, the 8086's
+  registers in `asmsub`, `diskio`, the command line, `.EXE` files.  `-run`
+  starts the program in DOSBox-X, and `make doscmp` compares what the test
+  programs print there with the host.  `targets/i8086` is the library of
+  the 8086 machines.
 - The Apple II as a target (`-target appleii`): the II Plus with `-cpu 6502`,
   the IIe, IIc and IIgs.  `textio` on the 40 column screen through the
   monitor's routines (line input with its editing, the cursor, inverse

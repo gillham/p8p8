@@ -63,6 +63,7 @@ Things that have bitten here:
 | `src/gen68k.p8` | the 68000 code generator |
 | `src/genz80.p8`, `peepz80.p8` | the Z80 code generator and the pass over its assembly |
 | `src/gen6809.p8`, `peep6809.p8` | the 6809 code generator and the pass over its assembly |
+| `src/gen8086.p8` | the 8086 code generator (MS-DOS; new) |
 | `src/gen68k.p8` | the 68000 code generator (qemu68k and the Amigas; new) |
 | `src/llvmgen.p8` | LLVM IR for the host |
 | `src/target.p8`, `triple.p8`, `importer.p8`, `main.p8` | target files, triple profiles of llvm32, module lookup, the driver |
@@ -90,6 +91,7 @@ Which suite after which change (see the Makefile for all of them):
 | 6502 code generator or peephole | `BUILDALL_CODEGEN=own make buildall`, `EMUCMP_CODEGEN=own make emucmp`, `EMUCMP_CODEGEN=own make emucmp64` |
 | IR generation for 68000 targets | `make qemucmpir` (p8p8's IR through prog8c-llvm's 68000 back end) |
 | 68000 code generator | `make qemucmp` (needs vasmm68k_mot, vlink, qemu-system-m68k), `make amigacmp`, `make amigacmp500` (vamos), `make coppercmp`, `make amigacmpfloat` (Copperline) |
+| 8086 code generator | `make doscmp` (needs nasm and dosbox-x) |
 | the 45GS02 code (`-target mega65`) | `make emucmp65` (needs xmega65; 6502 code against 45GS02 code on the MEGA65) |
 | assembly by hand with long addresses | `make farcheck` (x16emu, xscpu64, xmega65) |
 | what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |

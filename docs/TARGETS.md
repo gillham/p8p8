@@ -169,6 +169,34 @@ how the tests see what a program does in trs80gp.  The keys it reads:
 | `library` | the directory with the target's modules, as for any target |
 | `library_platform` | a subdirectory of `library` that is searched before it (p8p8) |
 
+### An 8086 machine
+
+`cpu = 8086` makes the target an 8086 machine: p8p8's 8086 code generator
+writes the program (assembly for nasm, which makes a flat file of it).
+`dos` is such a target: an MS-DOS `.COM` program.  The routines are lines of
+assembly that end by returning; a line that ends with a colon is a label.
+A routine may change every register but the segment registers and SP.  The
+keys it reads:
+
+| Key | Meaning |
+|-----|---------|
+| `load_address` | where the program begins (`$0100` for a `.COM` file) |
+| `output_extension` | of the program file (`.com`) |
+| `startup_code` | the first instructions, when the machine needs any |
+| `memory_end` | the first address that is not the program's: the assembler stops with an error when the program and its variables do not end before it (the stack is above) |
+| `exit_code` | how the program ends; `sys.exit` comes here too, with the status in AL |
+| `exit_hook` | lines before the end |
+| `console_out` | a routine: the character in AL to the console |
+| `key_poll` | a routine: AL = a key, or 0 when none is waiting |
+| `char_in` | a routine: AL = a character that is waited for |
+| `machine_cells` | lines that are always part of the program |
+| `end_code` | lines after the variables with values |
+| `wait_jiffy` | a routine that takes a 60th of a second, for `sys.wait` (without it there is no wait) |
+| `ticks` | a routine: AX = the clock in 60ths of a second (without it `sys.ticks()` is 0) |
+| `arguments` | the routines `p8rt_argc` (AX = the number of arguments) and `p8rt_argv` (AX = the argument whose number is in AX); without it there is one argument, which is empty |
+| `run_command` | what `-run` runs, with `{file}` for the program |
+| `library` | the directory with the target's modules, as for any target |
+
 ### A 6809 machine
 
 `cpu = 6809` makes the target a 6809 machine: p8p8's 6809 code generator
