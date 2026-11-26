@@ -73,6 +73,21 @@ main {
         txt.print_ub(txt.get_row())
         txt.nl()
 
+        ; reverse with a bright colour, and back
+        to_screen(true)
+        txt.plot(0, 6)
+        txt.color(txt.YELLOW)
+        txt.rvs_on()
+        txt.chrout('r')
+        txt.rvs_off()
+        txt.chrout('n')
+        txt.color(txt.LIGHT_GRAY)
+        to_screen(false)
+        txt.print_ubhex(txt.getclr(0, 6), true)
+        txt.spc()
+        txt.print_ubhex(txt.getclr(1, 6), true)
+        txt.nl()
+
         txt.setchr(3, 8, 'A')
         txt.setcc(4, 8, 'B', $1e)
         txt.setclr(3, 8, $4f)

@@ -7,6 +7,7 @@ reverse
           at 10,5             ! 
 $07 $0e $1f $70 $07
 31 5
+$e0 $0e
 AB $4f $1e
 second yellow blue  
           at 10,5 
