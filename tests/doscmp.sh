@@ -8,7 +8,8 @@
 # directory, run by a batch file with their output in files); one that does not end
 # stops the emulator at the time limit, is counted as different, and the rest is run
 # again without it.  Where a program's output is tests/dos/<name>.out, that is right
-# too.
+# too (a program with 8086 assembly, which the host cannot build), and
+# tests/dos/<name>.args is the command line it is started with.
 #
 # Usage: tests/doscmp.sh <p8c> <program.p8>...
 #        (needs clang, nasm and dosbox-x; DOSCMP_TIME is the seconds one start of the
@@ -57,7 +58,10 @@ while :; do
     left=0
     while read -r short name f; do
         [ -f "$work/c/$short.END" ] && continue
-        printf '%s.COM > %s.OUT\r\nECHO done > %s.END\r\n' "$short" "$short" "$short" >> "$work/c/RUN.BAT"
+        # (the program's command line, when it has one: tests/dos/<name>.args)
+        args=
+        [ -f "${f%.p8}.args" ] && args=" $(cat "${f%.p8}.args")"
+        printf '%s.COM%s > %s.OUT\r\nECHO done > %s.END\r\n' "$short" "$args" "$short" "$short" >> "$work/c/RUN.BAT"
         left=$((left + 1))
     done < "$work/list"
     [ $left -eq 0 ] && break

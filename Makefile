@@ -366,6 +366,8 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^    jsr  \[\$$a000\]$$' $(OUT)/divmix.asm || grep -q '^    stx  \$$88$$' $(OUT)/divmix.asm
 	@echo "test bad_m6809 (the 6809's registers in the declaration of a routine in assembly)"
 	@$(P8P8) -lib lib -target sim6809 -check tests/bad_m6809.p8 2>&1 | diff -u tests/expected/bad_m6809.txt -
+	@echo "test bad_i8086 (the 8086's registers in the declaration of a routine in assembly)"
+	@$(P8P8) -lib lib -target dos -check tests/bad_i8086.p8 2>&1 | diff -u tests/expected/bad_i8086.txt -
 	@echo "test accname (a variable named a in an unprefixed block: no operand a for the accumulator)"
 	@for t in cx16 c64 mega65; do \
 		$(P8P8) -lib lib -target $$t -asm -out $(OUT) tests/accname.p8 2> /dev/null || exit 1; \

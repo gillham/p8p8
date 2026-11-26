@@ -1502,8 +1502,34 @@ its output in a file and writes a mark after it.  A program that does not
 end stops the emulator at the time limit; it is the first one without its
 mark, is counted as different, and the rest is run again.
 
-Not there yet: floats, the 8086's registers in `asmsub` and `extsub`, a
-pass over the assembly, `diskio`, the command line, `.EXE` files.
+An `asmsub` and an `extsub` at an address name the 8086's own registers:
+AL, AH, BL, BH, CL, CH, DL and DH for a byte, AX, BX, CX, DX, SI, DI and BP
+for a word, and Pc for the carry.  The checker takes these names on an
+8086 machine (`i8086_registers`; `importer.i8086`), and the IR has slots
+for them (50 to 64).  A call loads what goes into variables first, then the
+registers, then the carry (`cmp byte [place], 1` and `cmc`): a `mov`
+changes no flag, so nothing needs saving.  The values come back with `mov`
+too, and a carry that the program takes as a value is `mov al, 0` and
+`adc al, 0`.  `tests/dos/asmsub.p8` runs them; `tests/bad_i8086.p8` is what
+the checker refuses.
+
+The `dos` target's console is in its target file.  The first instructions
+ask DOS whether the program's output is the screen and its input the
+keyboard (IOCTL on the handles 1 and 0).  To the screen a character goes
+through the BIOS: written with the text's colours where the cursor is
+(int $10, function 9) and once more as a teletype would write it (function
+$0e), which moves the cursor and scrolls.  Redirected, it goes through DOS.
+Keys come from int $16, where a key without a character has a scan code,
+which becomes 128 plus that; redirected input comes through DOS.  `textio`
+(`lib/targets/dos/textio.p8`) is small routines over int $10 with their
+arguments in the registers the BIOS wants them in.  The command line is
+the text at $81 of the program's segment: its blanks are made zeros once,
+and an argument is where it stands there; argument 0 is the program's name
+from behind the environment's strings.  `tests/dos/screen.p8` prints with
+the screen switched on by hand and reads the cells back; `tests/dos/args.p8`
+is started with `tests/dos/args.args`.
+
+Not there yet: floats, a pass over the assembly, `diskio`, `.EXE` files.
 
 ## Machines and the library
 

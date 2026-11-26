@@ -890,6 +890,7 @@ main {
             is_i8086 = target.i8086()
             importer.z80 = is_z80 or is_m6809 or is_i8086
             importer.m6809 = is_m6809
+            importer.i8086 = is_i8086
             if is_z80 or is_m6809 or is_i8086 {
                 importer.family = "llvm16"
                 importer.triple_library = target.text("library_platform")

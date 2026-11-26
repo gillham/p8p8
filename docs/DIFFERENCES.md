@@ -300,6 +300,9 @@ overlap; one block stays inside a 64 KB bank.
 - On the Color Computers a float is the ROM BASIC's (five bytes, about nine
   digits) and prints as BASIC prints it; `floats.round` takes a half up.
   `sim6809` has no floats.
+- On an 8086 machine (`dos`) an `asmsub` or `extsub` names the 8086's
+  registers: `AL`, `AH`, `BL`, `BH`, `CL`, `CH`, `DL`, `DH` (a byte), `AX`,
+  `BX`, `CX`, `DX`, `SI`, `DI`, `BP` (a word), and `Pc`.
 - On a 6809 machine (`coco2`, `coco3`, `sim6809`) an `asmsub` or `extsub`
   names the 6809's registers: `A`, `B` (a byte), `D`, `X`, `Y`, `U` (a
   word).  `X` and `Y` are words there, and there are no pairs (`AY`).

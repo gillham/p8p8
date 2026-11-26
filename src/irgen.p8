@@ -6382,6 +6382,32 @@ irgen {
     sub register_slot(^^ubyte r) -> ubyte {
         if r == 0
             return 255
+        if importer.i8086 and r[0] != 0 and r[1] != 0 and r[2] == 0 {
+            ; the 8086's own: AL 50, AH 51, BL 52, BH 53, CL 54, CH 55, DL 56, DH 57,
+            ; AX 58, BX 59, CX 60, DX 61, SI 62, DI 63, BP 64
+            ubyte first = r[0] & $df
+            ubyte second = r[1] & $df
+            ubyte letter = 255
+            when first {
+                'A' -> letter = 0
+                'B' -> letter = 1
+                'C' -> letter = 2
+                'D' -> letter = 3
+            }
+            if letter != 255 {
+                when second {
+                    'L' -> return 50 + letter * 2
+                    'H' -> return 51 + letter * 2
+                    'X' -> return 58 + letter
+                }
+            }
+            if first == 'S' and second == 'I'
+                return 62
+            if first == 'D' and second == 'I'
+                return 63
+            if first == 'B' and second == 'P'
+                return 64
+        }
         if importer.m6809 and r[0] != 0 and r[1] == 0 {
             ; the 6809's own: A 40, B 41, D 42, X 43, Y 44, U 45
             when r[0] & $df {

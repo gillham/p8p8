@@ -1555,6 +1555,9 @@ checker {
                     if is_ir
                         return has_word(text, first, stop, "return") or has_word(text, first, stop, "returnr") or has_word(text, first, stop, "returni")
                             or has_word(text, first, stop, "jump") or has_word(text, first, stop, "jumpi")
+                    ; (the 8086's "ret", "retf" and "iret")
+                    if importer.i8086 and (has_word(text, first, stop, "ret") or has_word(text, first, stop, "retf") or has_word(text, first, stop, "iret"))
+                        return true
                     return has_word(text, first, stop, "rts") or has_word(text, first, stop, "jmp") or has_word(text, first, stop, "bra")
                         or has_word(text, first, stop, "rti") or has_word(text, first, stop, "rte")
                 }
@@ -1917,11 +1920,121 @@ checker {
         }
     }
 
+    ; The 8086's registers, as an asmsub or extsub names them: AL, AH, BL, BH, CL, CH, DL
+    ; and DH hold a byte; AX, BX, CX and DX (each of which is two of those), SI, DI and
+    ; BP a word.  A bit for each byte register and each of the last three, or 0 for
+    ; another name.
+    sub i8086_bits(^^ubyte r) -> uword {
+        if r[0] == 0 or r[1] == 0 or r[2] != 0
+            return 0
+        ubyte first = r[0] & $df
+        ubyte second = r[1] & $df
+        uword low = 0
+        when first {
+            'A' -> low = 1
+            'B' -> low = 4
+            'C' -> low = 16
+            'D' -> low = 64
+        }
+        if low != 0 {
+            when second {
+                'L' -> return low
+                'H' -> return low * 2
+                'X' -> return low * 3
+            }
+        }
+        if first == 'S' and second == 'I'
+            return 256
+        if first == 'D' and second == 'I'
+            return 512
+        if first == 'B' and second == 'P'
+            return 1024
+        return 0
+    }
+
+    ; a register name on an 8086 machine: one of its registers, a status flag (Pc, Pz...)
+    ; or a virtual register (R0...); says so when it is none, and gives the bits
+    sub i8086_register(^^ast.Node at, ^^ubyte r, uword t, str what) -> uword {
+        uword bits = i8086_bits(r)
+        if bits == 0 {
+            if (r[0] & $df) != 'P' and (r[0] & $df) != 'R'
+                error(at, "Syntax error: invalid cpu register (the 8086 has AL, AH, BL, BH, CL, CH, DL, DH, AX, BX, CX, DX, SI, DI and BP)")
+            return 0
+        }
+        if t != 0 {
+            long size = types.size_of(t)
+            bool half = (r[1] & $df) == 'L' or (r[1] & $df) == 'H'
+            if half and size != 1 {
+                begin_message(what)
+                buf.add_str(parser.scratch, " in a byte register (AL, AH ...) should be (u)byte or bool")
+                error_scratch(at)
+            }
+            else if not half and size != 2 and t != types.T_STR {
+                begin_message(what)
+                buf.add_str(parser.scratch, " in a word register (AX, BX ...) should be (u)word, str or a pointer")
+                error_scratch(at)
+            }
+        }
+        return bits
+    }
+
+    sub i8086_registers(^^ast.Node n) {
+        uword used = 0
+        bool twice = false
+        ^^ast.Node q = n.a
+        while q != 0 {
+            if q.b != 0 and q.b.name != 0 {
+                uword pt = 0
+                if q.a != 0
+                    pt = q.a.type
+                uword bits = i8086_register(q, q.b.name, pt, "a parameter")
+                if (used & bits) != 0
+                    twice = true
+                used |= bits
+            }
+            q = q.next
+        }
+        if twice
+            error(n, "a register is used multiple times in the parameters")
+        used = 0
+        twice = false
+        ^^ast.Node r = n.b
+        while r != 0 {
+            if r.b != 0 and r.b.kind == ast.N_IDENT and r.b.name != 0 and r.op != token.T_KW_VOID {
+                uword rbits = i8086_register(n, r.b.name, typer.return_type(r), "a return value")
+                if (used & rbits) != 0
+                    twice = true
+                used |= rbits
+            }
+            r = r.next
+        }
+        if twice
+            error(n, "a register is used multiple times in the return values")
+        ; the clobber list: with the asmsub, or on the first return type of an extsub
+        ^^ast.Node clob = n.d
+        if n.kind == ast.N_EXTSUB {
+            clob = 0
+            if n.b != 0
+                clob = n.b.d
+        }
+        while clob != 0 {
+            if clob.kind == ast.N_IDENT and clob.name != 0 and i8086_bits(clob.name) == 0 {
+                error(n, "Syntax error: invalid cpu register (the 8086 has AL, AH, BL, BH, CL, CH, DL, DH, AX, BX, CX, DX, SI, DI and BP)")
+                break
+            }
+            clob = clob.next
+        }
+    }
+
     ; The registers of an asmsub's or extsub's return values: none used twice, none in
     ; the clobber list, each of the size of its value.
     sub register_returns(^^ast.Node n) {
         if importer.m6809 {
             m6809_registers(n)
+            return
+        }
+        if importer.i8086 {
+            i8086_registers(n)
             return
         }
         ubyte used = 0
@@ -1992,7 +2105,7 @@ checker {
             bool m68k_register = cl.name != 0 and cl.name[1] >= '0' and cl.name[2] == 0
                     and ((cl.name[0] == 'D' and cl.name[1] <= '7') or (cl.name[0] == 'A' and cl.name[1] <= '6'))
             if cl.kind == ast.N_IDENT and cl.name != 0 and not m68k_register and (cl.name[1] != 0 or cpu_bits(cl.name) == 0)
-                    and not (importer.m6809 and m6809_bits(cl.name) != 0) {
+                    and not (importer.m6809 and m6809_bits(cl.name) != 0) and not (importer.i8086 and i8086_bits(cl.name) != 0) {
                 error(n, "Syntax error: invalid cpu register")
                 break
             }
@@ -2010,7 +2123,7 @@ checker {
     ; The registers of an asmsub's or extsub's parameters: none used twice (AY takes A
     ; and Y), and each of the size of its parameter.
     sub register_params(^^ast.Node p) {
-        if importer.m6809
+        if importer.m6809 or importer.i8086
             return                  ; (register_returns looks at both there)
         bool used_a = false
         bool used_x = false

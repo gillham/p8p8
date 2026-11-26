@@ -51,12 +51,14 @@ The command is `p8c`.
 - For the 8086 there is a first code generator: `-target dos` builds an
   MS-DOS program, a `.COM` file (one segment of 64 KB for code, data and
   stack), with nasm.  It uses nothing that the 8086 and 8088 do not have.
-  Text goes out and keys come in through DOS, so both can be redirected;
-  `sys.inp` and `sys.outp` are the I/O ports.  Not there yet: floats, the
-  8086's registers in `asmsub`, `diskio`, the command line, a `textio` for
-  the screen itself (the one there writes ANSI sequences), `.EXE` files.
-  The test programs without floats print what they print on the host, in
-  DOSBox-X; nothing was run on a real machine.
+  `textio` is the BIOS's text screen in its 16 colours (cursor, cells read
+  and written, scrolling) and the BIOS's keyboard, arrow and function keys
+  included; when the program's output or input is redirected, it goes
+  through DOS.  `asmsub` and `extsub` name the 8086's registers, the
+  command line is there, and `sys.inp` and `sys.outp` are the I/O ports.
+  Not there yet: floats, `diskio`, `.EXE` files.  The test programs without
+  floats print what they print on the host, in DOSBox-X; nothing was run on
+  a real machine, and the keyboard's routines were not run at all.
   The upper 32 KB of a 64 KB machine are memory for data (the `highram`
   module), or, with `-target coco2ram`, the program runs with the ROMs
   switched out and has that memory as its own, its calls into the ROM

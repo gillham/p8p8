@@ -1,0 +1,16 @@
+80x25
+0 0
+7 2
+first line  
+second yellow blue  
+reverse  
+          at 10,5             ! 
+$07 $0e $1f $70 $07
+31 5
+AB $4f $1e
+second yellow blue  
+          at 10,5 
+second yellow blue  
+## $2f
+. $2f
+32 $07

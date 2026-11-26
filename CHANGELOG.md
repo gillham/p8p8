@@ -6,11 +6,15 @@
 
 - A code generator for the 8086 (`src/gen8086.p8`): it writes assembly for
   nasm, with nothing that the 8086 and 8088 lack.  `-target dos` builds an
-  MS-DOS `.COM` program: one segment of 64 KB.  The console is DOS's (what a
-  program prints and reads can be redirected), `sys.inp` and `sys.outp` are
-  the I/O ports, `sys.wait` counts the screen's vertical retraces and
-  `sys.ticks` comes from the BIOS's timer.  Not yet: floats, the 8086's
-  registers in `asmsub`, `diskio`, the command line, `.EXE` files.  `-run`
+  MS-DOS `.COM` program: one segment of 64 KB.  `textio` is the BIOS's text
+  screen (16 colours, the cursor, cells read and written, scrolling) and
+  keyboard (a key without a character is 128 plus its scan code); redirected
+  output and input go through DOS.  `asmsub` and `extsub` name the 8086's
+  registers (`AL` to `DH`, `AX`, `BX`, `CX`, `DX`, `SI`, `DI`, `BP`, and
+  `Pc` for the carry).  `sys.argc` and `sys.argv` are the command line,
+  `sys.inp` and `sys.outp` the I/O ports, `sys.wait` counts the screen's
+  vertical retraces and `sys.ticks` comes from the BIOS's timer.  Not yet:
+  floats, `diskio`, `.EXE` files.  `-run`
   starts the program in DOSBox-X, and `make doscmp` compares what the test
   programs print there with the host.  `targets/i8086` is the library of
   the 8086 machines.

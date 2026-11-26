@@ -18,8 +18,7 @@
 ;   and a pass over the finished text (branches) turns those that may not reach into
 ;   the opposite jump around a "jmp".
 ;
-; Not there yet is said by an error that names the instruction: floats, the
-; registers of a routine in assembly.
+; Not there yet is said by an error that names the instruction: floats.
 
 %import ir
 %import irparse
@@ -2227,13 +2226,17 @@ gen8086 {
     ; constant
     sub op_arg(str before, ^^ir.Arg a, ubyte k, ubyte w) {
         ins(before)
+        put_arg(a, k, w)
+        nl()
+    }
+
+    sub put_arg(^^ir.Arg a, ubyte k, ubyte w) {
         if a.reg != 0
             cell(a.reg, k, w)
         else if w == 1
             putn(((a.value >> (k * 8)) as long) & 255)
         else
             putn(((a.value >> (k * 8)) as long) & $ffff)
-        nl()
     }
 
     ; the parameter that an argument is for: a variable of the subroutine, named there
@@ -2275,23 +2278,83 @@ gen8086 {
         }
     }
 
+    ; the 8086 register of a slot of the IR (50 AL, 51 AH ... 57 DH, 58 AX, 59 BX, 60 CX,
+    ; 61 DX, 62 SI, 63 DI, 64 BP), or 0 for another slot
+    sub slot_register(ubyte number) -> str {
+        when number {
+            50 -> return "al"
+            51 -> return "ah"
+            52 -> return "bl"
+            53 -> return "bh"
+            54 -> return "cl"
+            55 -> return "ch"
+            56 -> return "dl"
+            57 -> return "dh"
+            58 -> return "ax"
+            59 -> return "bx"
+            60 -> return "cx"
+            61 -> return "dx"
+            62 -> return "si"
+            63 -> return "di"
+            64 -> return "bp"
+        }
+        return 0
+    }
+
     ; A call of a subroutine in assembly (asmsub) or of a routine at an address (extsub):
-    ; the arguments in the library's virtual registers or in variables, as the
-    ; declaration says.  (The 8086's own registers in such a declaration are not there
-    ; yet.)
+    ; the arguments in the 8086's registers, in the carry, or in the library's virtual
+    ; registers, as the declaration says; the values it returns from there.
     sub asm_call(^^ir.Instr i, bool by_address) {
+        ; first what goes into memory (through AX), then the registers, then the carry:
+        ; a "mov" leaves the flags alone
         ^^ir.Arg a = i.args
         while a != 0 {
-            if a.slot != 255 {
-                error("the registers of a routine in assembly are not there for the 8086 yet", i.sym)
+            if a.slot == 255 {
+                ubyte size = size_of(a.type)
+                if a.name == 0 or (size != 1 and size != 2) {
+                    error("an argument of this call cannot be passed on the 8086 yet", i.sym)
+                    return
+                }
+                arg_to_param(i, a, 0, size)
+            }
+            else if a.slot > ir.SLOT_FLAGS {
+                error("only the carry can be an argument of a routine in assembly", i.sym)
                 return
             }
-            ubyte size = size_of(a.type)
-            if a.name == 0 or (size != 1 and size != 2) {
-                error("an argument of this call cannot be passed on the 8086 yet", i.sym)
-                return
+            a = a.next
+        }
+        a = i.args
+        while a != 0 {
+            if a.slot < ir.SLOT_FLAGS {
+                ^^ubyte reg = slot_register(a.slot)
+                if reg == 0 {
+                    error("a register of another machine in the declaration of a routine in assembly", i.sym)
+                    return
+                }
+                ins("mov  ")
+                put(reg)
+                put(", ")
+                if a.slot <= 57
+                    put_arg(a, 0, 1)
+                else
+                    put_arg(a, 0, 2)
+                nl()
             }
-            arg_to_param(i, a, 0, size)
+            a = a.next
+        }
+        a = i.args
+        while a != 0 {
+            if a.slot == ir.SLOT_FLAGS {
+                if a.reg != 0 {
+                    ; (carry when the value is not 0)
+                    op_cell("cmp  ", a.reg, 0, 1, ", 1")
+                    line("cmc")
+                }
+                else if (a.value & 255) != 0
+                    line("stc")
+                else
+                    line("clc")
+            }
             a = a.next
         }
         if by_address {
@@ -2304,11 +2367,38 @@ gen8086 {
             name(i.sym)
             nl()
         }
+        ; the values: the registers first (a "mov" leaves a flag for the branch that
+        ; follows alone), then the carry as a value, which needs AL
         ^^ir.Arg r = i.results
         while r != 0 {
-            if r.reg != 0 {
-                error("the registers of a routine in assembly are not there for the 8086 yet", i.sym)
-                return
+            if r.slot < ir.SLOT_FLAGS and r.reg != 0 {
+                ^^ubyte from = slot_register(r.slot)
+                if from == 0 {
+                    error("a register of another machine in the declaration of a routine in assembly", i.sym)
+                    return
+                }
+                ins("mov  ")
+                if r.slot <= 57
+                    cell(r.reg, 0, 1)
+                else
+                    cell(r.reg, 0, 2)
+                put(", ")
+                put(from)
+                nl()
+            }
+            r = r.next
+        }
+        r = i.results
+        while r != 0 {
+            if r.slot == ir.SLOT_FLAGS and r.reg != 0 {
+                ; the carry as a value: the IR's next two instructions would rotate it
+                ; into a zero, which is done here
+                line("mov  al, 0")
+                line("adc  al, 0")
+                store_cell(r.reg, 0, 1)
+                if i.next != 0 and i.next.op == ir.OP_LOAD and i.next.r1 == r.reg and i.next.next != 0
+                        and i.next.next.op == ir.OP_ROXL and i.next.next.r1 == r.reg
+                    skip_next = 2
             }
             r = r.next
         }

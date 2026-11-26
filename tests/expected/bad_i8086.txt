@@ -1,0 +1,5 @@
+tests/bad_i8086.p8:5:18: error: Syntax error: invalid cpu register (the 8086 has AL, AH, BL, BH, CL, CH, DL, DH, AX, BX, CX, DX, SI, DI and BP)
+tests/bad_i8086.p8:11:17: error: a parameter in a byte register (AL, AH ...) should be (u)byte or bool
+tests/bad_i8086.p8:11:5: error: a return value in a word register (AX, BX ...) should be (u)word, str or a pointer
+tests/bad_i8086.p8:17:5: error: a register is used multiple times in the parameters
+tests/bad_i8086.p8:17:5: error: Syntax error: invalid cpu register (the 8086 has AL, AH, BL, BH, CL, CH, DL, DH, AX, BX, CX, DX, SI, DI and BP)
