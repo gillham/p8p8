@@ -78,6 +78,7 @@ gen8086 {
     ; here.  Else the program is one piece from the load address on (a .COM file).
     bool exe = false
     ubyte floats_option = 255       ; -floats: 0 hard, 1 soft, 2 auto; 255: as the target file says
+    bool map_symbols = false        ; -map: nasm lists its symbols (sizemap)
     bool[32] need_rt                ; the routines of the system calls (the RT_ numbers)
     const ubyte RT_MOVE = 0
     const ubyte RT_FILL = 1
@@ -610,6 +611,8 @@ gen8086 {
         raw("; written by p8p8's 8086 code generator, for nasm")
         line("cpu  8086")
         line("bits  16")
+        if map_symbols
+            raw("[map symbols]")           ; (-map: nasm's list of the symbols, to its output)
         if uses_floats {
             ; How the library's float routines are written: for the 8087 alone (0),
             ; without one (1), or both, with the choice made when the program starts
@@ -3757,8 +3760,8 @@ gen8086 {
             raw("    times  -((p8_code_end - p8_code_start) > 65535)  db  0     ; an error here: the program's code is more than 64 KB")
             raw("p8_code_paragraphs  equ  (p8_code_end - p8_code_start + 15) / 16")
             raw("section .data vstart=256 align=16 follows=.text")
-            raw("p8_data_start:")
         }
+        raw("p8_data_start:")
         raw("; ---- variables with values")
         ; (places of the machine's own that its routines and its library share)
         if target.text("machine_cells") != 0

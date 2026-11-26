@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- `-map` for the 8086 machines: the map of a `.COM` program has its
+  addresses; that of an `.EXE`, whose code and data are a segment each, is
+  one of sections, as on the 68000.
+
 ## 0.6.0
 
 ### Added

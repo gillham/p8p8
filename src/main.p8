@@ -293,6 +293,7 @@ main {
             else if strings.compare(arg, "-map") == 0 {
                 opt_map = true
                 gen6502.map_labels = true
+                gen8086.map_symbols = true
             }
             else if strings.compare(arg, "-varsgolden") == 0
                 gen6502.vars_golden = true
@@ -2565,8 +2566,15 @@ main {
             add_output(name, xext)
             buf.add_byte(cmd, ' ')
             add_output(name, ".asm")
+            if opt_map {
+                ; (nasm writes the list of its symbols where its output goes)
+                buf.add_str(cmd, " > ")
+                add_output(name, ".map")
+            }
             run_cmd("assembling the program")
             built_ext = xext
+            if opt_map
+                map_8086(name)
             if opt_run {
                 ^^ubyte xrun = target.text("run_command")
                 if xrun == 0 {
@@ -3207,6 +3215,39 @@ main {
             sizemap.number("free", limit - vars_to)
         }
         ; (the names that are only other names for a value, from the assembly itself)
+        ^^ubyte text
+        long length
+        text, length = map_file(name, ".asm", false)
+        sizemap.drop_equates(text, length)
+        map_end(name)
+    }
+
+    ; nasm's map.  A .COM program is one run of addresses; an .EXE has its code and
+    ; its data in a segment each, both of which begin low: sections, as on the 68000.
+    sub map_8086(^^ubyte name) {
+        ^^ubyte data
+        long size
+        data, size = map_file(name, ".map", true)
+        sizemap.read_nasm(data, size, gen8086.exe)
+        map_head(name, "8086")
+        long vars_from = sizemap.value("p8_bss_start")
+        long vars_to = sizemap.value("p8_bss_end")
+        if gen8086.exe {
+            sizemap.put("relocatable\n")
+            sizemap.region("image", 0, sizemap.value("p8_code_end"))
+            sizemap.region("data", sizemap.value("p8_data_start"), vars_from)
+        }
+        else {
+            sizemap.vars(vars_from, vars_to)
+            sizemap.values(sizemap.value("p8_data_start"), vars_from)
+            sizemap.region("image", sizemap.value("p8_start"), vars_from)
+        }
+        sizemap.region("vars", vars_from, vars_to)
+        long limit = target.number("memory_end", 0)
+        if limit > 0 and vars_to >= 0 and vars_to <= limit {
+            sizemap.limit(limit)
+            sizemap.number("free", limit - vars_to)
+        }
         ^^ubyte text
         long length
         text, length = map_file(name, ".asm", false)

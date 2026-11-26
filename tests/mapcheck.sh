@@ -6,7 +6,7 @@
 # a map is looked for: the main block's subroutine, and its array with its 100 bytes.
 # A target whose assembler is not installed is left out.
 #
-# Usage: tests/mapcheck.sh <p8c>      (needs python3; 64tass, lwasm, z88dk, vasm)
+# Usage: tests/mapcheck.sh <p8c>      (needs python3; 64tass, lwasm, z88dk, vasm, nasm)
 p8c=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 here=$(cd "$(dirname "$0")" && pwd)
 lib=$here/../lib
@@ -58,6 +58,10 @@ one coco3ram lwasm mapcheck/sizes.p8 -target coco3ram
 one coco3ram-above lwasm cocosys/bigcode.p8 -target coco3ram
 one amiga500 vasmm68k_mot mapcheck/sizes.p8 -target amiga500
 one qemu68k vasmm68k_mot mapcheck/sizes.p8 -target qemu68k
+one dos nasm mapcheck/sizes.p8 -target dos
+one dosexe nasm mapcheck/sizes.p8 -target dosexe
+one dos-floats nasm mapcheck/withfloats.p8 -target dos
+one dosexe-floats nasm mapcheck/withfloats.p8 -target dosexe -floats soft
 
 # the tool's other reports must at least run, and a comparison of a map with itself
 # has nothing to say

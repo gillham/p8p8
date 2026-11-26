@@ -3,7 +3,7 @@
 ; of p8p8's; tools/p8size.py reads it.
 ;
 ; The assembler knows the addresses: it is asked for its list of symbols (64tass's
-; label list, lwasm's symbol dump, z80asm's map, vasm's listing), a reader for each
+; label list, lwasm's symbol dump, z80asm's map, vasm's listing, nasm's map), a reader for each
 ; puts them in one table, and from there on it is the same work: what a name is (a
 ; block, a subroutine, a variable, a label inside a routine), the order of the
 ; addresses, and the bytes of each: the distance to the next one.
@@ -54,6 +54,9 @@ sizemap {
     long vars_to = -1
     long vars2_from = -1
     long vars2_to = -1
+    ; where the values are, when the assembler's list does not say (nasm, one segment)
+    long data_from = -1
+    long data_to = -1
 
     ; vasm's sections
     ubyte[16] sect_kind
@@ -78,6 +81,8 @@ sizemap {
         vars_to = -1
         vars2_from = -1
         vars2_to = -1
+        data_from = -1
+        data_to = -1
         sectioned = false
         if o == 0 {
             o = buf.new(65536)
@@ -208,6 +213,83 @@ sizemap {
                     add(data + k, length, 0, value)
             }
             k = e + 1
+        }
+    }
+
+    ; nasm's map ("[map symbols]" in the assembly, which goes to its output):
+    ;   ---- Section .text ----...
+    ;   Real              Virtual           Name
+    ;                100               100  p8_start
+    ; and before them "---- No Section" with the constants, which are no places.
+    ; The virtual address is the one the program has when it runs.  A .COM program
+    ; is one section.  An .EXE has two segments, whose addresses both begin low: its
+    ; map is one of sections (code 0, values 1, and what is set aside after the
+    ; values, which nasm lists with them, 2).
+    sub read_nasm(^^ubyte data, long size, bool segments) {
+        begin(lines_of(data, size))
+        style = UNDER
+        byte section = -1
+        long k = 0
+        while k < size {
+            long e = k
+            while e < size and data[e] != '\n'
+                e++
+            long length = e - k
+            if length >= 5 and buf.bytes_equal(data + k, "---- ", 5) {
+                section = -1
+                if length >= 18 and buf.bytes_equal(data + k + 5, "Section .text", 13)
+                    section = 0
+                else if length >= 18 and buf.bytes_equal(data + k + 5, "Section .data", 13)
+                    section = 1
+            }
+            else if section >= 0 {
+                long q = k
+                while q < e and data[q] == ' '
+                    q++
+                long digits = q
+                while q < e and hex_value(data[q]) >= 0
+                    q++
+                if q > digits and q < e and data[q] == ' ' {
+                    while q < e and data[q] == ' '
+                        q++
+                    long address = 0
+                    digits = q
+                    while q < e and hex_value(data[q]) >= 0 {
+                        address = address * 16 + hex_value(data[q])
+                        q++
+                    }
+                    if q > digits and q < e and data[q] == ' ' {
+                        while q < e and data[q] == ' '
+                            q++
+                        long name_end = q
+                        while name_end < e and data[name_end] != ' ' and data[name_end] != '\r'
+                            name_end++
+                        if name_end > q {
+                            if segments
+                                add(data + q, name_end - q, section as ubyte, address)
+                            else
+                                add(data + q, name_end - q, 0, address)
+                        }
+                    }
+                }
+            }
+            k = e + 1
+        }
+        if segments {
+            sectioned = true
+            sect_kind[0] = K_CODE
+            sect_kind[1] = K_DATA
+            sect_kind[2] = K_VAR
+            long set_aside = value("p8_bss_start")
+            sect_end[0] = value("p8_code_end")
+            sect_end[1] = set_aside
+            sect_end[2] = value("p8_bss_end")
+            if set_aside >= 0 {
+                for k in 0 to count - 1 {
+                    if sects[k] == 1 and addrs[k] >= set_aside
+                        sects[k] = 2
+                }
+            }
         }
     }
 
@@ -344,6 +426,13 @@ sizemap {
         return addrs[at]
     }
 
+    sub values(long from, long upto) {
+        if from >= 0 and upto >= from {
+            data_from = from
+            data_to = upto
+        }
+    }
+
     sub vars(long from, long upto) {
         if from < 0 or upto < from
             return
@@ -408,12 +497,14 @@ sizemap {
             or is_name(name, length, "p8_upper_end") or is_name(name, length, "p8_upper_vars_end")
             or is_name(name, length, "__tail") or is_name(name, length, "p8map_vars")
             or is_name(name, length, "p8_bss_start") or is_name(name, length, "p8_upper_start")
+            or is_name(name, length, "p8_code_start") or is_name(name, length, "p8_code_end")
+            or is_name(name, length, "p8_data_start") or is_name(name, length, "p8_data_end")
     }
 
     ; a label that is inside a routine
     sub is_local(^^ubyte name, long length) -> bool {
         return starts(name, length, "p8l_") or starts(name, length, "p8_label_gen_") or starts(name, length, "_p8_label_gen_")
-            or (style == UNDER and starts(name, length, "p8z_"))
+            or (style == UNDER and (starts(name, length, "p8z_") or starts(name, length, "p8j_")))
     }
 
     sub in_vars(ubyte section, long address) -> bool {
@@ -456,6 +547,8 @@ sizemap {
         if variable
             kind = K_VAR
         else if sectioned and sect_kind[sects[at] & 15] == K_DATA
+            kind = K_DATA
+        else if not sectioned and data_from >= 0 and addrs[at] >= data_from and addrs[at] < data_to
             kind = K_DATA
         if style == UNDER {
             if starts(name, length, "p8e_") {

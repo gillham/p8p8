@@ -1695,10 +1695,11 @@ in one table:
 | lwasm | `--symbol-dump` | the names that the assembly defines with `equ` (the dump does not tell a constant from a place) |
 | z80asm, zcc | the map (`-m`) | what it calls `const` |
 | vasm | the symbols at the end of the listing (`-L`), with their sections | expressions (`E:`) |
+| nasm | its map of the symbols (`[map symbols]`, a line that the generator writes into the assembly when `-map` is given; the list goes to nasm's output) | what is in no section (the constants), and the names the assembly defines with `equ` |
 
 From there on it is the same work for all of them.  A name says what it is:
 `p8b_block.p8s_sub.p8v_variable` in scopes for 64tass and vasm,
-`_block__sub__variable` for the other two.  A label inside a routine is no
+`_block__sub__variable` for lwasm, z80asm and nasm.  A label inside a routine is no
 entry of its own (`p8l_`, `p8_label_gen_`, a third scope in a library block
 that is written in assembly, `p8<block>_...` after a routine of that block
 on the Z80 and the 6809).  What is left is put in the order of its
@@ -1738,7 +1739,8 @@ var 0ab5 100 main table
 - `region NAME START END`: `image` is the program's bytes, `vars` the
   variables without a value; `uppervars` and `upper` are the variables and
   the code above $8000 on `coco3ram`.  `END` is the first address after it.
-- `relocatable` (the 68000): addresses are offsets in the section of the
+- `relocatable` (the 68000, and an 8086 `.EXE`, whose code and data are a
+  segment each): addresses are offsets in the section of the
   entry's kind, and the regions are `image`, `data` and `vars`.
 - `limit` and `free`: the first address the program may not reach, and the
   bytes left before it.
@@ -1746,9 +1748,10 @@ var 0ab5 100 main table
   is a subroutine (an inner one as `outer.inner`), a variable
   (`sub.variable`), or `-` for what is the block's own.  `data` is a variable
   with a value where the assembler's names show it (`p8v_`, the 68000's data
-  section); elsewhere it is counted with the code.
+  section) or where the generator marks where the values begin (the 8086);
+  elsewhere it is counted with the code.
 
-`make mapcheck` builds test programs for all four CPUs (with the variables
+`make mapcheck` builds test programs for all five CPUs (with the variables
 in high memory, a program in two parts on `coco3ram`, one linked with
 z88dk) and has `p8size --check` say of each map that its entries fill each
 region to the byte with nothing of the wrong kind in it.

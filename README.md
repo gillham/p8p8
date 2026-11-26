@@ -308,7 +308,7 @@ Options p8p8 has that the reference compiler does not:
 | `-overlayinfo` | after a 6502 program is built: every block (and the larger subroutines of the ones that stay) with its bytes and whether it could go into an overlay, or why not |
 | `-meminfo` | after a 6502 program is built: what it takes of main memory and of each overlay, and what is left (`-verbose` prints this too) |
 | `-floats auto\|hard\|soft` | on an 8086 machine (`dos`, `dosexe`): the float arithmetic with the 8087's instructions alone (`hard`), without them (`soft`), or both, with the program looking for an 8087 when it starts (`auto`, which the targets have without the option).  An error on another target.  p8p8's own |
-| `-map` | after a program is built by one of p8p8's code generators (6502 family, Z80, 6809, 68000): its map, `name.p8map`, with the address and the bytes of every block, subroutine and variable.  `p8size` reads it (see below) |
+| `-map` | after a program is built by one of p8p8's code generators (6502 family, Z80, 6809, 68000, 8086): its map, `name.p8map`, with the address and the bytes of every block, subroutine and variable.  `p8size` reads it (see below) |
 | `-libpath` | print the library directory that is used |
 | `-report <dir>` | write a report of this run into the new directory `<dir>` (see below); `-reportnosource` leaves the program's sources out of it |
 
