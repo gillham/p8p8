@@ -57,7 +57,8 @@ The command is `p8c`.
   through DOS.  A pass over the assembly takes out what the generator's simple way
   leaves.  `asmsub` and `extsub` name the 8086's registers, the
   command line is there, and `sys.inp` and `sys.outp` are the I/O ports.
-  Not there yet: floats, `diskio`, `.EXE` files.  The test programs without
+  `diskio` is DOS's files and directories.  Not there yet: floats, `.EXE`
+  files.  The test programs without
   floats print what they print on the host, in DOSBox-X; nothing was run on
   a real machine, and the keyboard's routines were not run at all.
   The upper 32 KB of a 64 KB machine are memory for data (the `highram`

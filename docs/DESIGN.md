@@ -1564,7 +1564,16 @@ files without the pass and with it: divmix 2180 and 1359 bytes, functions
 5084 and 3206, strlib 10302 and 5653 (the 6809's are 1123, 2808 and 4227:
 its library has the number and string routines in assembly).
 
-Not there yet: floats, `diskio`, `.EXE` files.
+`diskio` (`lib/targets/dos/diskio.p8`) is DOS's file handles (int $21,
+DOS 2.0 and later): each call is an `asmsub` with its arguments in the
+registers DOS wants and the carry as a `bool` beside the value.  The file
+that is read has 128 bytes read ahead, for `f_readline`; `f_read` empties
+that and reads the rest straight into the caller's buffer.  The list of a
+directory is find-first and find-next with a record of the module's own
+(DOS's default one is where the command line is).  `tests/dos/files.p8`
+runs it all in a directory that it makes and removes.
+
+Not there yet: floats, `.EXE` files.
 
 ## Machines and the library
 

@@ -14,8 +14,11 @@
   registers (`AL` to `DH`, `AX`, `BX`, `CX`, `DX`, `SI`, `DI`, `BP`, and
   `Pc` for the carry).  `sys.argc` and `sys.argv` are the command line,
   `sys.inp` and `sys.outp` the I/O ports, `sys.wait` counts the screen's
-  vertical retraces and `sys.ticks` comes from the BIOS's timer.  Not yet:
-  floats, `diskio`, `.EXE` files.  `-run`
+  vertical retraces and `sys.ticks` comes from the BIOS's timer.  `diskio`
+  is DOS's file handles: files read and written (by lines too), `f_seek`
+  and `f_tell`, `save` and `load`, delete, rename, directories made, removed
+  and entered, and their lists (`directory`, `list_filenames`, `lf_...`).
+  Not yet: floats, `.EXE` files.  `-run`
   starts the program in DOSBox-X, and `make doscmp` compares what the test
   programs print there with the host.  `targets/i8086` is the library of
   the 8086 machines.
