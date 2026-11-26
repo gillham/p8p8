@@ -13,8 +13,8 @@
   output and input go through DOS.  `asmsub` and `extsub` name the 8086's
   registers (`AL` to `DH`, `AX`, `BX`, `CX`, `DX`, `SI`, `DI`, `BP`, and
   `Pc` for the carry).  `sys.argc` and `sys.argv` are the command line,
-  `sys.inp` and `sys.outp` the I/O ports, `sys.wait` counts the screen's
-  vertical retraces and `sys.ticks` comes from the BIOS's timer.  `diskio`
+  `sys.inp` and `sys.outp` the I/O ports, `sys.wait` times itself by the
+  machine's timer chip and `sys.ticks` comes from the BIOS's timer.  `diskio`
   is DOS's file handles: files read and written (by lines too), `f_seek`
   and `f_tell`, `save` and `load`, delete, rename, directories made, removed
   and entered, and their lists (`directory`, `list_filenames`, `lf_...`).

@@ -1564,6 +1564,13 @@ files without the pass and with it: divmix 2180 and 1359 bytes, functions
 5084 and 3206, strlib 10302 and 5653 (the 6809's are 1123, 2808 and 4227:
 its library has the number and string routines in assembly).
 
+`sys.wait` counts 60ths of a second on the timer chip's first counter (the
+8253 that every PC has, read through ports $43 and $40).  The BIOS has it
+count down by two, so a 60th is 39772 of what is read; the first call
+looks at it 16 times, and where odd numbers come too it counts by one and
+a 60th is 19886.  The first version waited for the screen's retrace bit,
+which took no time at all in QEMU, whose bit flips at every look.
+
 `diskio` (`lib/targets/dos/diskio.p8`) is DOS's file handles (int $21,
 DOS 2.0 and later): each call is an `asmsub` with its arguments in the
 registers DOS wants and the carry as a `bool` beside the value.  The file

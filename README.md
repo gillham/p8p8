@@ -63,8 +63,8 @@ The command is `p8c`.
   doubles, with the 8087 where the machine has one and without it where
   not: the program finds out when it starts (`-floats hard` or `-floats
   soft` asks for one kind alone, as `floats` in a target file does).  The test programs print what they print on the host, in DOSBox-X as an
-  8086 with and without an 8087; nothing was run on a real machine, and
-  the keyboard's routines were not run at all.
+  8086 with and without an 8087, and the DOS tests print the same under
+  MS-DOS 6.22 in QEMU; nothing was run on a real machine.
   The upper 32 KB of a 64 KB machine are memory for data (the `highram`
   module), or, with `-target coco2ram`, the program runs with the ROMs
   switched out and has that memory as its own, its calls into the ROM
