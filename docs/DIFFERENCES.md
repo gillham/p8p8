@@ -300,6 +300,10 @@ overlap; one block stays inside a 64 KB bank.
 - On the Color Computers a float is the ROM BASIC's (five bytes, about nine
   digits) and prints as BASIC prints it; `floats.round` takes a half up.
   `sim6809` has no floats.
+- On an 8086 machine a float is an IEEE double, as on the llvm64 target, but
+  prints with up to 15 digits (there: as many as tell the number apart, up
+  to 17), and the functions of `floats` are series that are good for about
+  15 digits.  A number too small for a double's normal range is 0.
 - On an 8086 machine (`dos`) an `asmsub` or `extsub` names the 8086's
   registers: `AL`, `AH`, `BL`, `BH`, `CL`, `CH`, `DL`, `DH` (a byte), `AX`,
   `BX`, `CX`, `DX`, `SI`, `DI`, `BP` (a word), and `Pc`.

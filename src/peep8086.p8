@@ -843,7 +843,11 @@ peep8086 {
             return
         }
         if mnemonic_is("call") or mnemonic_is("int") {
-            called()
+            ; (a float routine writes where DI points, which may be a place)
+            if a_len > 4 and buf.bytes_equal(pool.data + a_at, "p8f_", 4)
+                forget()
+            else
+                called()
             return
         }
         if m_len >= 2 and pool.data[m_at] == 'j' and not mnemonic_is("jmp")

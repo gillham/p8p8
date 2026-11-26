@@ -90,6 +90,7 @@ gen8086 {
     const ubyte RT_LESS32 = 14
     const ubyte RT_CLAMP32 = 15
     const ubyte RT_INLONGS = 16
+    const ubyte RT_INFLOATS = 17
     const ubyte RT_CHROUT = 18
     const ubyte RT_GETKEY = 19
     const ubyte RT_CHRIN = 20
@@ -185,6 +186,7 @@ gen8086 {
             ir.T_BYTE -> return 1
             ir.T_WORD, ir.T_POINTER -> return 2
             ir.T_LONG -> return 4
+            ir.T_FLOAT -> return 8              ; (an IEEE double)
         }
         return 0
     }
@@ -348,6 +350,10 @@ gen8086 {
     ; the value of register r into AL (a byte), AX (a word) or DX and AX (a long, AX the
     ; low half)
     sub fetch(uword r, ubyte size) {
+        if size == 8 {
+            fcopy(F_FAC, 0, 0, 0, F_CELL, r, 0, 0)     ; (a float: in the float accumulator)
+            return
+        }
         if size == 1
             load_cell(r, 0, 1)
         else {
@@ -358,6 +364,10 @@ gen8086 {
     }
 
     sub keep(uword r, ubyte size) {
+        if size == 8 {
+            fcopy(F_CELL, r, 0, 0, F_FAC, 0, 0, 0)
+            return
+        }
         if size == 1
             store_cell(r, 0, 1)
         else {
@@ -599,6 +609,20 @@ gen8086 {
         raw("; written by p8p8's 8086 code generator, for nasm")
         line("cpu  8086")
         line("bits  16")
+        if uses_floats {
+            ; How the library's float routines are written: for the 8087 alone (0),
+            ; without one (1), or both, with the choice made when the program starts
+            ; (2).  The target file says which (floats = 8087, software or auto).
+            ^^ubyte how = target.text("floats")
+            put("%define p8f_mode ")
+            if how != 0 and strings.compare(how, "8087") == 0
+                put("0")
+            else if how != 0 and strings.compare(how, "software") == 0
+                put("1")
+            else
+                put("2")
+            nl()
+        }
         if exe {
             ; The header of an .EXE file: the file's size in pages of 512 bytes, no
             ; relocations (nothing in the program names a segment), a header of two
@@ -641,6 +665,9 @@ gen8086 {
         line("mov  cx, p8_bss_end-p8_bss_start")
         line("xor  al, al")
         line("rep stosb")
+        ; (floats: is there an 8087?)
+        if uses_floats
+            line("call  p8f_init")
         line("call  p8_init_globals")
         line("call  _main__start")
         line("xor  al, al")
@@ -1590,9 +1617,9 @@ gen8086 {
         ubyte size = size_of(i.type)
         ubyte k
         if i.type == ir.T_FLOAT or (i.op >= ir.OP_FFROMUB and i.op <= ir.OP_FCOMP) or (i.op >= ir.OP_FPOW and i.op <= ir.OP_FCEIL) {
-            if not uses_floats
-                error("floats are not there for the 8086 yet", 0)
             uses_floats = true
+            if not float_instruction(i)
+                unsupported(i)
             return
         }
         when i.op {
@@ -2137,6 +2164,330 @@ gen8086 {
         }
     }
 
+    ; ---- floats ----
+    ;
+    ; A float is an IEEE double: eight bytes, the low ones first.  Loads, stores and
+    ; moves are those of four words (through SI and DI, with "movsw").  Arithmetic is
+    ; routines of the library's floats module (p8f_add ...: with the 8087 or without
+    ; one), which work on the number that DI points at with the one that SI points
+    ; at.  A float that a subroutine returns is in the module's accumulator
+    ; (floats.fac), a constant operand in its scratch place (floats.operand).
+
+    ; where a float is: the place of a register, the instruction's memory operand, a
+    ; number of bytes from where BX points, the accumulator, or the scratch place
+    const ubyte F_CELL = 0
+    const ubyte F_MEM = 1
+    const ubyte F_X = 2
+    const ubyte F_FAC = 3
+    const ubyte F_SCRATCH = 4
+    float fc_value
+    uword[4] fc_words
+
+    ; the address of a float's place (not one through BX)
+    sub fname(ubyte kind, uword r, ^^ir.Instr i) {
+        when kind {
+            F_CELL -> {
+                if r <= ir.regcount
+                    reg_used[r] = 1
+                put("p8r_")
+                putn(part)
+                put("_")
+                putn(r)
+            }
+            F_MEM -> mem_name(i, 0)
+            F_FAC -> put("_floats__fac")
+            else -> put("_floats__operand")
+        }
+    }
+
+    sub bx_offset(long at) {
+        put("bx")
+        at &= $ffff
+        if at >= $8000 {
+            put("-")
+            putn($10000 - at)
+        }
+        else
+            plus(at)
+    }
+
+    ; SI or DI = the address of a float's place
+    sub faddr(str reg, ubyte kind, uword r, ^^ir.Instr i, long base) {
+        if kind == F_X {
+            ins("lea  ")
+            put(reg)
+            put(", [")
+            bx_offset(base)
+            put("]")
+            nl()
+            return
+        }
+        ins("mov  ")
+        put(reg)
+        put(", ")
+        fname(kind, r, i)
+        nl()
+    }
+
+    ; "word [..]" or "byte [..]": w bytes at offset k of a float's place
+    sub fpart(ubyte kind, uword r, ^^ir.Instr i, long base, ubyte k, ubyte w) {
+        width(w)
+        if kind == F_X
+            bx_offset(base + k)
+        else {
+            fname(kind, r, i)
+            plus(k)
+        }
+        put("]")
+    }
+
+    ; one float = another: the first place named is where it goes
+    sub fcopy(ubyte to_kind, uword to_r, ^^ir.Instr to_i, long to_base, ubyte from_kind, uword from_r, ^^ir.Instr from_i, long from_base) {
+        faddr("si", from_kind, from_r, from_i, from_base)
+        faddr("di", to_kind, to_r, to_i, to_base)
+        line("movsw")
+        line("movsw")
+        line("movsw")
+        line("movsw")
+    }
+
+    ; the four words of a double (the compiler's own floats are such)
+    sub float_words(float value) {
+        fc_value = value
+        ubyte k
+        for k in 0 to 3
+            fc_words[k] = mkword(@(&fc_value + k * 2 + 1), @(&fc_value + k * 2))
+    }
+
+    ; a constant into a float's place
+    sub fconst(float value, ubyte kind, uword r, ^^ir.Instr i, long base) {
+        float_words(value)
+        ubyte k
+        for k in 0 to 3 {
+            ins("mov  ")
+            fpart(kind, r, i, base, k * 2, 2)
+            put(", ")
+            putn(fc_words[k])
+            nl()
+        }
+    }
+
+    sub fzero(ubyte kind, uword r, ^^ir.Instr i, long base) {
+        ubyte k
+        for k in 0 to 3 {
+            ins("mov  ")
+            fpart(kind, r, i, base, k * 2, 2)
+            put(", 0")
+            nl()
+        }
+    }
+
+    ; first = first op second (see first for the groups); with_one: the second is 1.0
+    sub float_arith(^^ir.Instr i, ubyte group, ubyte kind, bool with_one) {
+        if with_one or group == 1 or group == 4 {
+            if with_one
+                fconst(1.0, F_SCRATCH, 0, 0, 0)
+            else
+                fconst(i.fvalue, F_SCRATCH, 0, 0, 0)
+            faddr("si", F_SCRATCH, 0, 0, 0)
+        }
+        else if group == 2
+            faddr("si", F_CELL, i.r2, 0, 0)
+        else
+            faddr("si", F_CELL, i.r1, 0, 0)
+        if group >= 3
+            faddr("di", F_MEM, 0, i, 0)
+        else
+            faddr("di", F_CELL, i.r1, 0, 0)
+        when kind {
+            0 -> line("call  p8f_add")
+            1 -> line("call  p8f_sub")
+            5 -> line("call  p8f_mul")
+            else -> line("call  p8f_div")
+        }
+    }
+
+    ; r1 = a function of r2, by a routine that works on the number where DI points
+    sub float_function(^^ir.Instr i, str routine) {
+        if i.r1 != i.r2
+            fcopy(F_CELL, i.r1, 0, 0, F_CELL, i.r2, 0, 0)
+        faddr("di", F_CELL, i.r1, 0, 0)
+        ins("call  ")
+        put(routine)
+        nl()
+    }
+
+    ; An instruction with floats; false when it is one that is not written.
+    sub float_instruction(^^ir.Instr i) -> bool {
+        ubyte k
+        when i.op {
+            ir.OP_LOAD -> fconst(i.fvalue, F_CELL, i.r1, 0, 0)
+            ir.OP_LOADM -> fcopy(F_CELL, i.r1, 0, 0, F_MEM, 0, i, 0)
+            ir.OP_STOREM -> fcopy(F_MEM, 0, i, 0, F_CELL, i.r1, 0, 0)
+            ir.OP_LOADR -> fcopy(F_CELL, i.r1, 0, 0, F_CELL, i.r2, 0, 0)
+            ir.OP_LOADX -> {
+                x_address(i, true)
+                fcopy(F_CELL, i.r1, 0, 0, F_X, 0, 0, 0)
+            }
+            ir.OP_STOREX -> {
+                x_address(i, true)
+                fcopy(F_X, 0, 0, 0, F_CELL, i.r1, 0, 0)
+            }
+            ir.OP_LOADI -> {
+                x_pointer(i)
+                fcopy(F_CELL, i.r1, 0, 0, F_X, 0, 0, i.offset)
+            }
+            ir.OP_STOREI -> {
+                x_pointer(i)
+                fcopy(F_X, 0, 0, i.offset, F_CELL, i.r1, 0, 0)
+            }
+            ir.OP_STOREZM -> fzero(F_MEM, 0, i, 0)
+            ir.OP_STOREZX -> {
+                x_address(i, true)
+                fzero(F_X, 0, 0, 0)
+            }
+            ir.OP_STOREZI -> {
+                x_pointer(i)
+                fzero(F_X, 0, 0, i.offset)
+            }
+            ir.OP_STOREIM -> fconst(i.fvalue, F_MEM, 0, i, 0)
+            ir.OP_RETURNR -> {
+                fcopy(F_FAC, 0, 0, 0, F_CELL, i.r1, 0, 0)
+                line("ret")
+            }
+            ir.OP_RETURNI -> {
+                fconst(i.fvalue, F_FAC, 0, 0, 0)
+                line("ret")
+            }
+            ir.OP_LOADHR, ir.OP_STOREHR -> {
+                ; (one of the values that a subroutine returns beside its first)
+                if i.slot >= ir.SLOT_FLAGS
+                    return false
+                for k in 0 to 3 {
+                    if i.op == ir.OP_LOADHR {
+                        op_slot("mov  ax, ", i.slot, k * 2, 2, "")
+                        store_cell(i.r1, k * 2, 2)
+                    }
+                    else {
+                        load_cell(i.r1, k * 2, 2)
+                        op_slot("mov  ", i.slot, k * 2, 2, ", ax")
+                    }
+                }
+            }
+            ir.OP_PUSH -> {
+                for k in 0 to 3
+                    op_cell("push  ", i.r1, k * 2, 2, "")
+            }
+            ir.OP_POP -> {
+                for k in 0 to 3
+                    op_cell("pop  ", i.r1, 6 - k * 2, 2, "")
+            }
+            ir.OP_ADD, ir.OP_SUB, ir.OP_MUL, ir.OP_MULS, ir.OP_DIV, ir.OP_DIVS -> float_arith(i, 1, kind_of(i.op), false)
+            ir.OP_ADDR, ir.OP_SUBR, ir.OP_MULR, ir.OP_MULSR, ir.OP_DIVR, ir.OP_DIVSR -> float_arith(i, 2, kind_of(i.op), false)
+            ir.OP_ADDM, ir.OP_SUBM, ir.OP_MULM, ir.OP_MULSM, ir.OP_DIVM, ir.OP_DIVSM -> float_arith(i, 3, kind_of(i.op), false)
+            ir.OP_ADDIM, ir.OP_SUBIM -> float_arith(i, 4, kind_of(i.op), false)
+            ir.OP_INC -> float_arith(i, 2, 0, true)
+            ir.OP_DEC -> float_arith(i, 2, 1, true)
+            ir.OP_INCM -> float_arith(i, 3, 0, true)
+            ir.OP_DECM -> float_arith(i, 3, 1, true)
+            ir.OP_NEG -> {
+                ; (the sign is the top bit)
+                ins("xor  ")
+                fpart(F_CELL, i.r1, 0, 0, 7, 1)
+                put(", 128")
+                nl()
+            }
+            ir.OP_NEGM -> {
+                ins("xor  ")
+                fpart(F_MEM, 0, i, 0, 7, 1)
+                put(", 128")
+                nl()
+            }
+            ir.OP_FABS -> {
+                if i.r1 != i.r2
+                    fcopy(F_CELL, i.r1, 0, 0, F_CELL, i.r2, 0, 0)
+                ins("and  ")
+                fpart(F_CELL, i.r1, 0, 0, 7, 1)
+                put(", 127")
+                nl()
+            }
+            ir.OP_SQRT -> float_function(i, "p8f_sqrt")
+            ir.OP_FFLOOR -> float_function(i, "p8f_floor")
+            ir.OP_FCEIL -> float_function(i, "p8f_ceil")
+            ir.OP_FROUND -> float_function(i, "p8f_round")
+            ir.OP_FFROMUB, ir.OP_FFROMSB, ir.OP_FFROMUW, ir.OP_FFROMSW, ir.OP_FFROMSL -> {
+                ; a whole number: as a long in DX and AX
+                when i.op {
+                    ir.OP_FFROMUB -> {
+                        load_cell(i.r2, 0, 1)
+                        line("xor  ah, ah")
+                        line("xor  dx, dx")
+                    }
+                    ir.OP_FFROMSB -> {
+                        load_cell(i.r2, 0, 1)
+                        line("cbw")
+                        line("cwd")
+                    }
+                    ir.OP_FFROMUW -> {
+                        load_cell(i.r2, 0, 2)
+                        line("xor  dx, dx")
+                    }
+                    ir.OP_FFROMSW -> {
+                        load_cell(i.r2, 0, 2)
+                        line("cwd")
+                    }
+                    else -> {
+                        load_cell(i.r2, 0, 2)
+                        op_cell("mov  dx, ", i.r2, 2, 2, "")
+                    }
+                }
+                faddr("di", F_CELL, i.r1, 0, 0)
+                line("call  p8f_from_long")
+            }
+            ir.OP_FTOUB, ir.OP_FTOSB, ir.OP_FTOUW, ir.OP_FTOSW, ir.OP_FTOSL -> {
+                ; towards zero, as a long in DX and AX; what the register holds of it
+                faddr("si", F_CELL, i.r2, 0, 0)
+                line("call  p8f_to_long")
+                ubyte wide = rsize(i.r1)
+                if wide == 1
+                    store_cell(i.r1, 0, 1)
+                else {
+                    store_cell(i.r1, 0, 2)
+                    if wide == 4
+                        op_cell("mov  ", i.r1, 2, 2, ", dx")
+                }
+            }
+            ir.OP_FCOMP -> {
+                ; r1 (a byte) = -1, 0 or 1: r2 against r3
+                faddr("di", F_CELL, i.r2, 0, 0)
+                faddr("si", F_CELL, i.r3, 0, 0)
+                line("call  p8f_cmp")
+                store_cell(i.r1, 0, 1)
+            }
+            ir.OP_SGN -> {
+                ; r1 (a byte) = the sign of the float r2; one that is all zeros but for
+                ; its sign is zero
+                long done = new_label()
+                op_cell("mov  bx, ", i.r2, 6, 2, "")
+                line("mov  ax, bx")
+                line("and  ax, 32767")
+                op_cell("or  ax, ", i.r2, 4, 2, "")
+                op_cell("or  ax, ", i.r2, 2, 2, "")
+                op_cell("or  ax, ", i.r2, 0, 2, "")
+                line("mov  al, 0")
+                jump_if_local("je", done)
+                line("mov  al, 1")
+                line("test  bx, bx")
+                jump_if_local("jns", done)
+                line("mov  al, 255")
+                local(done)
+                store_cell(i.r1, 0, 1)
+            }
+            else -> return false
+        }
+        return true
+    }
+
     ; ", value": the end of an instruction that puts a constant somewhere
     ubyte[16] imm_text
     sub immediate_text(long value) -> str {
@@ -2612,7 +2963,7 @@ gen8086 {
         a = i.args
         while a != 0 {
             ubyte size = size_of(a.type)
-            if a.name == 0 or size == 0 {
+            if a.name == 0 or size == 0 or (size == 8 and a.reg == 0) {
                 error("the arguments of this call cannot be passed on the 8086 yet", i.sym)
                 return
             }
@@ -3186,6 +3537,17 @@ gen8086 {
                 line("mov  ax, [p8_la]")
                 line("mov  dx, [p8_la+2]")
             }
+            $1011 -> {
+                ; is a float in an array, byte for byte: the value, the array, its length
+                if a0 == 0 or a0.reg == 0 or size_of(a0.type) != 8 {
+                    error("system call $1011 needs its float in a register", 0)
+                    return
+                }
+                arg_word(a1, "di")
+                arg_word(a2, "cx")
+                faddr("si", F_CELL, a0.reg, 0, 0)
+                call_rt(RT_INFLOATS, "p8rt_infloats")
+            }
             $101b -> {
                 ; is a long in an array: the value, the array, its length
                 arg_cell(a0, "p8_la")
@@ -3278,6 +3640,11 @@ gen8086 {
             lines("; is the long in p8_la among the CX longs at SI: AL = 1 or 0\np8rt_inlongs:\njcxz  p8rt_inlongs_no\np8rt_inlongs_next:\nmov  ax, [si]\ncmp  ax, [p8_la]\njne  p8rt_inlongs_other\nmov  ax, [si+2]\ncmp  ax, [p8_la+2]")
             lines("je  p8rt_inlongs_yes\np8rt_inlongs_other:\nadd  si, 4\nloop  p8rt_inlongs_next\np8rt_inlongs_no:\nxor  al, al\nret\np8rt_inlongs_yes:\nmov  al, 1\nret")
         }
+        if need_rt[RT_INFLOATS]
+        {
+            lines("; is the float at SI among the CX floats at DI: AL = 1 or 0\np8rt_infloats:\njcxz  p8rt_infloats_no\np8rt_infloats_next:\npush  cx\npush  si\npush  di\nmov  cx, 4\nrepe cmpsw\npop  di\npop  si\npop  cx\nje  p8rt_infloats_yes")
+            lines("add  di, 8\nloop  p8rt_infloats_next\np8rt_infloats_no:\nxor  al, al\nret\np8rt_infloats_yes:\nmov  al, 1\nret")
+        }
         if need_rt[RT_CLAMP32] {
             lines("; p8_la = p8_la kept between p8_lb and p8_lc (signed longs)\np8rt_clamp32:\nmov  si, p8_la\nmov  di, p8_lb\ncall  p8rt_less32\njnc  p8rt_clamp32_top\nmov  ax, [p8_lb]\nmov  [p8_la], ax\nmov  ax, [p8_lb+2]\nmov  [p8_la+2], ax\nret")
             lines("p8rt_clamp32_top:\nmov  si, p8_lc\nmov  di, p8_la\ncall  p8rt_less32\njnc  p8rt_clamp32_end\nmov  ax, [p8_lc]\nmov  [p8_la], ax\nmov  ax, [p8_lc+2]\nmov  [p8_la+2], ax\np8rt_clamp32_end:\nret")
@@ -3338,7 +3705,7 @@ gen8086 {
 
     sub element_size(^^ubyte typestr) -> ubyte {
         if text_has(typestr, "float")
-            return 0
+            return 8
         if text_has(typestr, "word") or text_has(typestr, "pointer") or typestr[0] == '^'
             return 2
         if text_has(typestr, "long")
@@ -3454,7 +3821,7 @@ gen8086 {
             if slot_used[sn] {
                 put("p8_slot_")
                 putn(sn)
-                raw(":  resb  4")
+                raw(":  resb  8")          ; (a float is eight bytes; the others are in the first four)
             }
         }
         if need_long {
@@ -3571,7 +3938,15 @@ gen8086 {
                 put("    dw  ")
             else if init[p] == 'l'
                 put("    dd  ")
-            else if init[p] == 'f' or init[p] == 'q' or (init[p] == 'u' and init[p + 1] == 'q') {
+            else if init[p] == 'f' {
+                put("    dw  ")
+                p = float_item(init, colon + 1)
+                nl()
+                if init[p] == ','
+                    p++
+                continue
+            }
+            else if init[p] == 'q' or (init[p] == 'u' and init[p + 1] == 'q') {
                 error("a struct field of this type cannot be used on the 8086 yet", v.name)
                 return
             }
@@ -3647,6 +4022,24 @@ gen8086 {
         return p
     }
 
+    ; one float of a list of values, as its four words; where the list goes on
+    sub float_item(^^ubyte text, long p) -> long {
+        buf.clear(nb)
+        while text[p] != 0 and text[p] != ',' {
+            buf.add_byte(nb, text[p])
+            p++
+        }
+        buf.add_byte(nb, 0)
+        float_words(irparse.parse_float(nb.data))
+        ubyte k
+        for k in 0 to 3 {
+            if k != 0
+                put(",")
+            putn(fc_words[k])
+        }
+        return p
+    }
+
     ; the values of a variable
     sub values(^^ir.Var v, ubyte esize) {
         if v.align > 1 {
@@ -3675,13 +4068,18 @@ gen8086 {
             if column == 0 {
                 when esize {
                     1 -> put("    db  ")
-                    2 -> put("    dw  ")
+                    2, 8 -> put("    dw  ")
                     else -> put("    dd  ")
                 }
             }
             else
                 put(",")
-            p = value_item(v.init, p)
+            if esize == 8 {
+                p = float_item(v.init, p)
+                column += 3
+            }
+            else
+                p = value_item(v.init, p)
             if v.init[p] == ','
                 p++
             column++

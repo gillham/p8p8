@@ -1594,7 +1594,58 @@ whole section.  The code is checked against 64 KB and the data against
 `memory_end`.  Assembly of a program's own that has bytes in the code and
 reads them through DS is wrong there.
 
-Not there yet: floats.
+A float is an IEEE double, eight bytes, as the host's are and as an 8087
+has them (`types.FLOAT_SIZE` is 8 under `importer.i8086`).  Loads, stores
+and moves are four words, through SI and DI with `movsw`; a constant is
+four `mov`s of its words (`float_words` takes them from the compiler's own
+float).  Arithmetic is routines that work on the float that DI points at
+with the one that SI points at: `p8f_add`, `p8f_sub`, `p8f_mul`, `p8f_div`,
+`p8f_cmp` (AL = -1, 0 or 1), `p8f_from_long` and `p8f_to_long` (DX and AX,
+towards zero), `p8f_sqrt`, `p8f_floor`, `p8f_ceil`, `p8f_round`.  A float
+that a subroutine returns is in `floats.fac`, a constant operand in
+`floats.operand`.  The pass over the assembly forgets everything at a call
+of a `p8f_` routine: it writes where DI points, which may be a place.
+
+The routines are assembly at the end of the library's `floats` module
+(`lib/targets/i8086/floats.p8`), each written twice: with the 8087's
+instructions, and without them.  The code generator's first line for a
+program with floats is `%define p8f_mode`, from the target file's `floats`
+key: 0 for the 8087 alone, 1 for software alone, 2 (`auto`, the default)
+for both; then each routine begins by looking at `floats.has87`, which
+`p8f_init` sets when the program starts (after `fninit` the status word's
+low byte reads 0 and the control word $03xx when an 8087 is there).  With
+an 8087 the number is loaded, worked on and stored back each time, with
+the control word set to round results as doubles: what a program
+computes is then the same, bit for bit, as without one, and as on the
+host.  Every 8087 instruction has `fwait` before it, which the 8087 itself
+needs (the later ones do not).
+
+Without the 8087 a float is taken apart into 64 bits of digits with the
+first one at the top, an exponent and a sign (`p8fs_unpack`), and put
+together again rounded to the nearest, a half to the even one
+(`p8fs_pack`).  A sum shifts the smaller number right and keeps what
+leaves as the lowest bit; a product is 16 products of words into 128
+bits; a quotient is 64 steps of compare and subtract; a square root is six
+rounds of Newton's method from a guess with half the exponent.  A number
+too small for an exponent is zero (none of the denormal ones), and one too
+large is infinity.  `p8f_floor` clears the bits after the point in the
+float itself, for both kinds.
+
+Everything else is Prog8 in the module, the same with and without the
+8087: the digits of a number (it is brought between 1 and 10, then 16
+digits are taken as two whole numbers of eight and rounded to 15), the
+reading of one (its digits as a whole number, times or divided by a power
+of ten, which is exact up to the 22nd), and `sin`, `cos`, `tan`, `atan`,
+`ln`, `log2`, `exp` and `pow` as series after the argument is brought
+into a small range.  The 8087's own instructions for those differ from
+the later coprocessors' (it has no `fsin`), so they are not used.
+
+`make doscmp` runs DOSBox-X as an 8086, where an instruction of a later
+processor would stop a program; `make dossoftcmp` builds with `floats =
+software`; `make dosnofpucmp` runs the programs with floats, built with
+both kinds of routines, on a machine without an 8087.  A program with
+floats prints 15 digits here and up to 17 on the host, so those are
+compared number by number (`tests/floatsame.py`).
 
 ## Machines and the library
 

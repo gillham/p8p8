@@ -12,6 +12,9 @@
 # tests/dos/<name>.args is the command line it is started with.
 #
 # With DOSCMP_TARGET=dosexe the programs are built for the dosexe target: .EXE files.
+# With DOSCMP_FLOATS=software (or 8087) the float routines are written that way alone.
+# A program with floats prints 15 digits of them here and up to 17 on the host: there
+# tests/floatsame.py compares, number by number, to seven digits.
 #
 # Usage: tests/doscmp.sh <p8c> <program.p8>...
 #        (needs clang, nasm and dosbox-x; DOSCMP_TIME is the seconds one start of the
@@ -26,9 +29,23 @@ machine=${DOSCMP_TARGET:-dos}
 ext=com
 [ "$machine" = dosexe ] && ext=exe
 EXT=$(echo $ext | tr a-z A-Z)
+# (DOSCMP_FLOATS=software or 8087: the float routines written that one way; without
+# it both are in the program, which uses the 8087 that DOSBox-X has)
+target=$machine
+srcdirs=
+# (the emulated processor is an 8086, so an instruction of a later one would stop a
+# program; DOSCMP_NOFPU=1 takes the 8087 away too, which a program then finds out)
+fpu=true
+[ -n "$DOSCMP_NOFPU" ] && fpu=false
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_doscmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/host" "$work/dos" "$work/c"
+if [ -n "$DOSCMP_FLOATS" ]; then
+    libdir=$(cd "$lib" && pwd)
+    printf 'base = %s/targets/%s/target.properties\nfloats = %s\nlibrary = %s/targets/i8086\n' "$libdir" "$machine" "$DOSCMP_FLOATS" "$libdir" > "$work/floats.properties"
+    target=$work/floats.properties
+    srcdirs="-srcdirs $libdir/targets/$machine"
+fi
 same=0; differ=0; unbuilt=0; skipped=0
 n=0
 : > "$work/list"
@@ -48,7 +65,7 @@ for f in "$@"; do
             continue
         fi
     fi
-    "$p8c" -lib "$lib" -target "$machine" -out "$work/dos" "$f" > "$work/dos.err" 2>&1
+    "$p8c" -lib "$lib" $srcdirs -target "$target" -out "$work/dos" "$f" > "$work/dos.err" 2>&1
     if [ $? -ne 0 ] || [ ! -f "$work/dos/$name.$ext" ]; then
         unbuilt=$((unbuilt + 1))
         echo "not built yet: $f: $(grep -v warning "$work/dos.err" | head -1 | cut -c1-110)"
@@ -73,7 +90,7 @@ while :; do
     done < "$work/list"
     [ $left -eq 0 ] && break
     (cd "$work/c" && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -s KILL "$limit" dosbox-x -silent -fastlaunch -nogui -nomenu -exit \
-        -set "cpu cycles=max" -c "mount c ." -c "c:" -c "call RUN.BAT" -c "exit" > /dev/null 2>&1 < /dev/null)
+        -set "cpu cycles=max" -set "cpu cputype=8086" -set "cpu fpu=$fpu" -c "mount c ." -c "c:" -c "call RUN.BAT" -c "exit" > /dev/null 2>&1 < /dev/null)
     # (the first one without its mark is the one that did not end)
     while read -r short name f; do
         if [ ! -f "$work/c/$short.END" ]; then
@@ -86,7 +103,8 @@ done
 while read -r short name f; do
     tr -d '\r' < "$work/c/$short.OUT" > "$work/dos/$name.out"
     if cmp -s "$work/host/$name.out" "$work/dos/$name.out" ||
-            { [ -f "$here/dos/$name.out" ] && cmp -s "$here/dos/$name.out" "$work/dos/$name.out"; }; then
+            { [ -f "$here/dos/$name.out" ] && cmp -s "$here/dos/$name.out" "$work/dos/$name.out"; } ||
+            { grep -q '^%import floats' "$f" && python3 "$here/floatsame.py" "$work/host/$name.out" "$work/dos/$name.out"; }; then
         same=$((same + 1))
         echo "ok: $f"
     else
@@ -95,5 +113,5 @@ while read -r short name f; do
         diff "$work/host/$name.out" "$work/dos/$name.out" | head -4
     fi
 done < "$work/list"
-echo "8086 comparison (MS-DOS in DOSBox-X, target $machine, against the host): $same the same, $differ different, $unbuilt not built yet, $skipped not for the host"
+echo "8086 comparison (MS-DOS in DOSBox-X, target $machine${DOSCMP_FLOATS:+, floats $DOSCMP_FLOATS}${DOSCMP_NOFPU:+, no 8087}, against the host): $same the same, $differ different, $unbuilt not built yet, $skipped not for the host"
 [ "$differ" -eq 0 ]

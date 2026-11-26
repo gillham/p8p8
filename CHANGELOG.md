@@ -20,9 +20,14 @@
   and entered, and their lists (`directory`, `list_filenames`, `lf_...`).
   `-target dosexe` builds an `.EXE` file: the code in a segment of its own,
   data and stack in another, with the header written by the code generator
-  (no linker).  Not yet: floats.  `-run`
-  starts the program in DOSBox-X, and `make doscmp` and `make dosexecmp`
-  compare what the test programs print there with the host.  `targets/i8086` is the library of
+  (no linker).  Floats are IEEE doubles: the arithmetic is there with the
+  8087's instructions and without them, and a program uses the 8087 when
+  it finds one (`floats = 8087` or `floats = software` in a target file
+  leaves the other kind out).  `floats` prints 15 digits, and its `sin`,
+  `cos`, `tan`, `atan`, `ln`, `log2`, `exp` and `pow` are series in Prog8.  `-run`
+  starts the program in DOSBox-X, and `make doscmp`, `make dosexecmp`,
+  `make dossoftcmp` and `make dosnofpucmp` compare what the test programs
+  print there (on an emulated 8086) with the host.  `targets/i8086` is the library of
   the 8086 machines.
 - The Apple II as a target (`-target appleii`): the II Plus with `-cpu 6502`,
   the IIe, IIc and IIgs.  `textio` on the 40 column screen through the
