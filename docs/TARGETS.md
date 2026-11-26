@@ -196,7 +196,7 @@ keys it reads:
 | `ticks` | a routine: AX = the clock in 60ths of a second (without it `sys.ticks()` is 0) |
 | `arguments` | the routines `p8rt_argc` (AX = the number of arguments) and `p8rt_argv` (AX = the argument whose number is in AX); without it there is one argument, which is empty |
 | `arguments_data` | the data of those routines |
-| `floats` | how the float routines are written: `8087` (with its instructions alone), `software` (without them), or `auto`, the default: both, and the program uses the 8087 when it finds one at its start |
+| `floats` | how the float routines are written: `8087` or `hard` (with its instructions alone), `software` or `soft` (without them), or `auto`, the default: both, and the program uses the 8087 when it finds one at its start.  `-floats` on the command line comes before it |
 | `run_command` | what `-run` runs, with `{file}` for the program |
 | `library` | the directory with the target's modules, as for any target |
 

@@ -64,6 +64,7 @@ main {
     ^^ubyte opt_target = 0          ; -target: a name, or a .properties file
     bool opt_own = false            ; p8p8's 6502 code generator, not prog8c-llvm's back end
     bool is_m68k = false            ; the target is a 68000 machine
+    bool opt_floats = false         ; -floats was given (p8p8)
     bool is_i8086 = false           ; an 8086 machine (cpu = 8086 in its target file): p8p8's own 8086 code generator
     bool is_m6809 = false           ; a 6809 machine (cpu = 6809 in its target file): p8p8's own 6809 code generator
     bool is_z80 = false             ; a Z80 machine (cpu = z80 in its target file): p8p8's own Z80 code generator
@@ -85,6 +86,7 @@ main {
             or strings.compare(arg, "-Xlink") == 0 or strings.compare(arg, "-D") == 0 or strings.compare(arg, "-clang") == 0
             or strings.compare(arg, "-O") == 0 or strings.compare(arg, "-address") == 0 or strings.compare(arg, "-breakinstr") == 0
             or strings.compare(arg, "-varshigh") == 0 or strings.compare(arg, "-varsaddress") == 0
+            or strings.compare(arg, "-floats") == 0
             or strings.compare(arg, "-out") == 0 or strings.compare(arg, "-o") == 0
             or strings.compare(arg, "-output") == 0 or strings.compare(arg, "-report") == 0
     }
@@ -338,6 +340,20 @@ main {
                 adok, irgen.option_address = target.parse_number(value)
                 if not adok
                     usage()
+                i++
+            }
+            else if strings.compare(arg, "-floats") == 0 and value != 0 {
+                ; (p8p8) how the float arithmetic is written, in place of what the target
+                ; file says: with the machine's coprocessor, without it, or both
+                if strings.compare(value, "hard") == 0
+                    gen8086.floats_option = 0
+                else if strings.compare(value, "soft") == 0
+                    gen8086.floats_option = 1
+                else if strings.compare(value, "auto") == 0
+                    gen8086.floats_option = 2
+                else
+                    usage()
+                opt_floats = true
                 i++
             }
             else if strings.compare(arg, "-varsaddress") == 0 and value != 0 {
@@ -781,6 +797,8 @@ main {
         out.nl()
         out.puts("  -varshigh N    in its high ram, bank N;  -varsaddress A: at address A ($hex or decimal)")
         out.nl()
+        out.puts("  -floats KIND   on an 8086 machine: float arithmetic for the 8087 (hard), without one (soft), or both (auto)")
+        out.nl()
         out.puts("  -noopt         with -codegen own: every IR instruction translated by itself, no value tracking")
         out.nl()
         out.puts("  -Xlink arg     one more argument for the link step of the llvm targets, such as -lfoo; can be repeated")
@@ -888,6 +906,11 @@ main {
             ; (for the front end a 6809 machine is what a Z80 machine is: the language of
             ; llvm16, assembly of its own in %asm)
             is_i8086 = target.i8086()
+            if opt_floats and not is_i8086 {
+                out.err()
+                out.puts("error: -floats: this target has one kind of float arithmetic (the option is for the 8086 machines)\n")
+                out.exit(1)
+            }
             importer.z80 = is_z80 or is_m6809 or is_i8086
             importer.m6809 = is_m6809
             importer.i8086 = is_i8086

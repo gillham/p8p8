@@ -343,6 +343,13 @@ test:	$(TESTBIN) $(P8P8)
 	@grep -q '^    call  p8rt_div16$$' $(OUT)/divmix.asm
 	@grep -q '^    org  256$$' $(OUT)/divmix.asm
 	@grep -q '^    cpu  8086$$' $(OUT)/divmix.asm
+	@$(P8P8) -lib lib -target dos -floats soft -asm -out $(OUT) tests/programs/floatcast.p8
+	@grep -q '^%define p8f_mode 1$$' $(OUT)/floatcast.asm
+	@$(P8P8) -lib lib -target dos -floats hard -asm -out $(OUT) tests/programs/floatcast.p8
+	@grep -q '^%define p8f_mode 0$$' $(OUT)/floatcast.asm
+	@$(P8P8) -lib lib -target dos -asm -out $(OUT) tests/programs/floatcast.p8
+	@grep -q '^%define p8f_mode 2$$' $(OUT)/floatcast.asm
+	@if $(P8P8) -lib lib -target cx16 -floats soft -check tests/programs/floatcast.p8 > /dev/null 2>&1; then echo "-floats was taken for a target that has no choice"; exit 1; fi
 	@echo "test m6809 (the 6809 code generator writes its assembly: no assembler is needed for that)"
 	@$(P8P8) -lib lib -target sim6809 -asm -out $(OUT) tests/programs/divmix.p8
 	@grep -q '^    jsr  p8rt_div16$$' $(OUT)/divmix.asm
@@ -597,7 +604,7 @@ doscmp:	$(P8P8)
 # make dosexecmp: the same programs as .EXE files (the dosexe target: code and data in
 # segments of their own).
 dossoftcmp:	$(P8P8)
-	@DOSCMP_FLOATS=software tests/doscmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/dos/*.p8)
+	@DOSCMP_FLOATS=soft tests/doscmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/dos/*.p8)
 
 dosnofpucmp:	$(P8P8)
 	@DOSCMP_NOFPU=1 tests/doscmp.sh $(P8P8) $(wildcard tests/programs/float*.p8 tests/programs/longfloat_in.p8 tests/conformance/floating.p8)

@@ -77,6 +77,7 @@ gen8086 {
     ; and the data in another, each counted from 0, after a header that is written
     ; here.  Else the program is one piece from the load address on (a .COM file).
     bool exe = false
+    ubyte floats_option = 255       ; -floats: 0 hard, 1 soft, 2 auto; 255: as the target file says
     bool[32] need_rt                ; the routines of the system calls (the RT_ numbers)
     const ubyte RT_MOVE = 0
     const ubyte RT_FILL = 1
@@ -613,14 +614,19 @@ gen8086 {
             ; How the library's float routines are written: for the 8087 alone (0),
             ; without one (1), or both, with the choice made when the program starts
             ; (2).  The target file says which (floats = 8087, software or auto).
+            ; -floats on the command line comes before that.
             ^^ubyte how = target.text("floats")
+            ubyte mode = 2
+            if how != 0 and (strings.compare(how, "8087") == 0 or strings.compare(how, "hard") == 0)
+                mode = 0
+            else if how != 0 and (strings.compare(how, "software") == 0 or strings.compare(how, "soft") == 0)
+                mode = 1
+            else if how != 0 and strings.compare(how, "auto") != 0
+                error("the target file's floats is none of 8087 (hard), software (soft) and auto", how)
+            if floats_option != 255
+                mode = floats_option
             put("%define p8f_mode ")
-            if how != 0 and strings.compare(how, "8087") == 0
-                put("0")
-            else if how != 0 and strings.compare(how, "software") == 0
-                put("1")
-            else
-                put("2")
+            putn(mode)
             nl()
         }
         if exe {

@@ -205,6 +205,8 @@ Options are upstream's where both have them, with one dash or two.
   `prog8c-llvm`'s back end, for the 6502 and the 68000 machines.
 - `-cpu 6502|65c02|65816` is p8p8's: the CPU to write 6502 code for, in
   place of the one the target's file names.
+- `-floats auto|hard|soft` is p8p8's: on an 8086 machine, which float
+  arithmetic the program has (see the README's options).
 - `-map` is p8p8's: after the build, the program's map (`name.p8map`),
   which `p8size` reports from.  Nothing changes without it.
 - `-Xcompile` is there for llvm32 only.

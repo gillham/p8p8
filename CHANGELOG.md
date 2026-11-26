@@ -22,8 +22,8 @@
   data and stack in another, with the header written by the code generator
   (no linker).  Floats are IEEE doubles: the arithmetic is there with the
   8087's instructions and without them, and a program uses the 8087 when
-  it finds one (`floats = 8087` or `floats = software` in a target file
-  leaves the other kind out).  `floats` prints 15 digits, and its `sin`,
+  it finds one (`-floats hard` or `-floats soft`, or `floats` in a target
+  file, leaves the other kind out).  `floats` prints 15 digits, and its `sin`,
   `cos`, `tan`, `atan`, `ln`, `log2`, `exp` and `pow` are series in Prog8.  `-run`
   starts the program in DOSBox-X, and `make doscmp`, `make dosexecmp`,
   `make dossoftcmp` and `make dosnofpucmp` compare what the test programs

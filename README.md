@@ -61,8 +61,8 @@ The command is `p8c`.
   `.EXE` file of the same program, with 64 KB for its code and another
   64 KB for its data and stack; no linker is needed.  Floats are IEEE
   doubles, with the 8087 where the machine has one and without it where
-  not: the program finds out when it starts (a target file can ask for
-  one kind alone, `floats = 8087` or `floats = software`).  The test programs print what they print on the host, in DOSBox-X as an
+  not: the program finds out when it starts (`-floats hard` or `-floats
+  soft` asks for one kind alone, as `floats` in a target file does).  The test programs print what they print on the host, in DOSBox-X as an
   8086 with and without an 8087; nothing was run on a real machine, and
   the keyboard's routines were not run at all.
   The upper 32 KB of a 64 KB machine are memory for data (the `highram`
@@ -307,6 +307,7 @@ Options p8p8 has that the reference compiler does not:
 | `-nooverlays` | take no notice of `%overlay`: the program is built in one piece, as on a machine without overlays |
 | `-overlayinfo` | after a 6502 program is built: every block (and the larger subroutines of the ones that stay) with its bytes and whether it could go into an overlay, or why not |
 | `-meminfo` | after a 6502 program is built: what it takes of main memory and of each overlay, and what is left (`-verbose` prints this too) |
+| `-floats auto\|hard\|soft` | on an 8086 machine (`dos`, `dosexe`): the float arithmetic with the 8087's instructions alone (`hard`), without them (`soft`), or both, with the program looking for an 8087 when it starts (`auto`, which the targets have without the option).  An error on another target.  p8p8's own |
 | `-map` | after a program is built by one of p8p8's code generators (6502 family, Z80, 6809, 68000): its map, `name.p8map`, with the address and the bytes of every block, subroutine and variable.  `p8size` reads it (see below) |
 | `-libpath` | print the library directory that is used |
 | `-report <dir>` | write a report of this run into the new directory `<dir>` (see below); `-reportnosource` leaves the program's sources out of it |

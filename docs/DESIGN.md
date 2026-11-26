@@ -1609,8 +1609,8 @@ of a `p8f_` routine: it writes where DI points, which may be a place.
 The routines are assembly at the end of the library's `floats` module
 (`lib/targets/i8086/floats.p8`), each written twice: with the 8087's
 instructions, and without them.  The code generator's first line for a
-program with floats is `%define p8f_mode`, from the target file's `floats`
-key: 0 for the 8087 alone, 1 for software alone, 2 (`auto`, the default)
+program with floats is `%define p8f_mode`, from `-floats` on the command
+line or else the target file's `floats` key: 0 for the 8087 alone, 1 for software alone, 2 (`auto`, the default)
 for both; then each routine begins by looking at `floats.has87`, which
 `p8f_init` sets when the program starts (after `fninit` the status word's
 low byte reads 0 and the control word $03xx when an 8087 is there).  With
