@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	stcmp stscreen a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	stcmp stscreen stargs a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -513,9 +513,15 @@ coppercmp:	$(P8P8)
 
 # the Atari ST (the atarist target): the programs as GEMDOS programs in Hatari, against
 # the host.  ST_TOS names a TOS image; without it Hatari runs its EmuTOS.
-STTESTS=tests/hello.p8 $(wildcard tests/programs/*.p8) $(CONFTESTS) $(wildcard tests/atarist/*.p8)
+STTESTS=tests/hello.p8 $(wildcard tests/programs/*.p8) $(CONFTESTS) $(patsubst %.out,%.p8,$(wildcard tests/atarist/*.out))
 stcmp:	$(P8P8)
 	@tests/stcmp.sh $(P8P8) $(STTESTS)
+
+# make stargs: an ST program's command line (tests/atarist/args.sh)
+stargs:	$(P8P8)
+	@tests/atarist/args.sh $(P8P8) > build/stargs.txt 2>&1; \
+	if cmp -s build/stargs.txt tests/expected/stargs.txt; then echo "Atari ST command line: as expected"; \
+	else echo "Atari ST command line: DIFFERENT"; diff build/stargs.txt tests/expected/stargs.txt | head -20; exit 1; fi
 
 # make stscreen: the ST's text screen in its three resolutions, read back from the
 # screen's memory (tests/stscreen.sh)

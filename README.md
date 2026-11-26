@@ -31,8 +31,8 @@ The command is `p8c`.
   (a bare 68020 in QEMU), the Amiga 1200 and the Amiga 500: it writes vasm
   assembly.  `-target atarist` is p8p8's own: the Atari ST, a GEMDOS program
   (`.tos`) with its text on the VT-52 console (40 or 80 columns and 16, 4 or
-  2 colours, as the screen's mode has them).  No floats there yet, no files,
-  no GEM.
+  2 colours, as the screen's mode has them), files through GEMDOS
+  (`diskio`) and the command line.  No floats there yet, no GEM.
 - For the Z80 there is a code generator too: `-target cpm`, `-target trs80`
   (the TRS-80 Model I and III) and `-target trs80m4` (the Model 4) build a
   CP/M program and TRS-80 command files with z88dk (its assembler; for a
@@ -224,7 +224,8 @@ console (`P8P8_VAMOS` names it when it is not in the PATH).
 `-target atarist` writes a `.tos` file for the Atari ST (vasm alone, its
 `-Ftos`); `-run` starts it in Hatari (`P8P8_HATARI` names it, with the
 options for the machine and the TOS, when plain `hatari` is not what is
-wanted).
+wanted).  [docs/HATARI.md](docs/HATARI.md) has how to run and debug ST
+programs in Hatari without a window.
 
 Without an option that says what to do, `p8c` compiles, as `prog8c` does:
 a program for a 6502 or 68000 machine, the LLVM IR (`.ll`) for an llvm
@@ -437,7 +438,7 @@ suites need 64tass, x16emu and VICE as well.
 | `tools/benchmega65.sh` | loops of long, word and byte arithmetic on the MEGA65 as 6502 code and as 45GS02 code |
 | `make qemucmpir` | the same programs built from p8p8's IR by `prog8c-llvm`'s 68000 back end (`-codegen upstream`) |
 | `make qemucmp`, `make amigacmp`, `make amigacmp500` | programs built for qemu68k, the Amiga 1200 and the Amiga 500 by both compilers print the same in QEMU and in vamos |
-| `make stcmp`, `make stscreen` | the Atari ST: programs built for `atarist` print in Hatari what they print on the host (`ST_TOS` names a TOS image, without it Hatari's EmuTOS runs; a program that Hatari's 68000 stops for a word at an odd address is counted apart), and the text screen in the three resolutions, read back from the screen's memory |
+| `make stcmp`, `make stscreen`, `make stargs` | the Atari ST: programs built for `atarist` print in Hatari what they print on the host (`ST_TOS` names a TOS image, without it Hatari's EmuTOS runs; a program that Hatari's 68000 stops for a word at an odd address is counted apart), and the text screen in the three resolutions, read back from the screen's memory; `diskio` (a test of its own among the programs) and the command line |
 | `tools/bench68k.sh` | how long small benchmarks take on an Amiga 500 in Copperline, from both compilers |
 | `tools/bench65.sh` | the same benchmarks on a Commander X16 (`x16emu -c816`), from the reference compiler and from p8p8 for the 65C02 and the 65816 |
 | `tools/benchx16.sh` | upstream's benchmark program (ten workloads) on a Commander X16, built by the reference compiler and by p8p8 for the 65C02 and the 65816 |

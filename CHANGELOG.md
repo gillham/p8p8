@@ -34,10 +34,16 @@
   mode: 40 columns and 16 colours, 80 and 4, or 80 in black and white
   (`txt.width`, `txt.colors`; `txt.color` makes of a colour what the mode
   has).  `-run` starts Hatari.  `make stcmp` and `make stscreen` test it in
-  Hatari, under a TOS image or its EmuTOS.  No floats, files or GEM yet.
+  Hatari, under a TOS image or its EmuTOS.  `diskio` is on GEMDOS's file
+  handles, with longs for sizes and addresses (more than 64 KB in a file
+  or in one read), and `sys.argc()`/`sys.argv()` have the command line.
+  No floats or GEM yet.
 
 ### Fixed
 
+- 68000 code generator: a byte or word argument for an address register
+  went through d0 after d0 had its own argument (seen with an `asmsub`
+  that takes a `uword` in `A0` and something else in `D0`).
 - 68000 machines: `sqrt()` of a uword could give 255, depending on what the
   code before it had left in a register (a fixed copy of upstream's
   routine is in the library's `common/`).

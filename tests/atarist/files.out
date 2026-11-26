@@ -1,0 +1,16 @@
+true \P8TEST
+truefalse
+10:first line
+6:second
+4:unix
+21:third, without an end
+true second 18 46 46
+true 300 0
+true true 181
+falsetruefalse false 33
+1 LINES.TXT
+LINES.TXT
+SUB\
+LINES.TXT prg 46 1
+0 false
+true 70000 70000 0 false

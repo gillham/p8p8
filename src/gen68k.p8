@@ -1348,6 +1348,14 @@ gen68k {
             }
             a = a.next
         }
+        ; (the address registers before the data registers: a byte or a word on its way
+        ;  into an address register goes through d0, which may be an argument's own)
+        a = i.args
+        while a != 0 {
+            if a.slot >= 18 and a.slot < 25
+                to_slot(a.slot, a.reg, a.value, a.type)
+            a = a.next
+        }
         a = i.args
         while a != 0 {
             if a.slot >= 25 and a.slot <= 32 {
@@ -1357,7 +1365,7 @@ gen68k {
                 putn(a.slot - 25)
                 nl()
             }
-            else if a.slot < ir.SLOT_FLAGS
+            else if a.slot < 18
                 to_slot(a.slot, a.reg, a.value, a.type)
             a = a.next
         }
