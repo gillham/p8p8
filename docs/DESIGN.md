@@ -1561,8 +1561,19 @@ three passes, twice over:
 
 The places that are left get memory (`still_named`).  Sizes of the `.COM`
 files without the pass and with it: divmix 2180 and 1359 bytes, functions
-5084 and 3206, strlib 10302 and 5653 (the 6809's are 1123, 2808 and 4227:
-its library has the number and string routines in assembly).
+5084 and 3206, strlib 10302 and 5653.
+
+The library then got what the 6809's has: the digits of numbers (`decimal`,
+one routine for every size, with `div`; `hexadecimal`), the reading of
+numbers (`str2uword`, `hex2uword`) and `strings.length`, `ncopy` and
+`compare` as `asmsub`s with their arguments in registers.  And a routine in
+assembly that nothing uses is left out on an 8086 machine
+(`irprune.asmsubs_kept` is false there, as for the 6502): the names that
+assembly uses are found in the form the generator writes them
+(`irprune.mangled`: `_conv__string_out` is `conv.string_out`), so what
+assembly alone names stays.  Before that every program carried all of
+`textio`'s and `diskio`'s routines.  With both: divmix 903 bytes, functions
+2300, strlib 3986 (the 6809's are 1123, 2808 and 4227).
 
 `sys.wait` counts 60ths of a second on the timer chip's first counter (the
 8253 that every PC has, read through ports $43 and $40).  The BIOS has it

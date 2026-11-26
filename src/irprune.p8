@@ -48,6 +48,7 @@ irprune {
     ; does not: then an asmsub is kept like a subroutine, when something refers to it,
     ; except those of the blocks that the generated code calls by name.
     bool asmsubs_kept = true
+    bool mangled = false            ; assembly names the program's things as "_block__name" (an 8086 machine)
 
     sub runtime_block(^^ubyte name) -> bool {
         return strings.compare(name, "prog8_lib") == 0 or strings.compare(name, "prog8_math") == 0
@@ -382,6 +383,23 @@ irprune {
             while stop > start and text[stop - 1] == '.'
                 stop--
             mark_name(text + start, stop - start)
+            if mangled and text[start] == '_' and stop - start > 1 {
+                ; (a name as the 8086 code generator writes it: "_block__name" is
+                ; block.name)
+                buf.clear(scratch)
+                long m = start + 1
+                while m < stop {
+                    if text[m] == '_' and m + 1 < stop and text[m + 1] == '_' {
+                        buf.add_byte(scratch, '.')
+                        m += 2
+                    }
+                    else {
+                        buf.add_byte(scratch, text[m])
+                        m++
+                    }
+                }
+                mark_name(scratch.data, scratch.len)
+            }
             if blockname != 0 {
                 buf.clear(scratch)
                 buf.add_str(scratch, blockname)
