@@ -4,8 +4,9 @@
 
 ### Added
 
-- A code generator for the 8086 (`src/gen8086.p8`): it writes assembly for
-  nasm, with nothing that the 8086 and 8088 lack.  `-target dos` builds an
+- A code generator for the 8086 (`src/gen8086.p8`, with a pass over its
+  assembly in `src/peep8086.p8`): it writes assembly for nasm, with nothing
+  that the 8086 and 8088 lack.  `-target dos` builds an
   MS-DOS `.COM` program: one segment of 64 KB.  `textio` is the BIOS's text
   screen (16 colours, the cursor, cells read and written, scrolling) and
   keyboard (a key without a character is 128 plus its scan code); redirected

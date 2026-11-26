@@ -28,6 +28,7 @@
 %import mem
 %import out
 %import target
+%import peep8086
 
 gen8086 {
     %option ignore_unused
@@ -500,6 +501,21 @@ gen8086 {
         if body == 0
             body = buf.new(65536)
         buf.clear(body)
+        ; (the memory-mapped variables, for the pass over the assembly: their values may
+        ; change by themselves)
+        if peep8086.volatile == 0
+            peep8086.volatile = buf.new(1024)
+        buf.clear(peep8086.volatile)
+        buf.add_byte(peep8086.volatile, '\n')
+        ^^ir.Var mv = p.vars
+        while mv != 0 {
+            if mv.kind == ir.V_MEMVAR {
+                o = peep8086.volatile
+                name(mv.name)
+                nl()
+            }
+            mv = mv.next
+        }
         o = body
         put("p8_init_globals:")
         nl()
@@ -660,6 +676,7 @@ gen8086 {
         put("; ---- ")
         put(s.name)
         nl()
+        long from = o.len
         part++
         this_sub = s
         this_index = index_of(s.name)
@@ -707,6 +724,10 @@ gen8086 {
         nl()
         this_sub = 0
         this_index = -1
+        if optimize {
+            peep8086.run(o, from)
+            still_named(from)
+        }
         register_cells()
         if carry_cell {
             buf.add_str(cells, "p8c_")
@@ -831,6 +852,33 @@ gen8086 {
             nl()
             line("sahf")
             carry_loaded = true
+        }
+    }
+
+    ; After the pass over the assembly: only the IR registers whose places the lines from
+    ; position from on still name get one.
+    sub still_named(long from) {
+        uword r
+        for r in 1 to ir.regcount
+            reg_used[r] = 0
+        long p = from
+        long last = o.len - 6
+        while p < last {
+            if o.data[p] == 'p' and o.data[p + 1] == '8' and o.data[p + 2] == 'r' and o.data[p + 3] == '_' {
+                p += 4
+                while p < o.len and o.data[p] >= '0' and o.data[p] <= '9'
+                    p++
+                p++
+                long n = 0
+                while p < o.len and o.data[p] >= '0' and o.data[p] <= '9' {
+                    n = n * 10 + (o.data[p] - '0')
+                    p++
+                }
+                if n >= 1 and n <= ir.regcount
+                    reg_used[n] = 1
+            }
+            else
+                p++
         }
     }
 
@@ -975,7 +1023,24 @@ gen8086 {
 
     ; "    mnemonic  first, second": with a constant as it stands, else through AL or AX
     sub first_op_second(str mnemonic, ^^ir.Instr i, ubyte group, ubyte k, ubyte w) {
-        if group == 1 or group == 4 {
+        if group <= 2 {
+            ; (a register's place: through AL or AX, where the pass over the assembly
+            ; joins it with what is around it)
+            load_cell(i.r1, k, w)
+            ins(mnemonic)
+            if w == 1
+                put("  al, ")
+            else
+                put("  ax, ")
+            if group == 1
+                putn(immediate(i, k, w))
+            else
+                cell(i.r2, k, w)
+            nl()
+            store_cell(i.r1, k, w)
+            return
+        }
+        if group == 4 {
             ins(mnemonic)
             put("  ")
             first(i, group, k, w)
@@ -996,7 +1061,7 @@ gen8086 {
 
     ; the second operand into AL or AX, when it is no constant (before first_op_second)
     sub second_at_hand(^^ir.Instr i, ubyte group, ubyte k, ubyte w) {
-        if group == 1 or group == 4
+        if group != 3
             return
         if w == 1
             op_second("mov  al, ", i, group, k, 1)
@@ -1091,14 +1156,26 @@ gen8086 {
             return
         if count > 1
             op_imm("mov  cl, ", count)
-        ins(mnemonic)
-        put("  ")
-        first(i, group, 0, w)
+        if group <= 2 {
+            load_cell(i.r1, 0, w)
+            ins(mnemonic)
+            if w == 1
+                put("  al")
+            else
+                put("  ax")
+        }
+        else {
+            ins(mnemonic)
+            put("  ")
+            first(i, group, 0, w)
+        }
         if count > 1
             put(", cl")
         else
             put(", 1")
         nl()
+        if group <= 2
+            store_cell(i.r1, 0, w)
     }
 
     ; Times, divided by, or the remainder by a constant that is a power of two, without
@@ -1113,7 +1190,15 @@ gen8086 {
         ubyte n = power_of_two(constant)
         if n == 255
             return false
-        if kind == 7 {
+        if kind == 7 and group == 1 {
+            load_cell(i.r1, 0, size)
+            if size == 1
+                op_imm("and  al, ", constant - 1)
+            else
+                op_imm("and  ax, ", constant - 1)
+            store_cell(i.r1, 0, size)
+        }
+        else if kind == 7 {
             ins("and  ")
             first(i, group, 0, size)
             put(", ")
@@ -1291,6 +1376,15 @@ gen8086 {
 
     ; first = -first
     sub negate(^^ir.Instr i, ubyte group, ubyte size) {
+        if size <= 2 and group <= 2 {
+            load_cell(i.r1, 0, size)
+            if size == 1
+                line("neg  al")
+            else
+                line("neg  ax")
+            store_cell(i.r1, 0, size)
+            return
+        }
         if size <= 2 {
             op_first("neg  ", i, group, 0, size, "")
             return
@@ -1737,7 +1831,21 @@ gen8086 {
                 if i.op == ir.OP_INCM or i.op == ir.OP_DECM
                     where = 3
                 bool up = i.op == ir.OP_INC or i.op == ir.OP_INCM
-                if size == 1 or size == 2 {
+                if (size == 1 or size == 2) and where == 1 {
+                    load_cell(i.r1, 0, size)
+                    if up {
+                        if size == 1
+                            line("inc  al")
+                        else
+                            line("inc  ax")
+                    }
+                    else if size == 1
+                        line("dec  al")
+                    else
+                        line("dec  ax")
+                    store_cell(i.r1, 0, size)
+                }
+                else if size == 1 or size == 2 {
                     if up
                         op_first("inc  ", i, where, 0, size, "")
                     else
@@ -1784,6 +1892,14 @@ gen8086 {
                     place = 3
                 if size == 0
                     unsupported(i)
+                else if size <= 2 and place == 1 {
+                    load_cell(i.r1, 0, size)
+                    if size == 1
+                        line("not  al")
+                    else
+                        line("not  ax")
+                    store_cell(i.r1, 0, size)
+                }
                 else if size <= 2 {
                     op_first("not  ", i, place, 0, size, "")
                     ; ("not" leaves no flags)
@@ -1835,11 +1951,23 @@ gen8086 {
                 if size <= 2 {
                     ; (the 8086 shifts by CL, as many bits as it says: 16 and more leave
                     ; nothing)
-                    ins(shift_name(i.op, false))
-                    put("  ")
-                    first(i, spot, 0, size)
-                    put(", cl")
-                    nl()
+                    if spot == 1 {
+                        load_cell(i.r1, 0, size)
+                        ins(shift_name(i.op, false))
+                        if size == 1
+                            put("  al, cl")
+                        else
+                            put("  ax, cl")
+                        nl()
+                        store_cell(i.r1, 0, size)
+                    }
+                    else {
+                        ins(shift_name(i.op, false))
+                        put("  ")
+                        first(i, spot, 0, size)
+                        put(", cl")
+                        nl()
+                    }
                     if spot == 3 and flags_wanted(i)
                         op_first("cmp  ", i, spot, 0, size, ", 0")
                 }
@@ -2044,6 +2172,17 @@ gen8086 {
         bool left = false
         when opc {
             ir.OP_LSL, ir.OP_LSLI, ir.OP_LSLN, ir.OP_LSLM, ir.OP_LSLNM, ir.OP_ROL, ir.OP_ROLM, ir.OP_ROXL, ir.OP_ROXLM -> left = true
+        }
+        if size <= 2 and place == 1 {
+            load_cell(i.r1, 0, size)
+            ins(shift_name(opc, false))
+            if size == 1
+                put("  al, 1")
+            else
+                put("  ax, 1")
+            nl()
+            store_cell(i.r1, 0, size)
+            return
         }
         if size <= 2 {
             ins(shift_name(opc, false))

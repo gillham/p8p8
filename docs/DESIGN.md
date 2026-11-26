@@ -1445,11 +1445,13 @@ address is 16 bits, and no segment register is ever changed.  That is a
 end.
 
 Every IR register has a place in memory (`p8r_S_N`, as wide as its type).
-The 8086 works on memory directly, so most IR instructions are one or two
-of its own: `add word [place], 5`, or the second operand through AL or AX
-when it is no constant (`mov ax, [b]` and `add [a], ax`).  `inc`, `dec`,
-`neg`, `not` and the shifts work on the place itself; a shift by more than
-one bit goes through CL, as the 8086 has no other.  BX holds addresses: an
+An instruction on a register takes the place into AL or AX, works there
+with the second operand straight from memory or as a constant, and puts
+the result back; the pass over the assembly (below) joins that with what
+is around it.  An instruction on a variable works on the memory itself, as
+the 8086 can: `add word [name], 5`, `inc byte [name]`, or the second
+operand through AL or AX when it is no constant.  A shift by more than one
+bit goes through CL, as the 8086 has no other.  BX holds addresses: an
 indexed load is the index in BX, shifted for the element's size, plus the
 array's address, and a load through a pointer is `mov bx, [pointer]` and an
 offset in the instruction.  A long is two words, the low one first, with
@@ -1529,7 +1531,40 @@ from behind the environment's strings.  `tests/dos/screen.p8` prints with
 the screen switched on by hand and reads the cells back; `tests/dos/args.p8`
 is started with `tests/dos/args.args`.
 
-Not there yet: floats, a pass over the assembly, `diskio`, `.EXE` files.
+`src/peep8086.p8` goes over each subroutine's lines (not with `-noopt`),
+three passes, twice over:
+
+- `loads` follows what AX, BX, CX, DX, SI, DI and the low halves hold: a
+  place, a variable by its name, or a constant.  A load of what the
+  register holds is dropped.  An instruction that reads a place reads the
+  register that holds it instead, or what the place was given (a
+  constant where the instruction takes one, a variable or another place
+  where its other operand is no memory); a place stands for a variable
+  once only, so the program reads its variables as often as it did.  A
+  write to named memory forgets what shares a byte with it (names with
+  offsets are compared as ranges, so the halves of a long are apart); a
+  write through a register or to an address forgets every variable; a
+  call forgets the registers and the variables, and a label everything.
+  Memory-mapped variables (`volatile`) are not followed.  A `mov` changes
+  no flag on the 8086, so none of this needs to look at flags.
+- `stores` drops a `mov` to a place that no line reads, or that the same
+  store writes over before a jump, a label or a line that names it.
+- `small`: what follows a `ret` or `jmp` up to a label; `call` and `ret` as
+  `jmp`; a conditional jump over a `jmp` as the opposite jump; a load of a
+  register that gets another value before anything reads it (the halves
+  of AX may go one after the other: `mov al` and `xor ah, ah`); `mov ax, X`
+  and `mov r, ax` as `mov r, X` when AX is loaded next; `mov P, ax`,
+  `mov ax, Q`, `add ax, P` as `add ax, Q`; `cmp r, 0` dropped after the
+  arithmetic that left r's flags and before a jump on zero, else written
+  `test r, r`; `mov r, 0` as `xor r, r` where an instruction that sets all
+  flags follows before anything can read them.
+
+The places that are left get memory (`still_named`).  Sizes of the `.COM`
+files without the pass and with it: divmix 2180 and 1359 bytes, functions
+5084 and 3206, strlib 10302 and 5653 (the 6809's are 1123, 2808 and 4227:
+its library has the number and string routines in assembly).
+
+Not there yet: floats, `diskio`, `.EXE` files.
 
 ## Machines and the library
 

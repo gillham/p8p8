@@ -54,7 +54,8 @@ The command is `p8c`.
   `textio` is the BIOS's text screen in its 16 colours (cursor, cells read
   and written, scrolling) and the BIOS's keyboard, arrow and function keys
   included; when the program's output or input is redirected, it goes
-  through DOS.  `asmsub` and `extsub` name the 8086's registers, the
+  through DOS.  A pass over the assembly takes out what the generator's simple way
+  leaves.  `asmsub` and `extsub` name the 8086's registers, the
   command line is there, and `sys.inp` and `sys.outp` are the I/O ports.
   Not there yet: floats, `diskio`, `.EXE` files.  The test programs without
   floats print what they print on the host, in DOSBox-X; nothing was run on
