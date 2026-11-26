@@ -1567,8 +1567,9 @@ The library then got what the 6809's has: the digits of numbers (`decimal`,
 one routine for every size, with `div`; `hexadecimal`), the reading of
 numbers (`str2uword`, `hex2uword`) and `strings.length`, `ncopy` and
 `compare` as `asmsub`s with their arguments in registers.  And a routine in
-assembly that nothing uses is left out on an 8086 machine
-(`irprune.asmsubs_kept` is false there, as for the 6502): the names that
+assembly (`asmsub`) that nothing uses is left out on an 8086 machine, and
+on a Z80 and a 6809 machine too (`irprune.asmsubs_kept` is false there, as
+for the 6502): the names that
 assembly uses are found in the form the generator writes them
 (`irprune.mangled`: `_conv__string_out` is `conv.string_out`), so what
 assembly alone names stays.  Before that every program carried all of

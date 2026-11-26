@@ -1217,9 +1217,10 @@ main {
             oname = out_name
         bool is_llvm = buf.bytes_equal(importer.family, "llvm", 4)
         irprune.asmsubs_kept = not opt_own or is_llvm
-        ; (an 8086 machine: a routine in assembly that nothing uses is left out, and what
-        ; assembly names is found by the names as the code generator writes them)
-        if is_i8086 {
+        ; (a Z80, 6809 or 8086 machine: a routine in assembly that nothing uses is left
+        ; out, and what assembly names is found by the names as the code generators
+        ; write them)
+        if is_i8086 or is_z80 or is_m6809 {
             irprune.asmsubs_kept = false
             irprune.mangled = true
         }
