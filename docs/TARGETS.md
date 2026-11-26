@@ -43,7 +43,9 @@ A `library` value that starts with `../` is beside the configuration file's
 directory (`library = ../vic20` for a variant that shares another machine's
 modules); any other path is from where the compiler runs, as upstream has
 it.  The assembler is given the configuration file's directory as an include
-directory, for the files its startup code includes.
+directory, for the files its startup code includes.  The target's own
+directory is searched before the one it names: `prodos` takes the Apple II's
+library from `../appleii` and has a `diskio.p8` of its own.
 
 ## Where the library is
 

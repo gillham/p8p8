@@ -17,7 +17,16 @@
   `diskio.file_type` says what `f_open_w` makes: `BINARY` (a B file with
   the address and length that BSAVE writes; every byte comes back as
   written) or `TEXT` (a T file as Applesoft writes them: bit 7 set, ended
-  by a 0 byte).  No ProDOS yet.
+  by a 0 byte).
+- The Apple II with ProDOS as a target (`-target prodos`): the machine and
+  its library are the `appleii` target's; the program is a system program
+  (a SYS file for `$2000`, memory up to `$bf00`) that ends with ProDOS's
+  QUIT, and `diskio` is ProDOS's MLI: files of any type (`file_type`,
+  `aux_type`), exact lengths, `f_seek` and `f_tell`, directories (`chdir`,
+  `mkdir`, `rmdir`, `curdir`) and their list.
+- A 6502 machine's target file that names another machine's library
+  (`library = ../appleii`) has its own directory searched first, as the
+  other CPUs' have: `prodos` has only its `diskio` there.
 
 ## 0.6.0
 

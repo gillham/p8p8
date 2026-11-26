@@ -95,7 +95,7 @@ Which suite after which change (see the Makefile for all of them):
 | the 45GS02 code (`-target mega65`) | `make emucmp65` (needs xmega65; 6502 code against 45GS02 code on the MEGA65) |
 | assembly by hand with long addresses | `make farcheck` (x16emu, xscpu64, xmega65) |
 | what programs draw | `GFXCMP_CODEGEN=own make gfxcmp` |
-| the Apple II's library (`lib/targets/appleii`) | `make a2cmp` (bobbin); its `diskio`: `make a2dos A2DOS33=<a DOS 3.3 disk image>` |
+| the Apple II's library (`lib/targets/appleii`) | `make a2cmp` (bobbin); its `diskio`: `make a2dos A2DOS33=<a DOS 3.3 disk image>`; the `prodos` target: `make a2prodos A2PRODOS=<a ProDOS disk image>` |
 | the Atari's library (`lib/targets/atari`) | `make ataricmp` (atari800) |
 | labels or layout of any code generator's output, `sizemap.p8`, `p8size.py` | `make mapcheck` |
 

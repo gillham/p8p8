@@ -973,8 +973,8 @@ main {
                     tlib = strtab.intern(rb.data, rb.len as uword)
                 }
                 importer.target_library = tlib
-                ; (a Z80 machine's own modules come before those of the library it shares)
-                if (is_z80 or is_m6809 or is_i8086) and target.dir != 0
+                ; (a machine's own modules come before those of the library it shares)
+                if target.dir != 0
                     importer.own_library = target.dir
             }
             else if layered and target.loaded and target.dir != 0

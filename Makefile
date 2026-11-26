@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	a2dos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -593,6 +593,12 @@ ataricmp:	$(P8P8)
 a2dos:	$(P8P8)
 	@if [ -n "$(A2DOS33)" ]; then A2DOS33="$(A2DOS33)" tests/a2dos.sh $(P8P8) | diff -u tests/expected/a2dos.txt - && echo "Apple II files (DOS 3.3): as expected"; \
 	else echo "Apple II files: not run (A2DOS33 names no DOS 3.3 disk image)"; fi
+
+# make a2prodos A2PRODOS=<disk image>: the prodos target's file routines (diskio), run
+# with ProDOS started from a copy of the disk (Apple's too; bobbin comes with one)
+a2prodos:	$(P8P8)
+	@if [ -n "$(A2PRODOS)" ]; then A2PRODOS="$(A2PRODOS)" tests/prodos.sh $(P8P8) | diff -u tests/expected/prodos.txt - && echo "Apple II files (ProDOS): as expected"; \
+	else echo "Apple II files (ProDOS): not run (A2PRODOS names no ProDOS disk image)"; fi
 
 # make z80cmp: the Z80 code generator (new): the test programs built for the host and for
 # CP/M on the Z80 (the cpm target), run in tnylpo, their output compared.
