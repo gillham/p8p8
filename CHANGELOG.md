@@ -7,6 +7,17 @@
 - `-map` for the 8086 machines: the map of a `.COM` program has its
   addresses; that of an `.EXE`, whose code and data are a segment each, is
   one of sections, as on the 68000.
+- `diskio` for the Atari 8-bit computers, through the OS's CIO calls: it
+  works with whatever DOS is loaded (and with other devices that have
+  files, as `H:`).  Files read and written, lines, whole files, the
+  directory's list, delete, rename, exists.  No position in a file: the
+  DOSes count in sectors.
+- `diskio` for the Apple II with DOS 3.3, through DOS's file manager (and
+  RWTS for the catalog's list).  DOS 3.3 keeps no length of a file, so
+  `diskio.file_type` says what `f_open_w` makes: `BINARY` (a B file with
+  the address and length that BSAVE writes; every byte comes back as
+  written) or `TEXT` (a T file as Applesoft writes them: bit 7 set, ended
+  by a 0 byte).  No ProDOS yet.
 
 ## 0.6.0
 

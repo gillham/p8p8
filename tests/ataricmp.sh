@@ -20,7 +20,7 @@ lib=${P8P8_LIB:-lib}
 seconds=${ATARICMP_SECONDS:-20}
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_ataricmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/ref" "$work/at"
+mkdir -p "$work/ref" "$work/at" "$work/h"
 # the reference compiler is told where the machine's modules are by the target file
 libdir=$(cd "$lib/targets/atari" && pwd)
 cp "$libdir/target.properties" "$work/atari.properties"
@@ -30,12 +30,13 @@ run() {
     # p8_sys_startup.cleanup_at_exit, whose address the assembler's label file has),
     # writes the screen's memory to a file and quits.  Its output is thrown away: at
     # the end of its input the monitor repeats its last command for ever.
+    # (H: is an empty directory that a program may write in: tests/atari/files.p8)
     rm -f "$1/$2.scr"
     at=$(sed -n 's/^al \([0-9A-Fa-f]*\) \.p8_sys_startup:cleanup_at_exit$/\1/p' "$1/$2.vice-mon-list")
     [ -n "$at" ] || return
     (cd "$1" && printf 'write bc40 bfff %s.scr\nquit\nquit\n' "$2" | \
         SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -s KILL "$seconds" \
-        atari800 -xl -nobasic -nosound -turbo -bpc "$at" -run "$2.xex" > /dev/null 2>&1) 2> /dev/null
+        atari800 -xl -nobasic -nosound -turbo -hreadwrite -H1 "$work/h" -bpc "$at" -run "$2.xex" > /dev/null 2>&1) 2> /dev/null
 }
 if [ -n "$show" ]; then
     name=$(basename "$1" .p8)

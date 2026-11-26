@@ -1,0 +1,13 @@
+truefalse
+10:first line
+6:second
+0:
+21:third, without an end
+6 first 34 0
+true 250 0
+true true 181
+0 falsetruefalse false 170
+1 LINES.TXT
+LINES.TXT TXT 1
+0 0
+[ ]

@@ -409,7 +409,8 @@ suites need 64tass, x16emu and VICE as well.
 | `make farcheck` | memory beyond 64 KB on the X16's 65816, the SuperCPU and the MEGA65: the addressing modes by hand, the compiler's code and the library's |
 | `make overlaycheck` | programs with overlays (`%overlay n`), with their loader, in x16emu |
 | `make z80cmp`, `make z80ref` | programs built for CP/M print in tnylpo what they print on the host, and what `prog8c-llvm`'s CP/M build prints |
-| `make ataricmp` | the Atari target: the programs built for it by the reference compiler and by `p8c`, both run in atari800 without a window, the text screens they leave compared; and the text screen's routines |
+| `make ataricmp` | the Atari target: the programs built for it by the reference compiler and by `p8c`, both run in atari800 without a window, the text screens they leave compared; the text screen's routines; and the file routines on the emulator's `H:` device |
+| `make a2dos A2DOS33=image` | the Apple II's file routines, run in bobbin from a copy of a disk image that starts DOS 3.3 (Apple's: it does not come with p8p8) |
 | `make a2cmp` | the Apple II target: the programs built for it by the reference compiler and by `p8c`, both run in bobbin, what they print compared; and the text screen's routines |
 | `make trs80cmp`, `make trs80cmp3`, `make trs80cmp4` | the same programs on a TRS-80 Model I, III and 4 in trs80gp (`TRS80GP` names the emulator), against the host |
 | `make z80sys`, `make trs80sys`, `make trs80dos`, `make trs80screen` | on the Z80 machines: the command line and files, the DOS still working after a program has ended, and the screen routines |
