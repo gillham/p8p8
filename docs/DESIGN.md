@@ -1573,7 +1573,28 @@ directory is find-first and find-next with a record of the module's own
 (DOS's default one is where the command line is).  `tests/dos/files.p8`
 runs it all in a directory that it makes and removes.
 
-Not there yet: floats, `.EXE` files.
+The `dosexe` target (`output_format = exe`) is the same program as an
+`.EXE` file with two segments: the code, and the data with the stack at
+its end.  The generator writes the file's 32-byte header itself and nasm
+makes a flat file of three sections (the header, `.text` counted from 0,
+`.data` on a paragraph), so there is no linker.  Nothing in the program
+names a segment, so the header has no relocations: DOS starts the program
+with CS at the code and SS at the data, both from the header, and the
+first instructions copy SS to DS and ES.  Before that they take the
+command line and the number of the environment's segment out of the
+segment that DOS made for the program (`p8dos_tail`, `p8dos_env`; in a
+`.COM` file these names are the addresses $80 and $2c).  The data's
+addresses begin at 256, as a `.COM` file's do, so that no variable is at
+an address that a program takes for none: the data's segment begins 16
+paragraphs before the data.  Everything that is data is written after the
+code: the variables with values, the target's own (`machine_cells`,
+`arguments_data`).  A variable's alignment is bytes of padding counted
+from the data's start, not the assembler's `align`, which would move the
+whole section.  The code is checked against 64 KB and the data against
+`memory_end`.  Assembly of a program's own that has bytes in the code and
+reads them through DS is wrong there.
+
+Not there yet: floats.
 
 ## Machines and the library
 

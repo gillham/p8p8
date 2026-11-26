@@ -11,6 +11,8 @@
 # too (a program with 8086 assembly, which the host cannot build), and
 # tests/dos/<name>.args is the command line it is started with.
 #
+# With DOSCMP_TARGET=dosexe the programs are built for the dosexe target: .EXE files.
+#
 # Usage: tests/doscmp.sh <p8c> <program.p8>...
 #        (needs clang, nasm and dosbox-x; DOSCMP_TIME is the seconds one start of the
 #        emulator may take, 120 when it is not set)
@@ -19,6 +21,11 @@ shift
 lib=${P8P8_LIB:-lib}
 here=$(cd "$(dirname "$0")" && pwd)
 limit=${DOSCMP_TIME:-120}
+# (DOSCMP_TARGET=dosexe: the same programs as .EXE files, with code and data apart)
+machine=${DOSCMP_TARGET:-dos}
+ext=com
+[ "$machine" = dosexe ] && ext=exe
+EXT=$(echo $ext | tr a-z A-Z)
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_doscmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/host" "$work/dos" "$work/c"
@@ -41,15 +48,15 @@ for f in "$@"; do
             continue
         fi
     fi
-    "$p8c" -lib "$lib" -target dos -out "$work/dos" "$f" > "$work/dos.err" 2>&1
-    if [ $? -ne 0 ] || [ ! -f "$work/dos/$name.com" ]; then
+    "$p8c" -lib "$lib" -target "$machine" -out "$work/dos" "$f" > "$work/dos.err" 2>&1
+    if [ $? -ne 0 ] || [ ! -f "$work/dos/$name.$ext" ]; then
         unbuilt=$((unbuilt + 1))
         echo "not built yet: $f: $(grep -v warning "$work/dos.err" | head -1 | cut -c1-110)"
         continue
     fi
     n=$((n + 1))
     short=$(printf 'P%03d' $n)
-    cp "$work/dos/$name.com" "$work/c/$short.COM"
+    cp "$work/dos/$name.$ext" "$work/c/$short.$EXT"
     echo "$short $name $f" >> "$work/list"
 done
 # the emulator, as often as a program stops it
@@ -61,7 +68,7 @@ while :; do
         # (the program's command line, when it has one: tests/dos/<name>.args)
         args=
         [ -f "${f%.p8}.args" ] && args=" $(cat "${f%.p8}.args")"
-        printf '%s.COM%s > %s.OUT\r\nECHO done > %s.END\r\n' "$short" "$args" "$short" "$short" >> "$work/c/RUN.BAT"
+        printf '%s.%s%s > %s.OUT\r\nECHO done > %s.END\r\n' "$short" "$EXT" "$args" "$short" "$short" >> "$work/c/RUN.BAT"
         left=$((left + 1))
     done < "$work/list"
     [ $left -eq 0 ] && break
@@ -88,5 +95,5 @@ while read -r short name f; do
         diff "$work/host/$name.out" "$work/dos/$name.out" | head -4
     fi
 done < "$work/list"
-echo "8086 comparison (MS-DOS in DOSBox-X, against the host): $same the same, $differ different, $unbuilt not built yet, $skipped not for the host"
+echo "8086 comparison (MS-DOS in DOSBox-X, target $machine, against the host): $same the same, $differ different, $unbuilt not built yet, $skipped not for the host"
 [ "$differ" -eq 0 ]

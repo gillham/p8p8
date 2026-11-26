@@ -18,9 +18,11 @@
   is DOS's file handles: files read and written (by lines too), `f_seek`
   and `f_tell`, `save` and `load`, delete, rename, directories made, removed
   and entered, and their lists (`directory`, `list_filenames`, `lf_...`).
-  Not yet: floats, `.EXE` files.  `-run`
-  starts the program in DOSBox-X, and `make doscmp` compares what the test
-  programs print there with the host.  `targets/i8086` is the library of
+  `-target dosexe` builds an `.EXE` file: the code in a segment of its own,
+  data and stack in another, with the header written by the code generator
+  (no linker).  Not yet: floats.  `-run`
+  starts the program in DOSBox-X, and `make doscmp` and `make dosexecmp`
+  compare what the test programs print there with the host.  `targets/i8086` is the library of
   the 8086 machines.
 - The Apple II as a target (`-target appleii`): the II Plus with `-cpu 6502`,
   the IIe, IIc and IIgs.  `textio` on the 40 column screen through the

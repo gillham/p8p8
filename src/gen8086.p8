@@ -73,6 +73,10 @@ gen8086 {
     bool entry_pending = false      ; the subroutine's first label is still to come
     ubyte skip_next = 0             ; so many instructions that follow are done already
     bool wide_error = false         ; the error about a register used wider than it is was said
+    ; An .EXE file (the target's output_format = exe): the code in a segment of its own
+    ; and the data in another, each counted from 0, after a header that is written
+    ; here.  Else the program is one piece from the load address on (a .COM file).
+    bool exe = false
     bool[32] need_rt                ; the routines of the system calls (the RT_ numbers)
     const ubyte RT_MOVE = 0
     const ubyte RT_FILL = 1
@@ -474,6 +478,7 @@ gen8086 {
         o = output
         errors = 0
         labels = 0
+        exe = target.text("output_format") != 0 and strings.compare(target.text("output_format"), "exe") == 0
         need_div = false
         need_divs = false
         need_mul32 = false
@@ -594,9 +599,38 @@ gen8086 {
         raw("; written by p8p8's 8086 code generator, for nasm")
         line("cpu  8086")
         line("bits  16")
-        put("    org  ")
-        putn(load_address())
-        nl()
+        if exe {
+            ; The header of an .EXE file: the file's size in pages of 512 bytes, no
+            ; relocations (nothing in the program names a segment), a header of two
+            ; paragraphs, the memory wanted beyond the file (the data's segment in
+            ; full), then SS (the data's segment, counted from the program's first)
+            ; and SP, and IP and CS.  The data's addresses begin at 256, as a .COM
+            ; file's do (no variable is at an address that a program takes for
+            ; none), so its segment begins 16 paragraphs before the data itself.
+            raw("section .header start=0")
+            line("db  'MZ'")
+            line("dw  p8_file_size % 512")
+            line("dw  (p8_file_size + 511) / 512")
+            line("dw  0")
+            line("dw  2")
+            line("dw  (65536 - 256 - (p8_data_end - p8_data_start) + 15) / 16")
+            line("dw  0xffff")
+            line("dw  p8_code_paragraphs - 16")
+            line("dw  0xfffe")
+            line("dw  0")
+            line("dw  p8_start")
+            line("dw  0")
+            line("dw  0x1c")
+            line("dw  0")
+            line("times  32-($-$$)  db  0")
+            raw("section .text vstart=0 align=16 follows=.header")
+            raw("p8_code_start:")
+        }
+        else {
+            put("    org  ")
+            putn(load_address())
+            nl()
+        }
         raw("p8_start:")
         ; (the machine's first instructions, when it needs any)
         if target.text("startup_code") != 0
@@ -617,9 +651,6 @@ gen8086 {
         if target.text("exit_hook") != 0
             target_lines("exit_hook")
         target_lines("exit_code")
-        ; (places of the machine's own that its routines and its library share)
-        if target.text("machine_cells") != 0
-            target_lines("machine_cells")
         nl()
     }
 
@@ -3281,7 +3312,7 @@ gen8086 {
             if target.text("arguments") != 0
                 target_lines("arguments")
             else
-                lines("p8rt_argc:\nmov  ax, 1\nret\np8rt_argv:\nmov  ax, p8rt_argv_none\nret\np8rt_argv_none:\ndb  0")
+                lines("p8rt_argc:\nmov  ax, 1\nret\np8rt_argv:\nmov  ax, p8rt_argv_none\nret")
         }
         if need_rt[RT_WAITKEY]
             lines("; waits for a key and gives it in AL, without showing it\np8rt_waitkey:\ncall  p8rt_getkey\ntest  al, al\njz  p8rt_waitkey\nret")
@@ -3347,7 +3378,24 @@ gen8086 {
     }
 
     sub variables() {
+        if exe {
+            ; (the code must fit its segment; the data begins on a paragraph)
+            raw("p8_code_end:")
+            raw("    times  -((p8_code_end - p8_code_start) > 65535)  db  0     ; an error here: the program's code is more than 64 KB")
+            raw("p8_code_paragraphs  equ  (p8_code_end - p8_code_start + 15) / 16")
+            raw("section .data vstart=256 align=16 follows=.text")
+            raw("p8_data_start:")
+        }
         raw("; ---- variables with values")
+        ; (places of the machine's own that its routines and its library share)
+        if target.text("machine_cells") != 0
+            target_lines("machine_cells")
+        if need_rt[RT_ARGS] {
+            if target.text("arguments") == 0
+                raw("p8rt_argv_none:  db  0")
+            else if target.text("arguments_data") != 0
+                target_lines("arguments_data")
+        }
         ^^ir.Var v = prog.vars
         while v != 0 {
             if v.kind == ir.V_MEMVAR and v.init != 0 {
@@ -3393,6 +3441,8 @@ gen8086 {
         ; comes after it, and the first instructions clear it)
         raw("; ---- variables without values, and the registers of the code")
         raw("p8_data_end:")
+        if exe
+            raw("p8_file_size  equ  32 + p8_code_paragraphs * 16 + (p8_data_end - p8_data_start)")
         raw("    absolute  p8_data_end")
         raw("p8_bss_start:")
         bss_variables()
@@ -3417,8 +3467,12 @@ gen8086 {
         ; (memory_end: the first address that is not the program's; the stack is above)
         long limit = target.number("memory_end", 0)
         if limit > 0 {
-            put("    times  -((p8_bss_end-p8_start+")
-            putn(load_address())
+            if exe
+                put("    times  -((p8_bss_end-p8_data_start+256")
+            else {
+                put("    times  -((p8_bss_end-p8_start+")
+                putn(load_address())
+            }
             put(") > ")
             putn(limit)
             raw(")  resb  1     ; an error here: the program is too long, it and its variables must end before memory_end of the target")
@@ -3596,9 +3650,21 @@ gen8086 {
     ; the values of a variable
     sub values(^^ir.Var v, ubyte esize) {
         if v.align > 1 {
-            put("    align  ")
+            ; (bytes up to the next address that the number divides; not the
+            ; assembler's "align", which would move a whole section)
+            put("    times  (")
             putn(v.align)
-            nl()
+            if exe
+                put(" - (($-p8_data_start+256) % ")
+            else {
+                put(" - (($-p8_start+")
+                putn(load_address())
+                put(") % ")
+            }
+            putn(v.align)
+            put(")) % ")
+            putn(v.align)
+            raw("  db  0")
         }
         name(v.name)
         put(":")

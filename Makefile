@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	doscmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	doscmp dosexecmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -590,6 +590,11 @@ z80cmp:	$(P8P8)
 # target (.COM files) and run in DOSBox-X, without a window (needs nasm and dosbox-x).
 doscmp:	$(P8P8)
 	@tests/doscmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/dos/*.p8)
+
+# make dosexecmp: the same programs as .EXE files (the dosexe target: code and data in
+# segments of their own).
+dosexecmp:	$(P8P8)
+	@DOSCMP_TARGET=dosexe tests/doscmp.sh $(P8P8) $(wildcard tests/programs/*.p8 tests/conformance/*.p8 tests/z80/*.p8 tests/dos/*.p8)
 
 # make m6809cmp: the 6809 code generator against the host: the programs built for the
 # sim6809 target and run in usim09batch (needs lwasm of lwtools, and usim09batch).

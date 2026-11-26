@@ -25,7 +25,7 @@ main {
         txt.nl()
         uword name = sys.argv(0)
         ubyte length = strings.length(name)
-        txt.print_bool(length > 4 and @(name + length - 4) == '.' and @(name + length - 3) == 'C')
+        txt.print_bool(length > 4 and @(name + length - 4) == '.')
         txt.nl()
         ; (two arguments held at once)
         uword first = sys.argv(1)
