@@ -345,6 +345,18 @@ without an operating system), the Amiga 1200 and the Amiga 500.
   (they use utility.library where there is one).  A program with floats is
   assembled for a 68020 with an FPU there too, as the reference compiler
   does it: the floats library needs both.
+- The Atari ST (`atarist`, a target of p8p8's own) is the Amiga 500's 68000
+  with another system: vasm's `-Ftos` writes the GEMDOS program with its
+  relocations, so the code is what it is for the Amiga, absolute addresses
+  and all.  A TOS program's sections follow each other in memory as long as
+  they are, so the generator ends the text and the data with `even`.  The
+  stack is the library's business (`p8_sys_startup.init_system` finds the
+  base page, keeps the program and 16 KB of stack and gives the rest of the
+  memory back with Mshrink), as are the system calls: traps with their
+  arguments on the stack, which keep d3-d7 and a3-a7, so the library's
+  routines save d2 and a2 around them.  The 32 bit multiply and divide are
+  the Amiga 500's routines without utility.library.  Floats are refused:
+  the float code is for an FPU.
 - A block with `%option amiga_chipram` goes into sections of its own
   (`code_c`, `data_c`, `bss_c`), which AmigaOS loads into chip memory.  A
   call is always `jsr` with an absolute address, so it can cross sections.

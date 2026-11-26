@@ -142,7 +142,7 @@ checker {
             or strings.compare(name, "llvm16") == 0 or strings.compare(name, "virtual") == 0
             array_limit = 65535
         else if strings.compare(name, "amiga500") == 0 or strings.compare(name, "amiga1200") == 0
-            or strings.compare(name, "qemu68k") == 0
+            or strings.compare(name, "qemu68k") == 0 or strings.compare(name, "atarist") == 0
             array_limit = 32768
         if types.POINTER_SIZE == 4
             max_address = $ffffffff

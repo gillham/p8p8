@@ -24,7 +24,9 @@ library without them, such as a plain copy of upstream's `prog8lib`, has no
 6502 machine for p8p8.
 
 The llvm targets, `virtual` and the 68000 targets are not machines of this
-kind and have no file.
+kind and have no file.  One of the 68000 targets is p8p8's own and not
+upstream's: `atarist`, the Atari ST, whose modules are in the library's
+`targets/atarist`.
 
 ## A library in parts
 

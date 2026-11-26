@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	stcmp stscreen a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -510,6 +510,19 @@ amigacmpfloat:	$(P8P8)
 COPPERTESTS=$(filter-out %/3d.p8 %/rasters.p8 %/star-blit.p8 %/window3d.p8 %/agabobs.p8 %/penrose-triangle.p8 %/beachballs.p8 %/lineclip-easygfx.p8 %/lowlevel-timer.p8 %/hwtimers.p8,$(wildcard .prog8-reference/examples/amiga/*.p8))
 coppercmp:	$(P8P8)
 	@COPPERCMP_SECONDS=$${COPPERCMP_SECONDS:-90} tests/coppercmp.sh $(P8P8) $(COPPERTESTS)
+
+# the Atari ST (the atarist target): the programs as GEMDOS programs in Hatari, against
+# the host.  ST_TOS names a TOS image; without it Hatari runs its EmuTOS.
+STTESTS=tests/hello.p8 $(wildcard tests/programs/*.p8) $(CONFTESTS) $(wildcard tests/atarist/*.p8)
+stcmp:	$(P8P8)
+	@tests/stcmp.sh $(P8P8) $(STTESTS)
+
+# make stscreen: the ST's text screen in its three resolutions, read back from the
+# screen's memory (tests/stscreen.sh)
+stscreen:	$(P8P8)
+	@tests/stscreen.sh $(P8P8) > build/stscreen.txt 2>&1; \
+	if cmp -s build/stscreen.txt tests/expected/stscreen.txt; then echo "Atari ST screen: as expected"; \
+	else echo "Atari ST screen: DIFFERENT"; diff build/stscreen.txt tests/expected/stscreen.txt | head -20; exit 1; fi
 
 # and for the Amiga 500: a 68000, long multiplication and division by the library's routines
 amigacmp500:	$(P8P8)

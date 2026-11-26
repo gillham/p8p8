@@ -98,7 +98,7 @@ encoding {
         else if strings.compare(name, "llvm64") == 0 or strings.compare(name, "llvm32") == 0
             or strings.compare(name, "llvm16") == 0 or strings.compare(name, "virtual") == 0
             or strings.compare(name, "amiga500") == 0 or strings.compare(name, "amiga1200") == 0
-            or strings.compare(name, "qemu68k") == 0
+            or strings.compare(name, "qemu68k") == 0 or strings.compare(name, "atarist") == 0
             newline_to_cr = false
     }
 

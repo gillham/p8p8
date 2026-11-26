@@ -900,6 +900,7 @@ main {
             ; unless an option asks for something else; and by p8p8's own code generator,
             ; unless -codegen upstream asks for prog8c-llvm's back end.
             is_m68k = strings.compare(tname, "qemu68k") == 0 or buf.bytes_equal(tname, "amiga", 5)
+                or strings.compare(tname, "atarist") == 0
             ; a Z80 machine: the language is what it is for llvm16 (16 bit addresses, no
             ; 6502 conventions), and the program is made by p8p8's Z80 code generator
             is_z80 = target.z80()
@@ -940,7 +941,7 @@ main {
                 opt_own = opt_codegen == 1 or (opt_codegen == 0 and opt_build)
             if not target.loaded and (opt_ir or opt_build or not explicit_mode) and not buf.bytes_equal(tname, "llvm", 4)
                     and strings.compare(tname, "virtual") != 0 and not buf.bytes_equal(tname, "amiga", 5)
-                    and strings.compare(tname, "qemu68k") != 0 {
+                    and strings.compare(tname, "qemu68k") != 0 and strings.compare(tname, "atarist") != 0 {
                 out.puts("error: no configuration for target ")
                 out.puts(tname)
                 out.puts(": no ")
@@ -2539,6 +2540,12 @@ main {
                 buf.add_str(cmd, "\"${P8P8_VAMOS:-vamos}\" -C 68020 ")
             add_output(name, "")
         }
+        else if strings.compare(importer.target, "atarist") == 0 {
+            ; the Atari ST: Hatari starts a program that it is given (P8P8_HATARI names
+            ; it, with the options that say which machine and TOS)
+            buf.add_str(cmd, "${P8P8_HATARI:-hatari} ")
+            add_output(name, ".tos")
+        }
         else {
             buf.add_str(cmd, "qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic -kernel ")
             add_output(name, ".elf")
@@ -2807,6 +2814,21 @@ main {
                     run_68k(name)
                 return
             }
+            if strings.compare(importer.target, "atarist") == 0 {
+                ; TOS: vasm writes the program file itself, with its relocations
+                buf.add_str(cmd, "vasmm68k_mot -m68000 -Ftos -opt-speed -ldots -spaces -nosym -quiet -o ")
+                add_output(name, ".tos")
+                map_68k_option(name)
+                buf.add_byte(cmd, ' ')
+                add_output(name, ".asm")
+                run_cmd("assembling the program")
+                built_ext = ".tos"
+                if opt_map
+                    map_68k(name)
+                if opt_run
+                    run_68k(name)
+                return
+            }
             buf.add_str(cmd, "vasmm68k_mot -m68020 -m68881 -Felf -opt-speed -ldots -spaces -quiet -o ")
             add_output(name, ".o")
             map_68k_option(name)
@@ -2928,6 +2950,8 @@ main {
                 built_ext = ".elf"
                 if buf.bytes_equal(importer.target, "amiga", 5)
                     built_ext = ""
+                if strings.compare(importer.target, "atarist") == 0
+                    built_ext = ".tos"
                 if opt_run
                     run_68k(name)
                 return

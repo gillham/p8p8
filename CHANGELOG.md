@@ -28,8 +28,19 @@
   (`library = ../appleii`) has its own directory searched first, as the
   other CPUs' have: `prodos` has only its `diskio` there.
 
+- A target for the Atari ST: `-target atarist` builds a GEMDOS program
+  (`.tos`) for a 68000 with p8p8's 68000 code generator and vasm
+  (`-Ftos`).  `textio` is on the VT-52 console and follows the screen's
+  mode: 40 columns and 16 colours, 80 and 4, or 80 in black and white
+  (`txt.width`, `txt.colors`; `txt.color` makes of a colour what the mode
+  has).  `-run` starts Hatari.  `make stcmp` and `make stscreen` test it in
+  Hatari, under a TOS image or its EmuTOS.  No floats, files or GEM yet.
+
 ### Fixed
 
+- 68000 machines: `sqrt()` of a uword could give 255, depending on what the
+  code before it had left in a register (a fixed copy of upstream's
+  routine is in the library's `common/`).
 - Apple II, DOS 3.3: writing a file with `diskio` left the rest of a track
   (15 sectors) marked as used each time, so a disk filled up from writing
   one small file again and again.  A new file was opened twice, and the

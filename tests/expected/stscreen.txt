@@ -1,0 +1,63 @@
+== low resolution
+40x25 16
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+
+
+     at 5,4
+
+colour 1 colour 2 colour 15
+inverse normal
+white on black
+
+                    *?
+
+0123col789
+abcdefghijklmnopqrstuvwxyzabcdefghijklmn
+opqrs
+end
+colours: row 6 column 0 length 6: 1 on 0
+colours: row 6 column 7 length 1: 1 on 0
+colours: row 6 column 9 length 6: 2 on 0
+colours: row 6 column 16 length 1: 2 on 0
+colours: row 7 column 0 length 7: 0 on 15
+colours: row 8 column 0 length 14: 0 on 15
+== medium resolution
+80x25 4
+0 1 2 3 3 1 2 3 3 1 2 3 3 1 2 3
+
+
+     at 5,4
+
+colour 1 colour 2 colour 15
+inverse normal
+white on black
+
+                    *?
+
+0123col789
+abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrs
+end
+colours: row 6 column 0 length 6: 1 on 0
+colours: row 6 column 7 length 1: 1 on 0
+colours: row 6 column 9 length 6: 2 on 0
+colours: row 6 column 16 length 1: 2 on 0
+colours: row 7 column 0 length 7: 0 on 3
+colours: row 8 column 0 length 14: 0 on 3
+== high resolution
+80x25 2
+0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+
+
+     at 5,4
+
+colour 1 colour 2 colour 15
+inverse normal
+white on black
+
+                    *?
+
+0123col789
+abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrs
+end
+colours: row 7 column 0 length 7: 0 on 1
+colours: row 8 column 0 length 14: 0 on 1

@@ -52,6 +52,7 @@ gen68k {
     bool cpu68000 = false           ; no 68020 instructions: the Amiga 500
     bool uses_fpu = false           ; the program has floating point: the assembler is told that there is an FPU
     bool amiga = false              ; AmigaOS: library calls, a hunk file, the system's stack
+    bool tos = false                ; the Atari ST: a GEMDOS program, the stack is the library's to set
     long memtop = $00100000
 
     sub error(str message, ^^ubyte detail) {
@@ -3356,7 +3357,7 @@ gen68k {
 
     sub code() {
         raw("prog8_program_start:")
-        if not amiga {
+        if not amiga and not tos {
             put("    move.l  #")
             puthex(memtop)
             raw(",sp")
@@ -3741,7 +3742,8 @@ gen68k {
             nb = buf.new(256)
         grow_cells()
         mark_frame_variables()
-        cpu68000 = strings.compare(p.target, "amiga500") == 0
+        tos = strings.compare(p.target, "atarist") == 0
+        cpu68000 = strings.compare(p.target, "amiga500") == 0 or tos
         amiga = buf.bytes_equal(p.target, "amiga", 5)
         any_chip = false
         uses_fpu = false
@@ -3765,5 +3767,16 @@ gen68k {
         code()
         data()
         bss()
+        if tos {
+            ; (a TOS program's sections follow each other in memory as they are long: one
+            ;  of an odd length would put the next one's words at odd addresses)
+            nl()
+            raw("    section  .text,code")
+            raw("    even")
+            raw("    section  .data,data")
+            raw("    even")
+        }
+        if tos and uses_fpu
+            error("floats are not supported on the Atari ST yet (it has no FPU)", 0)
     }
 }
