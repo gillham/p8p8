@@ -5,8 +5,8 @@ Macintosh or into an emulator, and how p8p8's own tests run such programs on
 a Macintosh Plus in [MAME](https://www.mamedev.org/) with no window and no
 hands.
 
-Tried with MAME 0.289, the Macintosh Plus's third ROM and System 4.2
-(the "System 5.0" disks).
+Tried with MAME 0.289, the Macintosh Plus's third ROM, System 4.2 (the
+"System 5.0" disks) and System 6.0.8.
 
 ## Building
 
@@ -49,10 +49,11 @@ and `SIZE` -1.
   (`dc.w $a9f4`); they change d0-d2 and a0-a1, and Prog8's code wants d2
   kept.  The block `macos` in the target's `syslib.p8` has examples.
 
-**Not tried yet.**  The tests run on a Macintosh Plus with System 4.2;
-reading keys works there (`txt.chrin`, `txt.input_chars`).  Command-Q,
-moving the window, MultiFinder, System 6 and 7 and the later machines are
-written as the system's documents say and have not been run.
+**Not tried yet.**  The tests run on a Macintosh Plus with System 4.2 and
+with System 6.0.8; reading keys works there (`txt.chrin`,
+`txt.input_chars`).  Command-Q, moving the window, MultiFinder, System 7
+and the later machines are written as the system's documents say and are
+not in the tests.
 
 ## Getting it onto a disk
 
@@ -75,10 +76,12 @@ unpacked by any MacBinary tool (StuffIt Expander does it).
 A Macintosh starts from a disk with a System and has no console whose
 output an emulator could hand over.  Three things make it work:
 
-1. **The disk's boot blocks name the program that is started in place of
-   the Finder**: a string of at most 15 characters with its length before
-   it, 16 bytes at offset 26 of the image.  The application must be in the
-   System Folder (it was not found in the disk's root).
+1. **The application takes the Finder's place** on the copy of the system
+   disk: the Finder is renamed and the application is put into the System
+   Folder as `Finder`, which is the program that a Macintosh starts.  (The
+   boot blocks have the name of that program, 16 bytes at offset 26, and
+   System 4.2 starts what is named there; System 6 starts `Finder`
+   whatever they say.)
 2. **A file `p8p8.out` beside the application** gets a copy of everything
    the program prints as text (lines end with a carriage return, as a
    Macintosh's text files have it), and makes the program end without

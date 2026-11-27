@@ -3,8 +3,8 @@
 # on a Macintosh Plus in MAME, with no window, and prints what it writes as text.
 #
 # A Macintosh starts from a disk with its System, and has no console that could be
-# listened to.  So: a copy of a system disk gets the application, which is named in
-# the disk's boot blocks as the program to start in place of the Finder, and an empty
+# listened to.  So: a copy of a system disk gets the application in place of the
+# Finder (under its name: that is the program a Macintosh starts), and an empty
 # file "p8p8.out" beside it: p8p8's library copies the text there when that file
 # exists, and says in the system's Scratch8 when the program has ended.  A script of
 # MAME's watches for that, and the file is read back from the disk.
@@ -40,14 +40,13 @@ folder=$(hfs hls -a | grep -i '^System' | head -1)
 [ -n "$folder" ] || folder="System Folder"
 hfs hcopy -m "$prog" ":$folder:" || exit 1
 name=$(dd if="$prog" bs=1 skip=2 count="$(dd if="$prog" bs=1 skip=1 count=1 2> /dev/null | od -An -tu1 | tr -d ' ')" 2> /dev/null)
-hfs hrename ":$folder:$name" ":$folder:P8P8App" || exit 1
+hfs hrename ":$folder:Finder" ":$folder:Finder was" 2> /dev/null
+hfs hrename ":$folder:$name" ":$folder:Finder" || exit 1
 hfs hcopy -r "$work/p8p8.out" ":$folder:p8p8.out" || exit 1
 for extra in $MAC_EXTRA; do
     hfs hcopy -r "${extra#*=}" ":$folder:${extra%%=*}" || exit 1
 done
 hfs humount
-# (the boot blocks: the name of the program that is the shell, 16 bytes at 26)
-printf '\007P8P8App        ' | dd of="$work/boot.dsk" bs=1 seek=26 conv=notrunc 2> /dev/null
 cat > "$work/run.lua" <<LUA
 local screen = manager.machine.screens[":screen"]
 local mem = manager.machine.devices[":maincpu"].spaces["program"]
@@ -66,7 +65,7 @@ emu.register_frame_done(function()
     frames = frames + 1
     if not started then
         -- CurApName: the application has been started
-        if mem:read_u32(0x910) == 0x07503850 and mem:read_u32(0x914) == 0x38417070 then
+        if mem:read_u32(0x910) == 0x0646696e and mem:read_u16(0x914) == 0x6465 then
             started = true
             errors = mem:read_u16(0xaf0)
             typing = frames + 60

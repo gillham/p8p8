@@ -519,7 +519,8 @@ stcmp:	$(P8P8)
 
 # make maccmp: the same comparison for the Macintosh Plus, in MAME (tests/macrun.sh:
 # MAC_ROMS and MAC_SYSTEM name MAME's ROM directory and a system disk)
-MACTESTS=$(filter-out tests/atarist/system.p8 tests/atarist/files.p8,$(STTESTS))
+# (fromtests_floats writes to $0400, which is the system's table of calls there)
+MACTESTS=$(filter-out tests/atarist/system.p8 tests/atarist/files.p8 %/fromtests_floats.p8,$(STTESTS))
 maccmp:	$(P8P8)
 	@STCMP_TARGET=macplus tests/stcmp.sh $(P8P8) $(MACTESTS)
 
