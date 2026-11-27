@@ -49,10 +49,10 @@ and `SIZE` -1.
   (`dc.w $a9f4`); they change d0-d2 and a0-a1, and Prog8's code wants d2
   kept.  The block `macos` in the target's `syslib.p8` has examples.
 
-**Not tried yet.**  The tests run on a Macintosh Plus with System 4.2 and
-type nothing: reading keys, command-Q, moving the window, MultiFinder,
-System 6 and 7 and the later machines are written as the system's
-documents say and have not been run.
+**Not tried yet.**  The tests run on a Macintosh Plus with System 4.2;
+reading keys works there (`txt.chrin`, `txt.input_chars`).  Command-Q,
+moving the window, MultiFinder, System 6 and 7 and the later machines are
+written as the system's documents say and have not been run.
 
 ## Getting it onto a disk
 
@@ -118,16 +118,18 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy mame macplus -rompath "$MAC_ROMS" \
 |---|---|
 | `SDL_VIDEODRIVER=dummy`, `-video none -sound none` | no window, no sound device |
 | `-nothrottle` | as fast as it goes: some 30 times a real Plus, a run takes two to three seconds, most of it the machine's start |
-| `-kbd ""` | no keyboard: MAME's Plus keyboard needs a ROM of its own, and nothing types here |
+| `-kbd ""` | no keyboard, unless keys are to be typed: MAME's Plus keyboard needs a ROM of its own |
 | `-flop1 boot.dsk` | the disk; MAME writes what the machine wrote back into the image when it ends |
 | `-autoboot_script run.lua` | the script that watches the memory and ends MAME |
 | `-cfg_directory`, `-nvram_directory` | MAME's own files, kept out of the way |
 
 Things to know:
 
-- **Keys cannot be typed** without the keyboard's ROM (`341-0332-a.bin` in
-  MAME's `mackbd_m0110a` set).  A program that waits for one runs into the
-  time limit.
+- **Keys**: `MAC_KEYS='some text\nq'` types that once the program runs
+  (MAME's `natkeyboard:post`).  It needs the keyboard's ROM beside the
+  machine's (`341-0332-a.bin`); without `MAC_KEYS` the machine is run
+  without a keyboard (`-kbd ""`) and does not need it.  A program that
+  waits for a key that never comes runs into the time limit.
 - **System errors**: 1 is a bus error, 2 an address error (a word or a long
   at an odd address, which a 68000 does not allow: in Prog8 usually a
   struct with a `uword` after one `ubyte`), 3 an illegal instruction, 4 a

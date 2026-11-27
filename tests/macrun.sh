@@ -20,6 +20,9 @@
 #                    screen at the end (.png); MAC_TRACE one that gets the system
 #                    error's number when the program is stopped by one;
 #        MAC_EXTRA   more files for the disk (NAME=file, with blanks between them)
+#        MAC_KEYS    what is typed once the program runs (\n is the return key); it
+#                    needs the keyboard's ROM among MAME's files (341-0332-a.bin),
+#                    without MAC_KEYS the machine has no keyboard
 # Needs hfsutils (hmount, hcopy) and MAME.
 prog=$1
 if [ -z "$MAC_ROMS" ] || [ -z "$MAC_SYSTEM" ]; then
@@ -51,6 +54,7 @@ local mem = manager.machine.devices[":maincpu"].spaces["program"]
 local frames = 0
 local started = false
 local errors = 0
+local typing = nil
 local function finish(what)
     if what then
         local f = io.open("$work/trace", "w"); f:write(what, "\n"); f:close()
@@ -65,6 +69,7 @@ emu.register_frame_done(function()
         if mem:read_u32(0x910) == 0x07503850 and mem:read_u32(0x914) == 0x38417070 then
             started = true
             errors = mem:read_u16(0xaf0)
+            typing = frames + 60
         end
     elseif mem:read_u32(0x9fa) == 0x50385038 and mem:read_u32(0x9fe) == 0x444f4e45 then
         finish(nil)
@@ -73,13 +78,17 @@ emu.register_frame_done(function()
         errors = mem:read_u16(0xaf0)
         if errors ~= 0 then finish("system error " .. errors) end
     end
+    if typing and frames >= typing then
+        typing = nil
+        if "$MAC_KEYS" ~= "" then manager.machine.natkeyboard:post("$MAC_KEYS") end
+    end
     if frames >= ${MAC_TIME:-120} * 60 then
         finish(started and "time limit" or "not started")
     end
 end)
 LUA
 (cd "$work" && SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout -s KILL 300 "${P8P8_MAME:-mame}" macplus \
-    -rompath "$MAC_ROMS" -kbd "" -flop1 boot.dsk -video none -sound none -nothrottle -skip_gameinfo \
+    -rompath "$MAC_ROMS" -kbd "${MAC_KEYS:+usp}" -flop1 boot.dsk -video none -sound none -nothrottle -skip_gameinfo \
     -snapshot_directory . -autoboot_script run.lua -cfg_directory cfg -nvram_directory nvram \
     > mame.out 2>&1 < /dev/null) 2> /dev/null
 [ -n "$MAC_SCREEN" ] && [ -f "$work/screen.png" ] && cp "$work/screen.png" "$MAC_SCREEN"
