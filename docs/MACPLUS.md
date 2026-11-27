@@ -49,11 +49,11 @@ and `SIZE` -1.
   (`dc.w $a9f4`); they change d0-d2 and a0-a1, and Prog8's code wants d2
   kept.  The block `macos` in the target's `syslib.p8` has examples.
 
-**Not tried yet.**  The tests run on a Macintosh Plus with System 4.2 and
-with System 6.0.8; reading keys works there (`txt.chrin`,
-`txt.input_chars`).  Command-Q, moving the window, MultiFinder, System 7
-and the later machines are written as the system's documents say and are
-not in the tests.
+**What has been tried.**  The tests run on a Macintosh Plus with System 4.2
+and with System 6.0.8, and read keys there (`txt.chrin`,
+`txt.input_chars`).  Moving the window, command-Q, command-period, the
+arrows and the delete key were tried by hand in Mini vMac.  MultiFinder,
+System 7 and the later machines have not been run.
 
 ## Getting it onto a disk
 

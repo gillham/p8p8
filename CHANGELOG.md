@@ -45,8 +45,7 @@
   `textio` is a window of 80 columns and 25 lines in Monaco 9, black on
   white, with inverse text; the window can be moved, command-Q or
   command-period ends the program, and at the program's end the window
-  stays until a key is pressed (the mouse and command-Q are not tested
-  yet).  Floats are the 68000 routines.  No
+  stays until a key is pressed.  Floats are the 68000 routines.  No
   `diskio`, menus or drawing yet.  `make maccmp` tests it on a Macintosh
   Plus in MAME (docs/MACPLUS.md).
 - Floats for the 68000 machines that have no FPU: the Amiga 500 and the
