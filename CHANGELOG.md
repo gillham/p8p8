@@ -4,6 +4,16 @@
 
 ### Added
 
+- GameTank: more of the GameTank SDK as Prog8 modules, with the SDK's
+  names: `gametank_input` (gamepads and paddles), `gametank_banking`,
+  `gametank_draw` (the blitter, directly), `gametank_sprites` (sprite
+  sheets in sprite ram, frame tables), `gametank_drawqueue` (blits that
+  the blitter's interrupt starts one after another), `gametank_text` (the
+  SDK's 8 by 8 font), `gametank_random` (the SDK's numbers, for programs
+  converted from C), `gametank_persist` (saves in the cartridge's flash),
+  `gametank_midi_fm` (the SDK's older music player) and `gametank_util`;
+  and `zlib`, an inflate for the 6502 (zlib6502, see the target's
+  `NOTICE.md`).
 - The signed remainder (`%` of `byte` and `word` values) on the 6502,
   65C02, 65816 and 45GS02 machines.  It stopped the code generator
   ("instruction not supported yet: mods"); upstream does not have it on a
