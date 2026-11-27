@@ -147,10 +147,11 @@ macapp {
             buf.add_bytes(out, tos + reloc, reloc_len)
         if ((4 + image + reloc_len) & 1) != 0
             buf.add_byte(out, 0)
-        ; SIZE -1: 32 bit clean, knows about MultiFinder; preferred and smallest memory
+        ; SIZE -1: 32 bit clean, may run in the background, is told when it is switched
+        ; to and from; preferred and smallest memory
         long wants = (code1 + bss_len + BELOW_A5 + EXTRA + 4095) & $7ffff000
         resource(out, 10)
-        add_word(out, $5880)
+        add_word(out, $5080)
         add_be(out, wants + EXTRA)
         add_be(out, wants)
         ; the map: a copy of the header (may be zero), the list of types, the resources

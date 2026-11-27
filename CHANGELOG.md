@@ -43,8 +43,9 @@
   or later), as a MacBinary file (`name.bin`), with p8p8's 68000 code
   generator and vasm.  The program relocates itself when it starts.
   `textio` is a window of 80 columns and 25 lines in Monaco 9, black on
-  white, with inverse text; the window can be moved, command-Q or
-  command-period ends the program, and at the program's end the window
+  white, with inverse text; the window can be moved, there is a menu
+  bar with the desk accessories and Quit, command-Q or command-period
+  ends the program, and at the program's end the window
   stays until a key is pressed.  Floats are the 68000 routines.
   `diskio` is on the File Manager: a file's data fork, longs for sizes
   and addresses, folders (`chdir`, `mkdir`, `rmdir`, `curdir`) and their

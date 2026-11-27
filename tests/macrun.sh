@@ -23,6 +23,8 @@
 #        MAC_KEYS    what is typed once the program runs (\n is the return key); it
 #                    needs the keyboard's ROM among MAME's files (341-0332-a.bin),
 #                    without MAC_KEYS the machine has no keyboard
+#        MAC_COMMAND a key that is pressed with the command key, four seconds after
+#                    MAC_KEYS was typed (MAC_KEYS must be there)
 # Needs hfsutils (hmount, hcopy) and MAME.
 prog=$1
 if [ -z "$MAC_ROMS" ] || [ -z "$MAC_SYSTEM" ]; then
@@ -54,6 +56,7 @@ local frames = 0
 local started = false
 local errors = 0
 local typing = nil
+local command = nil
 local function finish(what)
     if what then
         local f = io.open("$work/trace", "w"); f:write(what, "\n"); f:close()
@@ -80,6 +83,15 @@ emu.register_frame_done(function()
     if typing and frames >= typing then
         typing = nil
         if "$MAC_KEYS" ~= "" then manager.machine.natkeyboard:post("$MAC_KEYS") end
+        if "$MAC_COMMAND" ~= "" then command = frames + 240 end
+    end
+    if command and frames == command then
+        manager.machine.ioport.ports[":kbd:usp:P2"].fields["Command"]:set_value(1)
+    elseif command and frames == command + 20 then
+        manager.machine.natkeyboard:post("$MAC_COMMAND")
+    elseif command and frames == command + 120 then
+        manager.machine.ioport.ports[":kbd:usp:P2"].fields["Command"]:set_value(0)
+        command = nil
     end
     if frames >= ${MAC_TIME:-120} * 60 then
         finish(started and "time limit" or "not started")

@@ -33,7 +33,10 @@ and `SIZE` -1.
   on white, in the middle of the screen's width.  `txt.rvs_on()` gives
   white on black.  There are no colours.  The window can be moved by its
   title bar.
-- **Command-Q and command-period end the program** whenever it prints,
+- **A menu bar**: the Apple menu with the desk accessories, and File with
+  Quit.  It is what lets the Finder's Shut Down end the program, and what
+  shows MultiFinder's and System 7's application menu.
+- **Quit, command-Q and command-period end the program** whenever it prints,
   waits (`sys.wait`) or reads a key.  A program that computes for a long
   time without doing any of these does not look at the keyboard:
   `macos.poll()` does.
@@ -50,7 +53,8 @@ and `SIZE` -1.
   new file is a TeachText text file unless `diskio.file_type` and
   `diskio.file_creator` say otherwise.  `diskio.status_code()` is the
   system's error without its sign (43: file not found).
-- **Not there yet**: `coroutines`, menus, anything drawn.
+- **Not there yet**: `coroutines`, menus of the program's own, anything
+  drawn.
 - **In assembly, leave a5 alone.**  It is the system's: QuickDraw finds its
   variables through it.  The Toolbox's calls are the A-line words
   (`dc.w $a9f4`); they change d0-d2 and a0-a1, and Prog8's code wants d2
@@ -63,10 +67,7 @@ arrows and the delete key were tried by hand in Mini vMac, and the test
 programs ran there under System 7.0.1, 7.1 and 7.5.5 too, and on an
 emulated Macintosh II (a 68020, a colour screen) under 6.0.8 and those
 three.  Under MultiFinder they run beside other applications and can be
-switched between.  One thing is missing there: the program has no menu
-bar, so it has no Quit command for the Finder's Shut Down to choose, and
-the Finder says that the application would not quit.  End the program
-first (command-Q).
+switched between.
 
 ## Getting it onto a disk
 
@@ -141,6 +142,8 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy mame macplus -rompath "$MAC_ROMS" \
 
 Things to know:
 
+- **Command keys**: `MAC_COMMAND=q` presses that key with the command key,
+  four seconds after `MAC_KEYS` was typed.
 - **Keys**: `MAC_KEYS='some text\nq'` types that once the program runs
   (MAME's `natkeyboard:post`).  It needs the keyboard's ROM beside the
   machine's (`341-0332-a.bin`); without `MAC_KEYS` the machine is run
