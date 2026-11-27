@@ -51,8 +51,8 @@
   and addresses, folders (`chdir`, `mkdir`, `rmdir`, `curdir`) and their
   lists with `*` and `?` patterns; a new file gets the type and creator in
   `diskio.file_type` and `diskio.file_creator` (a TeachText text file).
-  No menus or drawing yet.  `math.rndseed_rom`, `math.randrange_rom`,
-  `txt.setclr`, `txt.getclr` and `txt.setcc` are there for programs that
+  No menus or drawing yet.  `math`'s five `_rom` names (`rndseed_rom`,
+  `rnd_rom` and the others), `txt.setclr`, `txt.getclr` and `txt.setcc` are there for programs that
   are written for other machines too.  `make maccmp` tests it on a Macintosh
   Plus in MAME (docs/MACPLUS.md).
 - Floats for the 68000 machines that have no FPU: the Amiga 500 and the
