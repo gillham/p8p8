@@ -60,8 +60,9 @@ and `SIZE` -1.
 and with System 6.0.8, and read keys there (`txt.chrin`,
 `txt.input_chars`).  Moving the window, command-Q, command-period, the
 arrows and the delete key were tried by hand in Mini vMac, and the test
-programs ran there under System 7.0.1, 7.1 and 7.5.5 too.  MultiFinder
-under System 6 and the machines after the Plus have not been run.
+programs ran there under System 7.0.1, 7.1 and 7.5.5 too, and on an
+emulated Macintosh II (a 68020, a colour screen) under 6.0.8 and those
+three.  MultiFinder under System 6 has not been run.
 
 ## Getting it onto a disk
 
