@@ -62,7 +62,11 @@ and with System 6.0.8, and read keys there (`txt.chrin`,
 arrows and the delete key were tried by hand in Mini vMac, and the test
 programs ran there under System 7.0.1, 7.1 and 7.5.5 too, and on an
 emulated Macintosh II (a 68020, a colour screen) under 6.0.8 and those
-three.  MultiFinder under System 6 has not been run.
+three.  Under MultiFinder they run beside other applications and can be
+switched between.  One thing is missing there: the program has no menu
+bar, so it has no Quit command for the Finder's Shut Down to choose, and
+the Finder says that the application would not quit.  End the program
+first (command-Q).
 
 ## Getting it onto a disk
 
