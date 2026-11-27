@@ -67,7 +67,8 @@ arrows and the delete key were tried by hand in Mini vMac, and the test
 programs ran there under System 7.0.1, 7.1 and 7.5.5 too, and on an
 emulated Macintosh II (a 68020, a colour screen) under 6.0.8 and those
 three.  Under MultiFinder they run beside other applications and can be
-switched between.
+switched between, the Finder's Shut Down ends them, and Quit and the desk
+accessories work from the menus; `diskio`'s test ran there too.
 
 ## Getting it onto a disk
 
