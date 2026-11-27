@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	maccmp stcmp stscreen stargs stfloat amigafloat500 a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	entropycheck maccmp stcmp stscreen stargs stfloat amigafloat500 a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -710,6 +710,10 @@ cocosys:	$(P8P8)
 # left out.)
 mapcheck:	$(P8P8)
 	@tests/mapcheck.sh $(P8P8)
+
+# make entropycheck: sys.entropy() (p8p8's own) is in every target's library.
+entropycheck:	$(P8P8)
+	@tests/entropycheck.sh $(P8P8)
 
 # make trs80cmp: the same against the host for the TRS-80 Model I, run in trs80gp (TRS80GP
 # names it), which opens a window for each program.

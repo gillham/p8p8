@@ -4,9 +4,17 @@
 
 ### Added
 
-- `macplus`: `sys.entropy()`, a `uword` that differs at every call and
-  every start, to seed the random generator with.  (p8p8's own; not in
-  upstream's library.)
+- `sys.entropy()` on every target but the two Amigas: a `uword` to seed
+  the random generator with (`math.rndseed(sys.entropy(), sys.entropy())`),
+  another one at every call.  It is mixed from what the machine has: the
+  raster line, timers and the jiffy clock on the Commodores, POKEY's
+  random register on the Atari, the KERNAL's `entropy_get` on the X16,
+  the clock, the mouse and the VIA on the Macintosh, the 200 Hz clock on
+  the ST, `sys.ticks()` on the Z80, 6809 and 8086 machines and the host,
+  the monitor's key-wait count on the Apple II.  Where a machine has
+  nothing of the kind (`f256`, `rp6502`, `w65c816sxb`, `qemu68k`,
+  `virtual`) the numbers are the same at every start.  p8p8's own: not in
+  upstream's library.
 - `-map` for the 8086 machines: the map of a `.COM` program has its
   addresses; that of an `.EXE`, whose code and data are a segment each, is
   one of sections, as on the 68000.
