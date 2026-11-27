@@ -299,6 +299,10 @@ overlap; one block stays inside a 64 KB bank.
   cartridge (`image_size`, `image_ext`).  The GameTank's does: `p8c` writes
   a 2 MB `name.gtr` with the program at its end, where `prog8c` writes the
   16 KB `name.bin`.  `-noimage` gives that file.
+- The signed remainder (`%` of `byte` and `word` values) on the 6502
+  family, where upstream says "remainder can only be used on unsigned
+  integer operands on 6502 target for now".  It is what the other CPUs
+  give: the sign is the first operand's (`-17 % 5` is -2).
 - `sys.entropy()`: a `uword` to seed the random generator with, on every
   target but the two Amigas (the library's README says what it is made of
   on each machine, and where it is the same at every start).

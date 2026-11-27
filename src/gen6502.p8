@@ -7955,6 +7955,88 @@ gen6502 {
                 else
                     error("multiplication of this size not supported yet", 0)
             }
+            ir.OP_MODS, ir.OP_MODSR -> {
+                ; The signed remainder (upstream does not have it on a 6502): that of the
+                ; two without their signs, with the sign of the first.  The library's
+                ; signed divisions do not keep their remainder.
+                second_operand(i)
+                if size == 1 {
+                    operand_ins("lda", 0)
+                    ins("bpl", "+")
+                    ins("eor", "#$ff")
+                    ins("clc", 0)
+                    ins("adc", "#1")
+                    anon_label("+")
+                    ins("tay", 0)
+                    lda_reg(i.r1, 0)
+                    ins("bpl", "+")
+                    ins("eor", "#$ff")
+                    ins("clc", 0)
+                    ins("adc", "#1")
+                    anon_label("+")
+                    ins("jsr", math_routine("prog8_math.divmod_ub_asm", 3))
+                    ins("bit", cell(i.r1, 0))
+                    ins("bpl", "+")
+                    ins("eor", "#$ff")
+                    ins("clc", 0)
+                    ins("adc", "#1")
+                    anon_label("+")
+                    sta_reg(i.r1, 0)
+                }
+                else if size == 2 {
+                    ; the first, without its sign, in the scratch word
+                    lda_reg(i.r1, 1)
+                    ins("bmi", "+")
+                    ins("sta", "P8ZP_SCRATCH_W1+1")
+                    lda_reg(i.r1, 0)
+                    ins("sta", "P8ZP_SCRATCH_W1")
+                    ins("jmp", "++")
+                    anon_label("+")
+                    ins("sec", 0)
+                    ins("lda", "#0")
+                    ins("sbc", cell(i.r1, 0))
+                    ins("sta", "P8ZP_SCRATCH_W1")
+                    ins("lda", "#0")
+                    ins("sbc", cell(i.r1, 1))
+                    ins("sta", "P8ZP_SCRATCH_W1+1")
+                    anon_label("+")
+                    ; the second, without its sign, in AY
+                    operand_ins("ldy", 1)
+                    ins("bmi", "+")
+                    operand_ins("lda", 0)
+                    ins("jmp", "++")
+                    anon_label("+")
+                    ins("sec", 0)
+                    ins("lda", "#0")
+                    operand_ins("sbc", 0)
+                    ins("pha", 0)
+                    ins("lda", "#0")
+                    operand_ins("sbc", 1)
+                    ins("tay", 0)
+                    ins("pla", 0)
+                    anon_label("+")
+                    ins("jsr", math_routine("prog8_math.divmod_uw_asm", 4))
+                    ; the remainder is in the second scratch word
+                    ins("bit", cell(i.r1, 1))
+                    ins("bmi", "+")
+                    ins("lda", "P8ZP_SCRATCH_W2")
+                    sta_reg(i.r1, 0)
+                    ins("lda", "P8ZP_SCRATCH_W2+1")
+                    sta_reg(i.r1, 1)
+                    ins("jmp", "++")
+                    anon_label("+")
+                    ins("sec", 0)
+                    ins("lda", "#0")
+                    ins("sbc", "P8ZP_SCRATCH_W2")
+                    sta_reg(i.r1, 0)
+                    ins("lda", "#0")
+                    ins("sbc", "P8ZP_SCRATCH_W2+1")
+                    sta_reg(i.r1, 1)
+                    anon_label("+")
+                }
+                else
+                    error("a signed remainder of this size is not supported yet", 0)
+            }
             ir.OP_DIV, ir.OP_DIVR, ir.OP_MOD, ir.OP_MODR, ir.OP_DIVS, ir.OP_DIVSR, ir.OP_DIVMODR, ir.OP_DIVMOD -> {
                 second_operand(i)
                 bool signed_div = i.op == ir.OP_DIVS or i.op == ir.OP_DIVSR

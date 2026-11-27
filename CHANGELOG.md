@@ -4,6 +4,11 @@
 
 ### Added
 
+- The signed remainder (`%` of `byte` and `word` values) on the 6502,
+  65C02, 65816 and 45GS02 machines.  It stopped the code generator
+  ("instruction not supported yet: mods"); upstream does not have it on a
+  6502 either.  The result is as on the other CPUs: the remainder of the
+  two without their signs, with the sign of the first.
 - `sys.entropy()` on every target but the two Amigas: a `uword` to seed
   the random generator with (`math.rndseed(sys.entropy(), sys.entropy())`),
   another one at every call.  It is mixed from what the machine has: the
