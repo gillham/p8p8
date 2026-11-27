@@ -624,6 +624,7 @@ ataricmp:	$(P8P8)
 		$(wildcard .prog8-reference/compiler/test/arithmetic/*.p8 .prog8-reference/compiler/test/comparisons/*.p8)
 	@tests/ataricmp.sh -screen $(P8P8) tests/atari/screen.p8 | diff -u tests/expected/atariscreen.txt - && echo "Atari screen: as expected"
 	@tests/ataricmp.sh -screen $(P8P8) tests/atari/files.p8 | diff -u tests/expected/atarifiles.txt - && echo "Atari files: as expected"
+	@tests/ataricmp.sh -screen $(P8P8) tests/atari/rename.p8 | diff -u tests/expected/atarirename.txt - && echo "Atari rename: as expected"
 
 # make a2dos A2DOS33=<disk image>: the Apple II's file routines (diskio), run from a copy
 # of a disk that starts DOS 3.3 (Apple's, so it does not come with p8p8), in bobbin

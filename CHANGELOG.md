@@ -76,6 +76,10 @@
 - Apple II, DOS 3.3: a program that printed something and was started with
   `BRUN` did not get back to BASIC when it ended.  DOS's note of the stack
   pointer is now put back as the program found it.
+- Atari: `diskio.rename` with a device before the new name
+  (`"D2:OLD.TMP"` to `"D2:NEW.TXT"`) made a file named after the device
+  (`D2`): the DOS takes the new name without one, and read it up to the
+  colon.  The library leaves the device off the new name now.
 
 ## 0.6.0
 
