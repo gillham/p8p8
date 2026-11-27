@@ -384,7 +384,10 @@ without an operating system), the Amiga 1200 and the Amiga 500.
   waiting, with a mark in the system's Scratch8: that is how
   `tests/macrun.sh` runs one in MAME (the application on a copy of a
   system disk, named in the boot blocks as the shell).  Upstream's
-  `coroutines` keeps a5 as the frame pointer and is not there.
+  `coroutines` keeps a5 as the frame pointer and is not there.  `diskio`
+  is the Atari ST's with the File Manager's calls under it (parameter
+  blocks, names with their length before them; the catalog call for
+  folders, lists and `exists`).
 - The Atari ST (`atarist`, a target of p8p8's own) is the Amiga 500's 68000
   with another system: vasm's `-Ftos` writes the GEMDOS program with its
   relocations, so the code is what it is for the Amiga, absolute addresses

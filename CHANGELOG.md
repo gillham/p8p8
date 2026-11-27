@@ -45,8 +45,12 @@
   `textio` is a window of 80 columns and 25 lines in Monaco 9, black on
   white, with inverse text; the window can be moved, command-Q or
   command-period ends the program, and at the program's end the window
-  stays until a key is pressed.  Floats are the 68000 routines.  No
-  `diskio`, menus or drawing yet.  `make maccmp` tests it on a Macintosh
+  stays until a key is pressed.  Floats are the 68000 routines.
+  `diskio` is on the File Manager: a file's data fork, longs for sizes
+  and addresses, folders (`chdir`, `mkdir`, `rmdir`, `curdir`) and their
+  lists with `*` and `?` patterns; a new file gets the type and creator in
+  `diskio.file_type` and `diskio.file_creator` (a TeachText text file).
+  No menus or drawing yet.  `make maccmp` tests it on a Macintosh
   Plus in MAME (docs/MACPLUS.md).
 - Floats for the 68000 machines that have no FPU: the Amiga 500 and the
   Atari ST build programs with floats now, with routines of p8p8's own

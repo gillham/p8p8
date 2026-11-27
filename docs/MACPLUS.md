@@ -43,7 +43,14 @@ and `SIZE` -1.
 - **Keys**: `txt.chrin()` waits for one (the place of the cursor is black
   meanwhile); return and enter are `'\n'`, delete is 8, the arrows 28 to 31.
 - **Floats** are p8p8's routines for a 68000 (singles).
-- **Not there yet**: `diskio`, `coroutines`, menus, anything drawn.
+- **Files**: `diskio`, through the File Manager.  A name alone is a file in
+  the current folder, which is the application's when the program starts;
+  `:Folder:name` goes down, `Disk:Folder:name` starts at the disk, and
+  `diskio.chdir("..")` goes up.  Only data forks are read and written.  A
+  new file is a TeachText text file unless `diskio.file_type` and
+  `diskio.file_creator` say otherwise.  `diskio.status_code()` is the
+  system's error without its sign (43: file not found).
+- **Not there yet**: `coroutines`, menus, anything drawn.
 - **In assembly, leave a5 alone.**  It is the system's: QuickDraw finds its
   variables through it.  The Toolbox's calls are the A-line words
   (`dc.w $a9f4`); they change d0-d2 and a0-a1, and Prog8's code wants d2

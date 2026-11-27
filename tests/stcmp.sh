@@ -17,7 +17,8 @@
 # A program with floats prints six digits after the point here and up to 17 on the
 # host: there tests/floatsame.py compares, number by number, to seven digits.
 # A program that cannot be built is counted apart.
-# Where tests/atarist/<name>.out exists, that is what the program must print.
+# Where tests/atarist/<name>.out exists, that is what the program must print
+# (tests/macplus/<name>.out first for the Macintosh).
 #
 # Usage: tests/stcmp.sh <p8c> <program.p8>...
 #        (needs clang, vasmm68k_mot and hatari; see tests/strun.sh for the variables)
@@ -47,7 +48,9 @@ agree() {
 odd=0; same=0; differ=0; unbuilt=0; skipped=0; order=0
 for f in "$@"; do
     name=$(basename "$f" .p8)
-    if [ -f "$here/atarist/$name.out" ]; then
+    if [ "$machine" = macplus ] && [ -f "$here/macplus/$name.out" ]; then
+        clean < "$here/macplus/$name.out" > "$work/host/$name.out"
+    elif [ -f "$here/atarist/$name.out" ]; then
         clean < "$here/atarist/$name.out" > "$work/host/$name.out"
     elif ! "$p8c" -lib "$lib" -target llvm64 -o "$work/host/$name" "$f" > "$work/host.err" 2>&1; then
         skipped=$((skipped + 1))

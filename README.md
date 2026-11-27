@@ -34,8 +34,8 @@ The command is `p8c`.
   2 colours, as the screen's mode has them), files through GEMDOS
   (`diskio`) and the command line.  No GEM yet.  `-target macplus` is
   p8p8's own too: an application for a Macintosh Plus or a later 68000
-  Macintosh, with its text in a window of 80 columns and 25 lines (new: no
-  `diskio`, no menus, no drawing yet).  A 68000 cannot have an
+  Macintosh, with its text in a window of 80 columns and 25 lines and files
+  through the File Manager (`diskio`).  New: no menus and no drawing yet.  A 68000 cannot have an
   FPU, so on the Atari ST, the Macintosh and the Amiga 500 floats are p8p8's own routines
   (singles, right to six or seven digits); `-floats soft` builds that way
   for the Amiga 1200 and qemu68k too, where the default is the FPU's
