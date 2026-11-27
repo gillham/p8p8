@@ -66,6 +66,11 @@
 
 ### Fixed
 
+- `macplus`: when the window was drawn again (after a desk accessory or
+  another window had covered it), a character that the font has no picture
+  of (those below 32, put there with `txt.setchr`) moved the rest of its
+  line to the left.  Such a character is now drawn alone at its place, and
+  putting one over another character clears the cell.
 - 68000 code generator: a byte or word argument for an address register
   went through d0 after d0 had its own argument (seen with an `asmsub`
   that takes a `uword` in `A0` and something else in `D0`).
