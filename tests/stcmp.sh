@@ -28,6 +28,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/p8p8_stcmp.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/host" "$work/st" "$work/amiga"
+# (STCMP_TARGET=macplus: the same comparison for the Macintosh Plus, run in MAME by
+# tests/macrun.sh, which says what it needs.)
 # (STCMP_TARGET=amiga500: the same comparison for the Amiga 500, run in vamos, which
 # P8P8_VAMOS names: for the programs with floats, which upstream's compiler builds for
 # an FPU there)
@@ -55,6 +57,7 @@ for f in "$@"; do
     fi
     built=$work/st/$name.tos
     [ "$machine" = atarist ] || built=$work/st/$name
+    [ "$machine" = macplus ] && built=$work/st/$name.bin
     if ! "$p8c" -lib "$lib" -target "$machine" -out "$work/st" "$f" > "$work/st.err" 2>&1 || [ ! -f "$built" ]; then
         unbuilt=$((unbuilt + 1))
         echo "not built: $f: $(grep -v warning "$work/st.err" | head -1 | cut -c1-110)"
@@ -63,6 +66,8 @@ for f in "$@"; do
     : > "$work/trace"
     if [ "$machine" = atarist ]; then
         ST_TRACE="$work/trace" "$here/strun.sh" "$built" 2> /dev/null | clean > "$work/st/$name.out"
+    elif [ "$machine" = macplus ]; then
+        MAC_TRACE="$work/trace" "$here/macrun.sh" "$built" 2> /dev/null | clean > "$work/st/$name.out"
     else
         (cd "$work/st" && timeout 20 "${P8P8_VAMOS:-vamos}" -C 68000 "$name" < /dev/null 2> /dev/null | clean > "$name.out"; exit 0)
     fi
@@ -70,15 +75,15 @@ for f in "$@"; do
             { grep -q '^%import floats' "$f" && python3 "$here/floatsame.py" "$work/host/$name.out" "$work/st/$name.out" 6; }; then
         same=$((same + 1))
         echo "ok: $f"
-    elif grep -q 'cpu exception 3 ' "$work/trace"; then
+    elif grep -q 'cpu exception 3 \|^system error 2$' "$work/trace"; then
         odd=$((odd + 1))
         echo "not for a 68000 (a word or a long at an odd address, which stops it): $f"
-    elif grep -q 'cpu exception 2 currpc [0-9a-f]\{1,5\} ' "$work/trace"; then
+    elif grep -q 'cpu exception 2 currpc [0-9a-f]\{1,5\} \|^system error 1$' "$work/trace"; then
         # (a bus error at an address of the program's, not of the ROM's: it reads or
         #  writes memory that is the system's, as a program for a machine's addresses does)
         odd=$((odd + 1))
         echo "not for this machine (it reads or writes memory that is not its own): $f"
-    elif [ "$machine" = atarist ] && [ -n "$P8P8_VAMOS" ] && "$p8c" -lib "$lib" -target amiga500 -out "$work/amiga" "$f" > /dev/null 2>&1 &&
+    elif [ "$machine" != amiga500 ] && [ -n "$P8P8_VAMOS" ] && "$p8c" -lib "$lib" -target amiga500 -out "$work/amiga" "$f" > /dev/null 2>&1 &&
             (cd "$work/amiga" && timeout 20 "$P8P8_VAMOS" -C 68000 "$name" < /dev/null 2> /dev/null | clean > "$name.out"; exit 0) &&
             agree "$work/host/$name.out" "$work/amiga/$name.out" "$work/st/$name.out"; then
         same=$((same + 1))
@@ -91,5 +96,6 @@ for f in "$@"; do
     fi
 done
 [ "$machine" = atarist ] || tosname="target $machine in vamos"
+[ "$machine" = macplus ] && tosname="a Macintosh Plus in MAME"
 echo "68000 comparison ($machine: $tosname, against the host): $same the same ($order of them as on the Amiga 500), $differ different, $unbuilt not built, $odd not for a 68000, $skipped not for the host"
 [ "$differ" -eq 0 ]

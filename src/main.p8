@@ -37,6 +37,7 @@
 %import triple
 %import irread
 %import sizemap
+%import macapp
 %zeropage basicsafe
 
 main {
@@ -900,7 +901,7 @@ main {
             ; unless an option asks for something else; and by p8p8's own code generator,
             ; unless -codegen upstream asks for prog8c-llvm's back end.
             is_m68k = strings.compare(tname, "qemu68k") == 0 or buf.bytes_equal(tname, "amiga", 5)
-                or strings.compare(tname, "atarist") == 0
+                or strings.compare(tname, "atarist") == 0 or strings.compare(tname, "macplus") == 0
             ; a Z80 machine: the language is what it is for llvm16 (16 bit addresses, no
             ; 6502 conventions), and the program is made by p8p8's Z80 code generator
             is_z80 = target.z80()
@@ -945,6 +946,7 @@ main {
                 ; floats without an FPU (p8p8's own routines) where the machine has a 68000,
                 ; which cannot have one; -floats soft or hard says it for the others
                 bool soft68k = strings.compare(tname, "amiga500") == 0 or strings.compare(tname, "atarist") == 0
+                    or strings.compare(tname, "macplus") == 0
                 if opt_floats {
                     if gen8086.floats_option == 2 {
                         out.err()
@@ -953,9 +955,9 @@ main {
                     }
                     soft68k = gen8086.floats_option == 1
                 }
-                if not soft68k and strings.compare(tname, "atarist") == 0 {
+                if not soft68k and (strings.compare(tname, "atarist") == 0 or strings.compare(tname, "macplus") == 0) {
                     out.err()
-                    out.puts("error: -floats hard: an Atari ST's 68000 cannot have an FPU\n")
+                    out.puts("error: -floats hard: this machine's 68000 cannot have an FPU\n")
                     out.exit(1)
                 }
                 gen68k.soft = soft68k
@@ -963,7 +965,8 @@ main {
             }
             if not target.loaded and (opt_ir or opt_build or not explicit_mode) and not buf.bytes_equal(tname, "llvm", 4)
                     and strings.compare(tname, "virtual") != 0 and not buf.bytes_equal(tname, "amiga", 5)
-                    and strings.compare(tname, "qemu68k") != 0 and strings.compare(tname, "atarist") != 0 {
+                    and strings.compare(tname, "qemu68k") != 0 and strings.compare(tname, "atarist") != 0
+                    and strings.compare(tname, "macplus") != 0 {
                 out.puts("error: no configuration for target ")
                 out.puts(tname)
                 out.puts(": no ")
@@ -2568,6 +2571,12 @@ main {
             buf.add_str(cmd, "${P8P8_HATARI:-hatari} ")
             add_output(name, ".tos")
         }
+        else if strings.compare(importer.target, "macplus") == 0 {
+            ; a Macintosh: the application has to be on a disk that the machine starts
+            ; from; P8P8_MACRUN names what does that (tests/macrun.sh is one)
+            buf.add_str(cmd, "\"${P8P8_MACRUN:-p8p8-macrun}\" ")
+            add_output(name, ".bin")
+        }
         else {
             buf.add_str(cmd, "qemu-system-m68k -M virt -cpu m68020 -m 1M -nographic -kernel ")
             add_output(name, ".elf")
@@ -2845,6 +2854,23 @@ main {
                 add_output(name, ".asm")
                 run_cmd("assembling the program")
                 built_ext = ".tos"
+                if opt_map
+                    map_68k(name)
+                if opt_run
+                    run_68k(name)
+                return
+            }
+            if strings.compare(importer.target, "macplus") == 0 {
+                ; a Macintosh: the assembler writes a TOS program file, for the list of
+                ; addresses that it has, and src/macapp.p8 makes the application of it
+                buf.add_str(cmd, "vasmm68k_mot -m68000 -Ftos -opt-speed -ldots -spaces -nosym -quiet -o ")
+                add_output(name, ".tos")
+                map_68k_option(name)
+                buf.add_byte(cmd, ' ')
+                add_output(name, ".asm")
+                run_cmd("assembling the program")
+                mac_application(name)
+                built_ext = ".bin"
                 if opt_map
                     map_68k(name)
                 if opt_run
@@ -3316,6 +3342,47 @@ main {
     }
 
     ; vasm's listing has its symbols: the option for it
+    ; name.tos, as the assembler wrote it, becomes name.bin: the application in a
+    ; MacBinary file
+    sub mac_application(^^ubyte name) {
+        ^^buf.Buf path = buf.new(256)
+        if outdir != 0 {
+            buf.add_str(path, outdir)
+            buf.add_byte(path, '/')
+        }
+        buf.add_str(path, name)
+        long stem = path.len
+        buf.add_str(path, ".tos")
+        ^^ubyte data
+        long size
+        data, size = file_bytes(path.data)
+        ^^buf.Buf app = 0
+        if data != 0 {
+            app = macapp.wrap(data, size, name)
+            io_platform.delete_file(path.data)
+        }
+        else
+            macapp.problem = "it cannot be read"
+        if app == 0 {
+            out.err()
+            out.puts("error: the assembled program ")
+            out.puts(path.data)
+            out.puts(": ")
+            out.puts(macapp.problem)
+            out.nl()
+            out.exit(1)
+        }
+        path.len = stem
+        buf.add_str(path, ".bin")
+        if not io_platform.write_file(path.data, app.data, app.len) {
+            out.err()
+            out.puts("error: cannot write ")
+            out.puts(path.data)
+            out.nl()
+            out.exit(1)
+        }
+    }
+
     sub map_68k_option(^^ubyte name) {
         if opt_map {
             buf.add_str(cmd, " -Lnf -L ")

@@ -67,7 +67,7 @@ types {
             ADDRESS_TYPE = T_LONG
         }
         else if strings.compare(name, "amiga500") == 0 or strings.compare(name, "amiga1200") == 0 or strings.compare(name, "qemu68k") == 0
-            or strings.compare(name, "atarist") == 0 {
+            or strings.compare(name, "atarist") == 0 or strings.compare(name, "macplus") == 0 {
             ; the 68000 machines: a float in memory is a 32 bit IEEE one, as upstream has it
             POINTER_SIZE = 4
             FLOAT_SIZE = 4

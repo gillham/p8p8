@@ -54,6 +54,11 @@ gen68k {
     bool amiga = false              ; AmigaOS: library calls, a hunk file, the system's stack
     bool soft = false               ; floats without an FPU: a float in a data register is its 32 bits, the
                                     ; arithmetic is calls of the library's routines (m68k_softfloat.asm)
+    ; the frame pointer: a5, but a6 on a Macintosh, where a5 is the system's (QuickDraw's
+    ; variables and the program's jump table are found through it)
+    ^^ubyte fp_name = "a5"
+    ^^ubyte fp_ind = "(a5)"
+    bool mac = false                ; a 68000 Macintosh: built as a TOS program is (src/macapp.p8)
     bool tos = false                ; the Atari ST: a GEMDOS program, the stack is the library's to set
     long memtop = $00100000
 
@@ -120,7 +125,7 @@ gen68k {
                 ^^ubyte place = cl + 12
                 long alen = clen - 16
                 if (alen == 2 and place[0] == 'd') or buf.bytes_equal(place, "p8_regfile", 10)
-                        or (alen > 4 and buf.bytes_equal(place + alen - 4, "(a5)", 4)) {
+                        or (alen > 4 and buf.bytes_equal(place + alen - 4, fp_ind, 4)) {
                     o.len = cur
                     return
                 }
@@ -131,7 +136,7 @@ gen68k {
             if clen > 12 and buf.bytes_equal(cl, "    tst.", 8) and buf.bytes_equal(pl, "    move.", 9) and pl[9] == cl[8] {
                 long tlen = clen - 12           ; the operand of tst, without the line end
                 if plen > tlen + 2 and pl[plen - tlen - 2] == ',' and buf.bytes_equal(pl + plen - tlen - 1, cl + 11, tlen)
-                        and ((cl[11] == 'd' and tlen == 2) or (tlen > 4 and buf.bytes_equal(cl + 11 + tlen - 4, "(a5)", 4))) {
+                        and ((cl[11] == 'd' and tlen == 2) or (tlen > 4 and buf.bytes_equal(cl + 11 + tlen - 4, fp_ind, 4))) {
                     o.len = cur
                     return
                 }
@@ -319,7 +324,7 @@ gen68k {
         }
         if framed {
             putn(adjust + extra - cell_of[r])
-            put("(a5)")
+            put(fp_ind)
         }
         else {
             put("p8_regfile+")
@@ -363,7 +368,7 @@ gen68k {
                     return
                 }
                 putn(i.offset + extra - fv.zpaddr)
-                put("(a5)")
+                put(fp_ind)
                 return
             }
             put(i.sym)
@@ -1059,8 +1064,12 @@ gen68k {
             error("this hardware register is not supported yet", 0)
             return
         }
-        if slot == 23
+        if slot == 23 and not mac
             error("a5 is the frame pointer and cannot take a value", 0)
+        if slot == 23 and mac
+            error("a5 is the system's on a Macintosh and cannot take a value", 0)
+        if slot == 24 and mac
+            error("a6 is the frame pointer and cannot take a value", 0)
         if r == 0 {
             put("    move.l  #")
             when t {
@@ -1166,11 +1175,13 @@ gen68k {
             if used_mask != 0 {
                 put("    movem.l  -")
                 putn(frame_size + 4 * mask_count(used_mask))
-                put("(a5),")
+                put(fp_ind)
+                put(",")
                 put_mask(used_mask)
                 nl()
             }
-            ins("unlk  a5")
+            put("    unlk  ")
+            raw(fp_name)
         }
     }
 
@@ -1603,7 +1614,7 @@ gen68k {
         }
         if framed {
             putn(0 - cell_of[r])
-            put("(a5)")
+            put(fp_ind)
         }
         else {
             put("p8_regfile+")
@@ -2799,7 +2810,9 @@ gen68k {
             if frame_size & 1 != 0
                 frame_size++
             if linked {
-                put("    link  a5,#-")
+                put("    link  ")
+                put(fp_name)
+                put(",#-")
                 putn(frame_size)
                 nl()
             }
@@ -3636,12 +3649,12 @@ gen68k {
                     put(v.name)
                     comma()
                     putn(0 - v.zpaddr)
-                    raw("(a5)")
+                    raw(fp_ind)
                     put("    move.l  ")
                     put(v.name)
                     put("+4,")
                     putn(4 - v.zpaddr)
-                    raw("(a5)")
+                    raw(fp_ind)
                 }
                 else {
                     when size {
@@ -3669,7 +3682,7 @@ gen68k {
                     }
                     else {
                         putn(0 - v.zpaddr)
-                        raw("(a5)")
+                        raw(fp_ind)
                     }
                 }
             }
@@ -3713,6 +3726,55 @@ gen68k {
         cursub = 0
     }
 
+    ; A Macintosh loads the program where it has room and changes nothing in it: the
+    ; program puts its own address into every place that holds one.  The list of those
+    ; places is behind the program, as the assembler writes it for a TOS program (a
+    ; long, the first place; then bytes, the distance to the next, 1 for 254 more and 0
+    ; at the end).  The two longs after the first branch are filled in when the
+    ; application is made (src/macapp.p8): the length of text and data, and of the BSS,
+    ; which is asked for here (NewPtr, cleared) and takes the addresses from there on.
+    ; Nothing before the end of this may use an address.
+    sub mac_start() {
+        ins("bra.s   .p8_go")
+        ins("dc.l    0,0")
+        raw(".p8_go:")
+        ins("lea     prog8_program_start(pc),a3")
+        ins("move.l  2(a3),d3")
+        ins("move.l  6(a3),d0")
+        ins("dc.w    $a31e                  ; _NewPtr, cleared")
+        ins("move.l  a0,d4")
+        ins("bne.s   .p8_mem")
+        ins("dc.w    $a9f4                  ; no memory: _ExitToShell")
+        raw(".p8_mem:")
+        ins("sub.l   d3,d4")
+        ins("lea     0(a3,d3.l),a1")
+        ins("move.l  (a1)+,d0")
+        ins("beq.s   .p8_done")
+        ins("lea     0(a3,d0.l),a2")
+        raw(".p8_fix:")
+        ins("move.l  (a2),d1")
+        ins("cmp.l   d3,d1")
+        ins("bhs.s   .p8_bss")
+        ins("add.l   a3,d1")
+        ins("bra.s   .p8_put")
+        raw(".p8_bss:")
+        ins("add.l   d4,d1")
+        raw(".p8_put:")
+        ins("move.l  d1,(a2)")
+        raw(".p8_next:")
+        ins("moveq   #0,d0")
+        ins("move.b  (a1)+,d0")
+        ins("beq.s   .p8_done")
+        ins("cmp.b   #1,d0")
+        ins("bne.s   .p8_step")
+        ins("lea     254(a2),a2")
+        ins("bra.s   .p8_next")
+        raw(".p8_step:")
+        ins("adda.l  d0,a2")
+        ins("bra.s   .p8_fix")
+        raw(".p8_done:")
+    }
+
     sub code() {
         raw("prog8_program_start:")
         if not amiga and not tos {
@@ -3720,6 +3782,8 @@ gen68k {
             puthex(memtop)
             raw(",sp")
         }
+        if mac
+            mac_start()
         ins("jsr  p8_sys_startup.init_system")
         ins("jsr  p8_sys_startup.init_system_phase2")
         ins("jsr  p8b_main.p8s_start")
@@ -4100,7 +4164,14 @@ gen68k {
             nb = buf.new(256)
         grow_cells()
         mark_frame_variables()
-        tos = strings.compare(p.target, "atarist") == 0
+        mac = strings.compare(p.target, "macplus") == 0
+        tos = strings.compare(p.target, "atarist") == 0 or mac
+        fp_name = "a5"
+        fp_ind = "(a5)"
+        if mac {
+            fp_name = "a6"
+            fp_ind = "(a6)"
+        }
         cpu68000 = strings.compare(p.target, "amiga500") == 0 or tos
         amiga = buf.bytes_equal(p.target, "amiga", 5)
         any_chip = false
@@ -4135,6 +4206,6 @@ gen68k {
             raw("    even")
         }
         if tos and uses_fpu
-            error("floats are not supported on the Atari ST yet (it has no FPU)", 0)
+            error("the FPU's floats are not there on this machine (it has a 68000)", 0)
     }
 }

@@ -80,7 +80,7 @@ EXAMPLE	= tests/hello.p8
 
 CORPUS	= $(shell find -L lib/prog8lib lib/common lib/targets .prog8-reference/examples .prog8-reference/compiler/test -name '*.p8')
 
-.PHONY:	stcmp stscreen stargs stfloat amigafloat500 a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
+.PHONY:	maccmp stcmp stscreen stargs stfloat amigafloat500 a2dos a2prodos doscmp dosexecmp dossoftcmp dosnofpucmp a2cmp ataricmp mapcheck coco3ramcmp m6809cmp cococmp cocoramcmp dragoncmp coco3cmp coco3screen cocosys z80bench z80sys trs80sys z80cmp z80ref trs80cmp trs80cmp3 trs80cmp4 trs80screen trs80dos quick816 emucmp816 emucmp64816 qemucmp qemucmpir amigacmp amigacmp500 amigacmpfloat coppercmp cross wasihost upstreamcheck conformance all check seed seedcheck install dist test corpus roundtrip programs clean run stats vmcmp nativecmp nativecmp32 nativecmp16 nativecmp16c64 hostcmp hostbootstrap buildall gfxcmp bootstrap emucmp emucmp64 irroundtrip
 
 all: $(OUT) $(P8P8)
 
@@ -516,6 +516,12 @@ coppercmp:	$(P8P8)
 STTESTS=tests/hello.p8 $(wildcard tests/programs/*.p8) $(CONFTESTS) $(wildcard $(patsubst %.out,%.p8,$(wildcard tests/atarist/*.out)))
 stcmp:	$(P8P8)
 	@tests/stcmp.sh $(P8P8) $(STTESTS)
+
+# make maccmp: the same comparison for the Macintosh Plus, in MAME (tests/macrun.sh:
+# MAC_ROMS and MAC_SYSTEM name MAME's ROM directory and a system disk)
+MACTESTS=$(filter-out tests/atarist/system.p8 tests/atarist/files.p8,$(STTESTS))
+maccmp:	$(P8P8)
+	@STCMP_TARGET=macplus tests/stcmp.sh $(P8P8) $(MACTESTS)
 
 # make stfloat: the 68000 machines' float routines against Python's arithmetic, in Hatari
 stfloat:

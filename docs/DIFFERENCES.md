@@ -53,7 +53,7 @@ compiler with LLVM targets added.
 | `@requirezp` on an array or string with initial values | placed in the zero page | an error: the 6502 code generator does not copy values into the zero page at the start (without values, and for every other kind of variable, the tags work as upstream's) |
 | 65816 | no | `-cpu 65816`: the 65C02's code, with runs of word arithmetic in the 16-bit accumulator |
 | 45GS02 | no | no (planned) |
-| 68000 (Amiga and others) | yes | a first code generator of p8p8's own, for qemu68k and the two Amigas, new and with little optimization; and a target that upstream does not have, `atarist` (the Atari ST: GEMDOS programs, text on the VT-52 console) |
+| 68000 (Amiga and others) | yes | a first code generator of p8p8's own, for qemu68k and the two Amigas, new and with little optimization; and two targets that upstream does not have, `atarist` (the Atari ST: GEMDOS programs, text on the VT-52 console) and `macplus` (the Macintosh Plus: an application with its text in a window) |
 | the virtual machine | yes, with the machine itself | p8p8 writes the IR for it and has no virtual machine: upstream's runs it |
 | the host, through LLVM | in the fork's LLVM branch | yes; it is how p8p8 compiles itself |
 
@@ -299,7 +299,7 @@ overlap; one block stays inside a 64 KB bank.
   cartridge (`image_size`, `image_ext`).  The GameTank's does: `p8c` writes
   a 2 MB `name.gtr` with the program at its end, where `prog8c` writes the
   16 KB `name.bin`.  `-noimage` gives that file.
-- On the Amiga 500 and the Atari ST floats are p8p8's own routines, with no
+- On the Amiga 500, the Atari ST and the Macintosh Plus floats are p8p8's own routines, with no
   FPU: upstream builds a program with floats for the Amiga 500 as one for a
   68020 with an FPU, which a 500 cannot run (`-floats hard` builds that).
   The functions of `floats` are right to six or seven digits, every step

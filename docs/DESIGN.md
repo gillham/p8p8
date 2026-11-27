@@ -361,6 +361,30 @@ without an operating system), the Amiga 1200 and the Amiga 500.
   parts so that large arguments keep their digits.  With `-floats hard`
   on the Amiga 500 a program with floats is assembled for a 68020 with an
   FPU, as the reference compiler does it.
+- The Macintosh (`macplus`, a target of p8p8's own) is built as the Atari ST
+  is, and then wrapped.  An application is resources (CODE 0 with the jump
+  table, CODE 1 with the program, SIZE) in a file's resource fork, and the
+  Segment Loader relocates nothing.  The generator's code has absolute
+  addresses, so the assembler is asked for a TOS program file, which has
+  the list of the places that hold an address; `src/macapp.p8` puts text,
+  data and that list into CODE 1 and writes the fork in a MacBinary II
+  file (`name.bin`).  The program's first lines, which the generator
+  writes itself (`gen68k.mac_start`), are position independent: they ask
+  for the BSS (NewPtr, cleared) and walk the list, adding the program's
+  address to what points into text and data and the BSS's to the rest.
+  One segment may be longer than 32 KB, as nothing is called through the
+  jump table.  a5 is the system's on a Macintosh (QuickDraw's variables,
+  the jump table), so the frame pointer is a6 there (`gen68k.fp_name`),
+  and a5 cannot be an asmsub's register.  There is no console: the
+  library opens a window, draws the text in Monaco 9 and keeps a copy of
+  it to draw the window again (`macos` in the target's `syslib`); it
+  looks at the events while it prints and waits, and at the program's end
+  the window stays until a key or a click.  A file `p8p8.out` beside the
+  application gets a copy of the text and makes the program end without
+  waiting, with a mark in the system's Scratch8: that is how
+  `tests/macrun.sh` runs one in MAME (the application on a copy of a
+  system disk, named in the boot blocks as the shell).  Upstream's
+  `coroutines` keeps a5 as the frame pointer and is not there.
 - The Atari ST (`atarist`, a target of p8p8's own) is the Amiga 500's 68000
   with another system: vasm's `-Ftos` writes the GEMDOS program with its
   relocations, so the code is what it is for the Amiga, absolute addresses

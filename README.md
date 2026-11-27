@@ -32,8 +32,11 @@ The command is `p8c`.
   assembly.  `-target atarist` is p8p8's own: the Atari ST, a GEMDOS program
   (`.tos`) with its text on the VT-52 console (40 or 80 columns and 16, 4 or
   2 colours, as the screen's mode has them), files through GEMDOS
-  (`diskio`) and the command line.  No GEM yet.  A 68000 cannot have an
-  FPU, so on the Atari ST and the Amiga 500 floats are p8p8's own routines
+  (`diskio`) and the command line.  No GEM yet.  `-target macplus` is
+  p8p8's own too: an application for a Macintosh Plus or a later 68000
+  Macintosh, with its text in a window of 80 columns and 25 lines (new: no
+  `diskio`, no menus, no drawing yet).  A 68000 cannot have an
+  FPU, so on the Atari ST, the Macintosh and the Amiga 500 floats are p8p8's own routines
   (singles, right to six or seven digits); `-floats soft` builds that way
   for the Amiga 1200 and qemu68k too, where the default is the FPU's
   instructions, and `-floats hard` on the Amiga 500 is what upstream
@@ -231,6 +234,13 @@ console (`P8P8_VAMOS` names it when it is not in the PATH).
 options for the machine and the TOS, when plain `hatari` is not what is
 wanted).  [docs/HATARI.md](docs/HATARI.md) has how to run and debug ST
 programs in Hatari without a window.
+`-target macplus` writes `name.bin`: a Macintosh application in a MacBinary
+file, which is what the tools that write Mac disks take (hfsutils'
+`hcopy -m`) and what a Macintosh unpacks itself.  It needs `vasmm68k_mot`
+alone.  `-run` gives the file to what `P8P8_MACRUN` names (an application
+has to be put on a disk that an emulator starts from; `tests/macrun.sh`
+does that for MAME).  [docs/MACPLUS.md](docs/MACPLUS.md) has what a Mac
+program of p8p8's is and how to run one in MAME without a window.
 
 Without an option that says what to do, `p8c` compiles, as `prog8c` does:
 a program for a 6502 or 68000 machine, the LLVM IR (`.ll`) for an llvm
@@ -445,6 +455,7 @@ suites need 64tass, x16emu and VICE as well.
 | `make qemucmp`, `make amigacmp`, `make amigacmp500` | programs built for qemu68k, the Amiga 1200 and the Amiga 500 by both compilers print the same in QEMU and in vamos |
 | `make stfloat`, `make amigafloat500` | the 68000 machines' float routines: some 17000 operations with random operands against Python's arithmetic, bit for bit, in Hatari; and the programs with floats built for the Amiga 500 print in vamos what they print on the host, to six digits |
 | `make stcmp`, `make stscreen`, `make stargs` | the Atari ST: programs built for `atarist` print in Hatari what they print on the host (`ST_TOS` names a TOS image, without it Hatari's EmuTOS runs; a program that Hatari's 68000 stops for a word at an odd address is counted apart), and the text screen in the three resolutions, read back from the screen's memory; `diskio` (a test of its own among the programs) and the command line |
+| `make maccmp` | the Macintosh Plus: programs built for `macplus` print in MAME what they print on the host (`MAC_ROMS` names MAME's ROM directory, `MAC_SYSTEM` a system disk of 800 KB; `tests/macrun.sh` says how it is done) |
 | `tools/bench68k.sh` | how long small benchmarks take on an Amiga 500 in Copperline, from both compilers |
 | `tools/bench65.sh` | the same benchmarks on a Commander X16 (`x16emu -c816`), from the reference compiler and from p8p8 for the 65C02 and the 65816 |
 | `tools/benchx16.sh` | upstream's benchmark program (ten workloads) on a Commander X16, built by the reference compiler and by p8p8 for the 65C02 and the 65816 |

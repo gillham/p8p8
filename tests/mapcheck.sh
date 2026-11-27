@@ -59,6 +59,7 @@ one coco3ram-above lwasm cocosys/bigcode.p8 -target coco3ram
 one amiga500 vasmm68k_mot mapcheck/sizes.p8 -target amiga500
 one qemu68k vasmm68k_mot mapcheck/sizes.p8 -target qemu68k
 one atarist vasmm68k_mot mapcheck/sizes.p8 -target atarist
+one macplus vasmm68k_mot mapcheck/sizes.p8 -target macplus
 one dos nasm mapcheck/sizes.p8 -target dos
 one dosexe nasm mapcheck/sizes.p8 -target dosexe
 one dos-floats nasm mapcheck/withfloats.p8 -target dos

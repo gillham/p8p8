@@ -38,6 +38,17 @@
   handles, with longs for sizes and addresses (more than 64 KB in a file
   or in one read), and `sys.argc()`/`sys.argv()` have the command line.
   No GEM yet.
+- A target for the classic Macintosh: `-target macplus` builds an
+  application for a Macintosh Plus or a later 68000 Macintosh (System 4.1
+  or later), as a MacBinary file (`name.bin`), with p8p8's 68000 code
+  generator and vasm.  The program relocates itself when it starts.
+  `textio` is a window of 80 columns and 25 lines in Monaco 9, black on
+  white, with inverse text; the window can be moved, command-Q or
+  command-period ends the program, and at the program's end the window
+  stays until a key is pressed (the keyboard and the mouse are not
+  tested yet: the tests print only).  Floats are the 68000 routines.  No
+  `diskio`, menus or drawing yet.  `make maccmp` tests it on a Macintosh
+  Plus in MAME (docs/MACPLUS.md).
 - Floats for the 68000 machines that have no FPU: the Amiga 500 and the
   Atari ST build programs with floats now, with routines of p8p8's own
   (IEEE singles; add, subtract, multiply and divide rounded as an FPU
