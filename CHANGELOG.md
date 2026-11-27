@@ -4,6 +4,9 @@
 
 ### Added
 
+- `macplus`: `sys.entropy()`, a `uword` that differs at every call and
+  every start, to seed the random generator with.  (p8p8's own; not in
+  upstream's library.)
 - `-map` for the 8086 machines: the map of a `.COM` program has its
   addresses; that of an `.EXE`, whose code and data are a segment each, is
   one of sections, as on the 68000.

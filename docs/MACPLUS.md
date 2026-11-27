@@ -53,6 +53,10 @@ and `SIZE` -1.
   new file is a TeachText text file unless `diskio.file_type` and
   `diskio.file_creator` say otherwise.  `diskio.status_code()` is the
   system's error without its sign (43: file not found).
+- **A seed**: `sys.entropy()` gives a `uword` that is another one at every
+  call and every start (from the clock, the ticks, the mouse and the VIA's
+  timers), for `math.rndseed(sys.entropy(), sys.entropy())`.  It is p8p8's
+  own: upstream's library has no such routine.
 - **Not there yet**: `coroutines`, menus of the program's own, anything
   drawn.
 - **In assembly, leave a5 alone.**  It is the system's: QuickDraw finds its
