@@ -92,6 +92,10 @@
 
 ### Fixed
 
+- GameTank: the startup code makes the three pins that switch the
+  cartridge's bank outputs (the VIA's data direction register).  Without
+  it banking did not work on the machine itself; the emulators did not
+  show it.
 - `macplus`: when the window was drawn again (after a desk accessory or
   another window had covered it), a character that the font has no picture
   of (those below 32, put there with `txt.setchr`) moved the rest of its
